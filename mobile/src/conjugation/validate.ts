@@ -1,12 +1,10 @@
 import type { ConjugationTense } from './types';
+import { normalizeAnswer as normalize } from '../validation/textAnswer';
 
-function stripAccents(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
-function normalize(s: string): string {
-  return stripAccents(s.trim().toLowerCase()).replace(/\s+/g, ' ');
-}
+// La normalisation (accents/casse/ponctuation/espaces) vit désormais
+// dans `validation/textAnswer.ts`, partagée avec la compréhension orale
+// (20/08/2026) — voir PLAN.md/AUDIT.md. Réexportée ici sous son ancien
+// nom local pour ne changer aucune ligne plus bas dans ce fichier.
 
 /** Suffixes de la 6ème position (personIndex 0-5) du subjonctif
  * imparfait en -ra vers son équivalent en -se — le radical est

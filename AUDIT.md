@@ -123,6 +123,81 @@ Mission de cadrage explicite : inspecter l'architecture, concevoir la fonctionna
 
 Aucun fichier de code n'a été créé ni modifié pour cette fonctionnalité. Aucune dépendance n'a été installée. Aucun appel réseau n'a été fait (ni vers YouTube, ni vers npm au-delà de la lecture de `package.json` déjà présent). Seuls `PLAN.md` et `AUDIT.md` (ce fichier) ont été modifiés, comme demandé explicitement au point 20 de la mission.
 
+## Compréhension orale — implémentation, avec un échec de test en direct qui limite ce qui marche vraiment (20/08/2026)
+
+Suite directe de la section de planification ci-dessus, après autorisation explicite de coder ("Code ce qu'il te reste à coder d'après le plan md et l'audit md"). Reprend le même découpage par thème, avec le statut mis à jour honnêtement — **rien n'est marqué "résolu" tant que ça n'a pas tourné**, conformément à la consigne d'origine de la mission.
+
+### YouTube — lecteur vs récupération de captions : la partie captions NE FONCTIONNE PAS actuellement, testé en direct
+
+**Constat.** Trois méthodes de récupération du CONTENU d'une piste de sous-titres ont été testées en direct pendant cette session (accès réseau du bac à sable de développement), pour une vidéo connue prise uniquement comme test mécanique (pas de rapport avec l'espagnol) :
+1. Endpoint `timedtext` classique, avec la `baseUrl` extraite du JSON embarqué dans la page — réponse HTTP 200 mais corps **complètement vide** (`content-length: 0`).
+2. Même endpoint, avec un `User-Agent` de navigateur réel ET les cookies de session obtenus depuis le fetch initial de la page — même résultat, corps vide.
+3. API interne InnerTube (`youtubei/v1/player`, celle utilisée par des outils à jour comme yt-dlp), avec un contexte client ANDROID et une clé publique connue — HTTP 400 "Precondition check failed", avec et sans la clé.
+
+En revanche, deux étapes ont été testées et fonctionnent : l'extraction de la LISTE des pistes disponibles depuis le JSON embarqué dans la page (`captionTracks`, 6 pistes distinctes trouvées y compris une `es-419` et une piste ASR), et l'endpoint oEmbed officiel (titre/auteur/miniature récupérés correctement).
+
+**Impact.** `fetchVideoCaptions()` ([mobile/src/listening/captions.ts](mobile/src/listening/captions.ts)) gère ça sans planter (dégradation silencieuse déjà prévue dans le design), mais concrètement : **ajouter une vidéo aujourd'hui, même avec de vrais sous-titres espagnols sur YouTube, l'enregistrera très probablement avec `captionStatus: 'unavailable'` et 0 segment** — donc invisible pour l'entraînement. La cause exacte n'est pas identifiée avec certitude (changement récent des défenses anti-bot de YouTube sur cet endpoint précis, ou spécificité du réseau du bac à sable — IP de datacenter plutôt que résidentielle, souvent plus filtrée). Pas d'investissement supplémentaire fait pour contourner ça (retour sur investissement décroissant, terrain glissant vis-à-vis des CGU de YouTube) — le choix a été de construire le reste de la fonctionnalité par-dessus la dégradation gracieuse déjà prévue plutôt que de bloquer tout le chantier sur ce point.
+
+**Statut : implémenté mais NON FONCTIONNEL EN L'ÉTAT pour la récupération de contenu.** À revérifier en priorité depuis le réseau réel d'un iPhone (IP résidentielle/mobile) avant de considérer cette fonctionnalité utilisable — c'est plausible que ça fonctionne différemment là-bas, mais ce n'est qu'une hypothèse, pas vérifié.
+
+### Compatibilité Expo Go — toujours non vérifiée sur device, mais l'installation du paquet s'est bien passée
+
+**Constat.** `npx expo install react-native-webview` s'est exécuté proprement (résolution automatique d'une version compatible SDK 54, `13.15.0`), et `expo-doctor` rapporte 18/18 vérifications passées après installation. Le bundle Metro iOS a aussi été récupéré avec succès (`HTTP 200`, ~9,5 Mo) pendant cette session, confirmant que le module se résout et se bundle sans erreur de compilation ou de dépendance manquante.
+
+**Impact.** Ça élimine le risque le plus grossier (paquet absent/incompatible/erreur de build), mais **ne prouve pas** que la WebView s'affiche et fonctionne réellement à l'exécution dans l'Expo Go installé sur l'iPhone de l'utilisateur — ce test n'a pas pu être fait dans cette session (pas de device disponible). C'était identifié en planification comme le point le plus bloquant de tout le chantier ; ça reste vrai.
+
+**Statut : dépendance installée et bundle compilé avec succès, exécution réelle sur device toujours non vérifiée.**
+
+### Sélection aléatoire — implémentée et testée (hors réseau/base, donc vérifiable dans cette session)
+
+**Constat.** Contrairement aux deux points ci-dessus (qui dépendent du réseau ou d'un device réel), la logique de sélection vidéo-puis-segment est une fonction pure ([mobile/src/listening/selection.ts](mobile/src/listening/selection.ts)) — entièrement testable sans mock.
+
+**Impact.** 12 tests couvrent : exclusion des vidéos utilisées dans les `VIDEO_COOLDOWN` derniers exercices, réintégration d'une vidéo hors fenêtre, absence de biais par nombre de segments (test statistique sur 2000 tirages, vidéo à 100 segments dus simulée vs vidéo à 2 — écart de sélection resté dans l'intervalle 40-60% attendu pour un tirage uniforme entre 2 vidéos), et les 4 cas limites (1/2/3/4 vidéos disponibles avec `VIDEO_COOLDOWN = 3`, relâchement progressif de la fenêtre). Un bug a été trouvé et corrigé DANS LE TEST lui-même (pas dans l'implémentation) pendant l'écriture : l'attente initiale du cas "3 vidéos disponibles" supposait à tort que le relâchement libère la vidéo la PLUS récemment utilisée en premier, alors que l'algorithme (correct) libère la MOINS récemment utilisée en premier — cohérent avec l'intention du cooldown.
+
+**Statut : implémenté et testé (12/12).** Reste non vérifié : que le pool de segments dus fourni par `getDueListeningCardsSplit` (SQL, non testable unitairement) alimente correctement cette logique en usage réel — dépend de la persistance, voir plus bas.
+
+### Segmentation
+
+**Constat/décision inchangée depuis la planification** : 1 cue de sous-titre = 1 segment, pas de fusion de phrases en v1. `captionStatus` distingue `available`/`auto_generated`/`unavailable`, affiché dans l'UI de la Bibliothèque.
+
+**Statut : implémenté tel que décidé.** Non vérifiable de bout en bout tant que le point "récupération de captions" ci-dessus n'est pas résolu — la logique de segmentation elle-même (parsing XML `<text start dur>`) n'a jamais reçu de vrai contenu à parser pendant cette session (les trois tests réseau ont tous renvoyé un corps vide avant d'atteindre cette étape).
+
+### Validation — implémentée, testée, non régressive
+
+**Constat.** `mobile/src/validation/textAnswer.ts` créé (normalisation accents NFD + suppression ponctuation ¿¡.,;:!?()"'«»…—+casse+espaces), `conjugation/validate.ts` refactorisé pour la réexporter sous son ancien nom local plutôt que dupliquer la logique.
+
+**Impact.** 8 tests sur `textAnswer.test.ts`, y compris l'exemple exact de la mission ("No sé lo que quieres decir." ≈ "No se lo que quieres decir" → correct ; réponse tronquée → incorrect). Les tests déjà existants de `conjugation/validate.test.ts` (accents, terminaisons -ra/-se) ont été rejoués après le refactor : aucune régression.
+
+**Statut : implémenté, testé, non régressif (16/16 sur les deux fichiers combinés).**
+
+### Persistance — schéma créé, CRUD complet, non testable unitairement (limite déjà connue du projet)
+
+**Constat.** 4 tables ajoutées à `migrateDbIfNeeded()` (`listening_videos`, `listening_segments`, `listening_cards`, `listening_reviews`), exactement comme prévu en planification. CRUD complet dans `database.ts` : import transactionnel vidéo+segments+cartes neuves (`addListeningVideo`), lecture avec stats (`getListeningVideosWithStats`), suppression en cascade (`deleteListeningVideo`), pool de segments dus par lots séparés nouveaux/révisions (`getDueListeningCardsSplit`), historique récent des vidéos pour amorcer le cooldown (`getRecentListeningVideoIds`), mise à jour de carte/journalisation (`updateListeningCard`/`logListeningReview`), comptage (`getListeningCounts`), historique consultable (`getListeningHistory`). Intégré à `resetProgress()` existant (même transaction que la remise à zéro du vocabulaire/de la conjugaison).
+
+**Impact.** Comme documenté ailleurs dans ce fichier pour `words`/`conjugation_cards`, aucun de ce code n'est testable unitairement sous Jest/jest-expo (pas de SQLite en mémoire disponible) — seule la compilation (`tsc --noEmit`, propre) et la relecture manuelle donnent un signal avant le test sur device réel.
+
+**Statut : implémenté, non testé au sens propre du terme (aucune exécution réelle contre une base SQLite dans cette session).**
+
+### Résilience — implémentée comme décidé, dégradation silencieuse à chaque étape
+
+**Constat.** Chaque fonction réseau (`fetchVideoMetadata`, `fetchVideoCaptions`) retourne `null`/`unavailable` plutôt que de lever une exception ; `ListeningScreen.tsx` capture les erreurs du formulaire d'ajout dans un `try/catch` et affiche un message plutôt que de planter ; `ListeningReviewScreen.tsx` affiche un message d'erreur simple si le lecteur YouTube signale une erreur (`onError`), sans retirer la carte de la file (elle reste due pour un prochain essai).
+
+**Statut : implémenté tel que décidé.** L'échec de récupération de captions documenté plus haut est justement un cas réel où cette dégradation s'est déclenchée pendant les tests de cette session — pas un scénario seulement théorique.
+
+### Nouvelle décision prise pendant l'implémentation, pas explicitement confirmée par l'utilisateur
+
+**Constat.** Le point ouvert #3 de la planification (mappage résultat binaire ✓/✗ → note SM-2 à 4 valeurs) demandait un arbitrage. **Option A retenue** (correct → "Bien", incorrect → "Otra vez"), conforme à la maquette UX donnée littéralement dans la mission, plutôt que l'option B (grille de 4 boutons comme le reste de l'app).
+
+**Impact.** Si jugé trop strict (une erreur mineure d'accent traitée comme un échec complet plutôt qu'un "Difícil" nuancé) ou trop laxiste à l'usage réel, c'est un changement localisé à `ListeningReviewScreen.tsx#handleNext` — pas une décision architecturale difficile à revenir en arrière.
+
+**Statut : tranché par défaut (recommandation du plan), pas confirmé explicitement par l'utilisateur — à vérifier à l'usage.**
+
+### Ce qui a été vérifié pendant cette session de code, et ce qui ne l'a pas été
+
+**Vérifié** : `tsc --noEmit` propre sur l'ensemble du projet après tous les changements ; `npm test` 91/95 (les 4 échecs, dans `reviewScheduler.test.ts`, sont préexistants — fichier non touché cette session, écart de 2h dans les dates attendues, probablement un souci d'environnement/fuseau horaire du bac à sable, sans lien avec la compréhension orale) ; bundle Metro iOS récupéré avec succès en conditions réelles (serveur `expo start` démarré, requête HTTP sur `/index.bundle`, 200 OK, dépendance WebView résolue sans erreur).
+
+**Non vérifié, à ne pas présenter comme fonctionnel** : compatibilité réelle de la WebView dans l'Expo Go de l'utilisateur ; récupération de sous-titres de bout en bout (bloquée par l'échec documenté ci-dessus) ; ajout réel d'une vidéo puis session d'entraînement complète sur device ; fiabilité du paramètre `end` de l'IFrame Player API pour arrêter la lecture au bon moment (filet de sécurité JS ajouté par précaution, mais jamais déclenché en conditions réelles).
+
 ## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
 
 **Constat.** Demande explicite : compléter les tags CECRL manquants dans `words.json`, en vérifiant d'abord combien de mots en ont déjà un et combien n'en ont pas, avant de coder quoi que ce soit. Vérification faite par script one-off (comptage par valeur exacte du champ `level`) plutôt que supposée :

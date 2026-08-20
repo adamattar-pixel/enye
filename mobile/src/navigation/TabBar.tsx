@@ -4,17 +4,21 @@ import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-export type TabKey = 'today' | 'stats' | 'decks' | 'conjugation' | 'settings';
+export type TabKey = 'today' | 'stats' | 'decks' | 'conjugation' | 'listening' | 'settings';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'today', label: 'Aujourd’hui' },
   { key: 'stats', label: 'Statistiques' },
   // Libellé raccourci ("Decks & mots" → "Decks") pour laisser assez de
-  // place aux 5 pilules depuis l'ajout de Conjugaison — le titre complet
+  // place aux pilules depuis l'ajout de Conjugaison — le titre complet
   // reste affiché en haut de l'écran lui-même, seul le libellé de la
   // barre change.
   { key: 'decks', label: 'Decks' },
   { key: 'conjugation', label: 'Conjugaison' },
+  // "Écoute" plutôt que "Compréhension orale" (20/08/2026) — le libellé
+  // complet ne tient pas sur une pilule à 6 onglets (voir PLAN.md, point
+  // ouvert #4) ; le titre complet reste affiché en haut de l'écran.
+  { key: 'listening', label: 'Écoute' },
   { key: 'settings', label: 'Réglages' },
 ];
 

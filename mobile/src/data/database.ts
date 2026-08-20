@@ -3,6 +3,7 @@ import { createCard, type SM2CardLifecycle, type SM2CardState, type SM2Grade } f
 import type { Word } from './types';
 import { CONJUGATION_TENSES, personCountForTense, type ConjugationTense, type ConjugationVerb } from '../conjugation/types';
 import { shuffle } from '../utils/shuffle';
+import type { CaptionStatus, ListeningSegment, ListeningVideo } from '../listening/types';
 
 /** Groupe de placeholders `(?, ?, ...)` répété `rowCount` fois, pour un
  * INSERT multi-lignes en un seul aller-retour au pont natif plutôt
@@ -145,6 +146,63 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
       fire_date TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_fire_date ON scheduled_notifications(fire_date);
+
+    -- Onglet Compréhension orale (20/08/2026, planifié puis implémenté le
+    -- même jour — voir PLAN.md/AUDIT.md). Contrairement à conjugation_cards,
+    -- ici le contenu (titre, transcription des segments) N'EST PAS partagé
+    -- via un fichier bundlé : chaque utilisateur ajoute ses propres vidéos
+    -- à l'exécution (URL YouTube), donc video/segment vivent en base, pas
+    -- dans un JSON versionné avec l'app.
+    CREATE TABLE IF NOT EXISTS listening_videos (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      thumbnail_url TEXT NOT NULL,
+      duration_seconds INTEGER,
+      language TEXT NOT NULL,
+      caption_status TEXT NOT NULL,
+      added_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS listening_segments (
+      id TEXT PRIMARY KEY NOT NULL,
+      video_id TEXT NOT NULL REFERENCES listening_videos(id),
+      segment_index INTEGER NOT NULL,
+      start_time REAL NOT NULL,
+      end_time REAL NOT NULL,
+      transcript TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_listening_segments_video_id ON listening_segments(video_id);
+
+    -- id = même id que le segment correspondant (relation 1:1) — pas de
+    -- clé composite ni d'auto-increment séparé, pour rester dans le même
+    -- style que conjugation_cards (id = clé métier directement). video_id
+    -- est dupliqué ici (déjà présent via le segment) uniquement pour éviter
+    -- une jointure sur les requêtes de cooldown ([getRecentListeningVideoIds]),
+    -- appelées à chaque exercice.
+    CREATE TABLE IF NOT EXISTS listening_cards (
+      id TEXT PRIMARY KEY NOT NULL REFERENCES listening_segments(id),
+      video_id TEXT NOT NULL,
+      ease_factor REAL NOT NULL,
+      interval_days REAL NOT NULL,
+      repetitions INTEGER NOT NULL,
+      lapses INTEGER NOT NULL,
+      learning_step_index INTEGER NOT NULL,
+      lifecycle TEXT NOT NULL,
+      due_date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_listening_cards_due_date ON listening_cards(due_date);
+
+    CREATE TABLE IF NOT EXISTS listening_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id TEXT NOT NULL,
+      grade TEXT NOT NULL,
+      reviewed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_listening_reviews_reviewed_at ON listening_reviews(reviewed_at);
   `);
 }
 
@@ -672,6 +730,22 @@ export async function resetProgress(db: SQLiteDatabase, now: Date = new Date()):
       card.lifecycle,
       card.dueDate.toISOString()
     );
+
+    // Idem pour la compréhension orale (20/08/2026) — mêmes règles que
+    // pour la conjugaison juste au-dessus : les vidéos/segments déjà
+    // ajoutés restent en base, seule leur progression SM-2 repart à zéro.
+    await db.runAsync('DELETE FROM listening_reviews;');
+    await db.runAsync(
+      `UPDATE listening_cards
+       SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?;`,
+      card.easeFactor,
+      card.intervalDays,
+      card.repetitions,
+      card.lapses,
+      card.learningStepIndex,
+      card.lifecycle,
+      card.dueDate.toISOString()
+    );
   });
 }
 
@@ -947,4 +1021,327 @@ export async function getNextScheduledNotificationTime(db: SQLiteDatabase, now: 
     now.toISOString()
   );
   return row ? new Date(row.fire_date) : null;
+}
+
+// MARK: - Compréhension orale
+
+const VALID_CAPTION_STATUSES: readonly CaptionStatus[] = ['available', 'auto_generated', 'unavailable'];
+
+function parseCaptionStatus(value: string): CaptionStatus {
+  if ((VALID_CAPTION_STATUSES as readonly string[]).includes(value)) {
+    return value as CaptionStatus;
+  }
+  throw new Error(`Valeur de caption_status invalide en base : "${value}"`);
+}
+
+type ListeningVideoRow = {
+  id: string;
+  title: string;
+  channel: string;
+  thumbnail_url: string;
+  duration_seconds: number | null;
+  language: string;
+  caption_status: string;
+  added_at: string;
+};
+
+function mapListeningVideoRow(r: ListeningVideoRow): ListeningVideo {
+  return {
+    id: r.id,
+    title: r.title,
+    channel: r.channel,
+    thumbnailUrl: r.thumbnail_url,
+    durationSeconds: r.duration_seconds,
+    language: r.language,
+    captionStatus: parseCaptionStatus(r.caption_status),
+    addedAt: r.added_at,
+  };
+}
+
+/** Ajoute une vidéo à la bibliothèque avec ses segments (déjà découpés
+ * depuis les sous-titres, voir `listening/captions.ts`) et une carte SM-2
+ * neuve par segment — en une seule transaction, pour ne jamais se
+ * retrouver avec une vidéo sans ses segments/cartes si l'app est fermée
+ * au milieu. `segments` peut être vide (sous-titres indisponibles, voir
+ * `CaptionStatus`) : la vidéo est quand même enregistrée dans la
+ * bibliothèque, juste non exploitable pour les exercices tant qu'elle n'a
+ * aucun segment (voir PLAN.md, "dégradation gracieuse"). */
+export async function addListeningVideo(
+  db: SQLiteDatabase,
+  video: ListeningVideo,
+  segments: Omit<ListeningSegment, 'id' | 'videoId' | 'index'>[],
+  now: Date = new Date()
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO listening_videos (id, title, channel, thumbnail_url, duration_seconds, language, caption_status, added_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+      video.id,
+      video.title,
+      video.channel,
+      video.thumbnailUrl,
+      video.durationSeconds,
+      video.language,
+      video.captionStatus,
+      video.addedAt
+    );
+
+    if (segments.length === 0) return;
+
+    const segmentRows = segments.map((seg, index) => ({ id: `${video.id}:${index}`, index, ...seg }));
+
+    await insertInBatches(
+      db,
+      segmentRows,
+      5,
+      'INSERT INTO listening_segments (id, video_id, segment_index, start_time, end_time, transcript)',
+      (seg) => [seg.id, video.id, seg.index, seg.startTime, seg.endTime, seg.transcript]
+    );
+
+    await insertInBatches(
+      db,
+      segmentRows,
+      9,
+      'INSERT INTO listening_cards (id, video_id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)',
+      (seg) => {
+        const card = createCard({ dueDate: now });
+        return [
+          seg.id,
+          video.id,
+          card.easeFactor,
+          card.intervalDays,
+          card.repetitions,
+          card.lapses,
+          card.learningStepIndex,
+          card.lifecycle,
+          card.dueDate.toISOString(),
+        ];
+      }
+    );
+  });
+}
+
+/** Toutes les vidéos de la bibliothèque, la plus récemment ajoutée
+ * d'abord — utilisé par l'écran Bibliothèque. */
+export async function getListeningVideos(db: SQLiteDatabase): Promise<ListeningVideo[]> {
+  const rows = await db.getAllAsync<ListeningVideoRow>('SELECT * FROM listening_videos ORDER BY added_at DESC;');
+  return rows.map(mapListeningVideoRow);
+}
+
+export interface ListeningVideoWithStats extends ListeningVideo {
+  segmentCount: number;
+}
+
+/** Même chose que `getListeningVideos`, avec le nombre de segments de
+ * chaque vidéo en plus — sert à l'écran Bibliothèque pour distinguer une
+ * vidéo exploitable (≥ 1 segment) d'une vidéo ajoutée mais sans
+ * sous-titres récupérables (`captionStatus === 'unavailable'`, 0
+ * segment). Sous-requête plutôt qu'une jointure + GROUP BY : plus simple
+ * à lire pour un volume de vidéos qui reste petit (bibliothèque
+ * personnelle, pas un catalogue). */
+export async function getListeningVideosWithStats(db: SQLiteDatabase): Promise<ListeningVideoWithStats[]> {
+  type Row = ListeningVideoRow & { segment_count: number };
+  const rows = await db.getAllAsync<Row>(
+    `SELECT v.*, (SELECT COUNT(*) FROM listening_segments s WHERE s.video_id = v.id) as segment_count
+     FROM listening_videos v
+     ORDER BY v.added_at DESC;`
+  );
+  return rows.map((r) => ({ ...mapListeningVideoRow(r), segmentCount: r.segment_count }));
+}
+
+/** Supprime une vidéo et tout ce qui en dépend (segments, cartes,
+ * historique de révisions) — irréversible, l'appelant doit confirmer
+ * avant d'appeler cette fonction (voir l'écran Bibliothèque). */
+export async function deleteListeningVideo(db: SQLiteDatabase, videoId: string): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `DELETE FROM listening_reviews WHERE card_id IN (SELECT id FROM listening_cards WHERE video_id = ?);`,
+      videoId
+    );
+    await db.runAsync('DELETE FROM listening_cards WHERE video_id = ?;', videoId);
+    await db.runAsync('DELETE FROM listening_segments WHERE video_id = ?;', videoId);
+    await db.runAsync('DELETE FROM listening_videos WHERE id = ?;', videoId);
+  });
+}
+
+export interface DueListeningCardRow {
+  cardId: string;
+  videoId: string;
+  segmentIndex: number;
+  startTime: number;
+  endTime: number;
+  transcript: string;
+  card: SM2CardState;
+}
+
+type ListeningCardWithSegmentRow = {
+  id: string;
+  video_id: string;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  lapses: number;
+  learning_step_index: number;
+  lifecycle: string;
+  due_date: string;
+  segment_index: number;
+  start_time: number;
+  end_time: number;
+  transcript: string;
+};
+
+function mapListeningCardRow(r: ListeningCardWithSegmentRow): DueListeningCardRow {
+  return {
+    cardId: r.id,
+    videoId: r.video_id,
+    segmentIndex: r.segment_index,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    transcript: r.transcript,
+    card: {
+      easeFactor: r.ease_factor,
+      intervalDays: r.interval_days,
+      repetitions: r.repetitions,
+      lapses: r.lapses,
+      learningStepIndex: r.learning_step_index,
+      lifecycle: parseLifecycle(r.lifecycle),
+      dueDate: new Date(r.due_date),
+    },
+  };
+}
+
+const LISTENING_CARD_SEGMENT_SELECT = `SELECT c.*, s.segment_index, s.start_time, s.end_time, s.transcript
+     FROM listening_cards c
+     JOIN listening_segments s ON s.id = c.id`;
+
+/** Segments dus, avec le même principe de plafond séparé nouveaux/révisions
+ * que `getDueCardsSplit`/`getDueConjugationCardsSplit`. **Ne fait PAS la
+ * sélection vidéo-puis-segment décrite dans PLAN.md** — ça reste le rôle de
+ * `listening/selection.ts`, appelé côté écran à partir de ce pool de
+ * lignes dues et de `getRecentListeningVideoIds` (le cooldown doit se
+ * recalculer à chaque exercice AU FUR ET À MESURE de la session, pas
+ * seulement une fois au chargement — donc pas quelque chose qu'une seule
+ * requête SQL peut exprimer). Cette fonction ne fait que fournir le pool
+ * de candidats, mélangé (pas d'ordre par vidéo). */
+export async function getDueListeningCardsSplit(
+  db: SQLiteDatabase,
+  now: Date,
+  settings: { listeningNewSegmentsPerDay: number; listeningReviewCapPerDay: number }
+): Promise<DueListeningCardRow[]> {
+  const reviewRows = await db.getAllAsync<ListeningCardWithSegmentRow>(
+    `${LISTENING_CARD_SEGMENT_SELECT}
+     WHERE c.due_date <= ? AND c.lifecycle != 'new'
+     ORDER BY c.due_date ASC
+     LIMIT ?;`,
+    now.toISOString(),
+    settings.listeningReviewCapPerDay
+  );
+
+  const newRows = await db.getAllAsync<ListeningCardWithSegmentRow>(
+    `${LISTENING_CARD_SEGMENT_SELECT}
+     WHERE c.due_date <= ? AND c.lifecycle = 'new'
+     ORDER BY RANDOM()
+     LIMIT ?;`,
+    now.toISOString(),
+    settings.listeningNewSegmentsPerDay
+  );
+
+  return shuffle([...reviewRows, ...newRows]).map(mapListeningCardRow);
+}
+
+/** Derniers `video_id` distincts révisés, du plus récent au plus ancien —
+ * c'est le `recentVideoIdsOrdered` attendu par
+ * `selection.ts#selectEligibleVideoIds`. Calculé depuis l'historique
+ * PERSISTÉ (`listening_reviews`), utilisé pour amorcer le cooldown au
+ * DÉBUT d'une session ; pendant la session elle-même, l'écran doit
+ * continuer à faire évoluer sa propre copie en mémoire au fur et à mesure
+ * (voir plus haut), sans rappeler cette fonction à chaque exercice. */
+export async function getRecentListeningVideoIds(db: SQLiteDatabase, limit: number): Promise<string[]> {
+  const rows = await db.getAllAsync<{ video_id: string }>(
+    `SELECT c.video_id as video_id, MAX(r.reviewed_at) as last_at
+     FROM listening_reviews r
+     JOIN listening_cards c ON c.id = r.card_id
+     GROUP BY c.video_id
+     ORDER BY last_at DESC
+     LIMIT ?;`,
+    limit
+  );
+  return rows.map((r) => r.video_id);
+}
+
+export async function updateListeningCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+  await db.runAsync(
+    `UPDATE listening_cards
+     SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
+     WHERE id = ?;`,
+    card.easeFactor,
+    card.intervalDays,
+    card.repetitions,
+    card.lapses,
+    card.learningStepIndex,
+    card.lifecycle,
+    card.dueDate.toISOString(),
+    cardId
+  );
+}
+
+export async function logListeningReview(
+  db: SQLiteDatabase,
+  cardId: string,
+  grade: SM2Grade,
+  at: Date = new Date()
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO listening_reviews (card_id, grade, reviewed_at) VALUES (?, ?, ?);',
+    cardId,
+    grade,
+    at.toISOString()
+  );
+}
+
+export interface ListeningCounts {
+  total: number;
+  learned: number;
+}
+
+/** Même définition d'"acquis" que `getWordCounts`/`getConjugationCounts` —
+ * a été vu au moins une fois au-delà de l'état `new`. */
+export async function getListeningCounts(db: SQLiteDatabase): Promise<ListeningCounts> {
+  const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM listening_cards;');
+  const learned = await db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM listening_cards WHERE lifecycle != 'new';"
+  );
+  return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
+}
+
+export interface ListeningHistoryRow {
+  id: number;
+  videoId: string;
+  videoTitle: string;
+  transcript: string;
+  grade: SM2Grade;
+  reviewedAt: Date;
+}
+
+/** Historique de révisions de compréhension orale, le plus récent
+ * d'abord — même principe que `getReviewHistory`/`getConjugationHistory`. */
+export async function getListeningHistory(db: SQLiteDatabase, limit = 200): Promise<ListeningHistoryRow[]> {
+  type Row = { id: number; video_id: string; title: string; transcript: string; grade: string; reviewed_at: string };
+  const rows = await db.getAllAsync<Row>(
+    `SELECT r.id, s.video_id, v.title, s.transcript, r.grade, r.reviewed_at
+     FROM listening_reviews r
+     JOIN listening_segments s ON s.id = r.card_id
+     JOIN listening_videos v ON v.id = s.video_id
+     ORDER BY r.reviewed_at DESC
+     LIMIT ?;`,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    videoId: r.video_id,
+    videoTitle: r.title,
+    transcript: r.transcript,
+    grade: parseGrade(r.grade),
+    reviewedAt: new Date(r.reviewed_at),
+  }));
 }

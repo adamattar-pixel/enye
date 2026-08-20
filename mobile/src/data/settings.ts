@@ -25,6 +25,14 @@ export interface AppSettings {
    * ajuster séparément si besoin, voir AUDIT.md. */
   conjugationNewCardsPerDay: number;
   conjugationReviewCapPerDay: number;
+  /** Rythme de l'onglet Compréhension orale — même logique de budget
+   * séparé que la conjugaison, mais plus bas par défaut (5 + 15) : le
+   * volume de segments disponibles dépend entièrement des vidéos que
+   * l'utilisateur ajoute lui-même (pas de contenu bundlé), donc un
+   * budget aussi élevé que le vocabulaire n'aurait pas de sens tant que
+   * la bibliothèque est petite. Voir PLAN.md. */
+  listeningNewSegmentsPerDay: number;
+  listeningReviewCapPerDay: number;
 }
 
 /** Réglages validés (voir PLAN.md, "Décisions validées avec l'utilisateur"). */
@@ -39,6 +47,8 @@ export const defaultSettings: AppSettings = {
   themeOverride: 'system',
   conjugationNewCardsPerDay: 8,
   conjugationReviewCapPerDay: 22,
+  listeningNewSegmentsPerDay: 5,
+  listeningReviewCapPerDay: 15,
 };
 
 const SETTINGS_KEY = 'app';

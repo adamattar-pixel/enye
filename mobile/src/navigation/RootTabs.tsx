@@ -5,24 +5,27 @@ import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { DecksScreen } from '../screens/DecksScreen';
 import { ConjugationScreen } from '../screens/ConjugationScreen';
+import { ListeningScreen } from '../screens/ListeningScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
 import { ConjugationReviewContainer } from '../screens/ConjugationReviewContainer';
+import { ListeningReviewContainer } from '../screens/ListeningReviewContainer';
 import { TabBar, type TabKey } from './TabBar';
 import { FadeInView } from '../components/FadeInView';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, useThemeToggle, type SolYSombraPalette } from '../theme/solYSombra';
 
-type ActiveSession = 'none' | 'vocab' | 'conjugation';
+type ActiveSession = 'none' | 'vocab' | 'conjugation' | 'listening';
 
-/** Aujourd'hui / Statistiques / Decks & mots / Conjugaison / Réglages
- * vivent derrière une barre d'onglets (Conjugaison ajouté le
+/** Aujourd'hui / Statistiques / Decks & mots / Conjugaison / Écoute /
+ * Réglages vivent derrière une barre d'onglets (Conjugaison ajouté le
  * 20/08/2026 — entraînement SM-2 + référence statique en sous-onglets,
- * voir ConjugationScreen.tsx ; Réglages séparé de Decks & mots le même
- * jour, regroupe réglages/historique/prochaine notification à part de
- * la liste de mots) ; Session (révision vocabulaire OU conjugaison,
- * plein écran) masque la barre, lancée depuis Aujourd'hui/Conjugaison
- * et y ramène en sortant. */
+ * voir ConjugationScreen.tsx ; Écoute ajouté le même jour — compréhension
+ * orale sur vidéos YouTube, voir ListeningScreen.tsx ; Réglages séparé de
+ * Decks & mots le même jour, regroupe réglages/historique/prochaine
+ * notification à part de la liste de mots) ; Session (révision
+ * vocabulaire, conjugaison OU écoute, plein écran) masque la barre,
+ * lancée depuis Aujourd'hui/Conjugaison/Écoute et y ramène en sortant. */
 export function RootTabs({ db }: { db: SQLiteDatabase }) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -35,6 +38,7 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
         <FadeInView duration={250} direction="none" style={styles.root}>
           {activeSession === 'vocab' && <ReviewScreenContainer db={db} onExit={() => setActiveSession('none')} />}
           {activeSession === 'conjugation' && <ConjugationReviewContainer db={db} onExit={() => setActiveSession('none')} />}
+          {activeSession === 'listening' && <ListeningReviewContainer db={db} onExit={() => setActiveSession('none')} />}
         </FadeInView>
       ) : (
         <FadeInView duration={0} direction="none" style={styles.root}>
@@ -45,6 +49,7 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
             {tab === 'stats' && <StatsScreen db={db} />}
             {tab === 'decks' && <DecksScreen db={db} />}
             {tab === 'conjugation' && <ConjugationScreen db={db} onStartSession={() => setActiveSession('conjugation')} />}
+            {tab === 'listening' && <ListeningScreen db={db} onStartSession={() => setActiveSession('listening')} />}
             {tab === 'settings' && <SettingsScreen db={db} />}
           </FadeInView>
           <TabBar current={tab} onChange={setTab} />
