@@ -12,11 +12,11 @@ describe('parseWords', () => {
     for (const word of words) {
       expect(typeof word.id).toBe('string');
       expect(typeof word.spanish).toBe('string');
-      expect(typeof word.french).toBe('string');
+      expect(typeof word.english).toBe('string');
       expect(typeof word.partOfSpeech).toBe('string');
       expect(word.gender === null || typeof word.gender === 'string').toBe(true);
       expect(typeof word.exampleEs).toBe('string');
-      expect(typeof word.exampleFr).toBe('string');
+      expect(typeof word.exampleEn).toBe('string');
       expect(typeof word.level).toBe('string');
       expect(Array.isArray(word.tags)).toBe(true);
       expect(typeof word.frequencyRank).toBe('number');
@@ -34,7 +34,7 @@ describe('parseWords', () => {
 
   test('silently drops malformed entries instead of failing the whole import', () => {
     const raw = [
-      { id: 'casa', spanish: 'casa', french: 'maison', partOfSpeech: 'nom', gender: 'féminin', exampleEs: 'x', exampleFr: 'y', level: 'A1', tags: [], frequencyRank: 1 },
+      { id: 'casa', spanish: 'casa', english: 'house', partOfSpeech: 'nom', gender: 'féminin', exampleEs: 'x', exampleEn: 'y', level: 'A1', tags: [], frequencyRank: 1 },
       { id: 'broken', spanish: 'roto' }, // missing required fields
       'not even an object',
       null,
@@ -46,7 +46,7 @@ describe('parseWords', () => {
 
   test('defaults gender to null when absent or not a string', () => {
     const raw = [
-      { id: 'correr', spanish: 'correr', french: 'courir', partOfSpeech: 'verbe', exampleEs: 'x', exampleFr: 'y', level: 'A1', tags: [], frequencyRank: 1 },
+      { id: 'correr', spanish: 'correr', english: 'to run', partOfSpeech: 'verbe', exampleEs: 'x', exampleEn: 'y', level: 'A1', tags: [], frequencyRank: 1 },
     ];
     const words = parseWords(raw);
     expect(words[0].gender).toBeNull();
@@ -56,16 +56,16 @@ describe('parseWords', () => {
 describe('findDuplicateIds', () => {
   test('returns ids that appear more than once', () => {
     const words = [
-      { id: 'a', spanish: '', french: '', partOfSpeech: '', gender: null, exampleEs: '', exampleFr: '', level: '', tags: [], frequencyRank: 0 },
-      { id: 'b', spanish: '', french: '', partOfSpeech: '', gender: null, exampleEs: '', exampleFr: '', level: '', tags: [], frequencyRank: 0 },
-      { id: 'a', spanish: '', french: '', partOfSpeech: '', gender: null, exampleEs: '', exampleFr: '', level: '', tags: [], frequencyRank: 0 },
+      { id: 'a', spanish: '', english: '', partOfSpeech: '', gender: null, exampleEs: '', exampleEn: '', level: '', tags: [], frequencyRank: 0 },
+      { id: 'b', spanish: '', english: '', partOfSpeech: '', gender: null, exampleEs: '', exampleEn: '', level: '', tags: [], frequencyRank: 0 },
+      { id: 'a', spanish: '', english: '', partOfSpeech: '', gender: null, exampleEs: '', exampleEn: '', level: '', tags: [], frequencyRank: 0 },
     ];
     expect(findDuplicateIds(words)).toEqual(['a']);
   });
 
   test('returns an empty array when there are no duplicates', () => {
     const words = [
-      { id: 'a', spanish: '', french: '', partOfSpeech: '', gender: null, exampleEs: '', exampleFr: '', level: '', tags: [], frequencyRank: 0 },
+      { id: 'a', spanish: '', english: '', partOfSpeech: '', gender: null, exampleEs: '', exampleEn: '', level: '', tags: [], frequencyRank: 0 },
     ];
     expect(findDuplicateIds(words)).toEqual([]);
   });

@@ -2,6 +2,25 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Pivot espagnol→anglais + génération de vocabulaire depuis doozan/spanish_data (20/08/2026)
+
+**Décision définitive, actée avec l'utilisateur** : le couple cible du projet passe d'espagnol→français à espagnol→anglais, pour toute la suite du projet — pas seulement ce lot de contenu. Déclenchée par le choix d'une source de vocabulaire fiable ([doozan/spanish_data](https://github.com/doozan/spanish_data), CC BY 4.0, agrégeant hermitdave/FrequencyWords CC BY-SA 3.0 + Wiktionary CC BY-SA + Tatoeba CC BY 2.0 FR) qui ne fournit que de l'anglais, pas de français.
+
+**Renommage effectué dans toute la base de code** : `Word.french`→`Word.english`, `Word.exampleFr`→`Word.exampleEn`, colonnes SQL `french`/`example_fr` → `english`/`example_en`, libellés UI ("Traduction française" → "Traduction anglaise"), les 36 mots de `mobile/src/data/words.json` retraduits en anglais (dérivés directement de l'espagnol, pas d'une chaîne de traduction français→anglais, pour éviter une double perte de nuance). **`DB_NAME` changé de `lexis.db` à `lexis-en.db`** : `CREATE TABLE IF NOT EXISTS` ne migre pas une table déjà créée avec l'ancien schéma, donc un nouveau nom de fichier force une base fraîche plutôt qu'un crash au premier import. Aucune donnée utilisateur réelle perdue (rien n'a encore tourné avec succès de bout en bout sur device, voir plus bas dans ce fichier).
+
+**Script de génération** : [mobile/scripts/generate-vocabulary/](mobile/scripts/generate-vocabulary/), voir son propre README pour le détail complet du fonctionnement et des limites. Résumé :
+- Formats des 3 fichiers sources inspectés manuellement avant d'écrire le parseur (pas de doc formelle dans le dépôt source) : `frequency.csv` est un CSV simple sans guillemets (vérifié : 0 occurrence de `"`, 5 champs exactement sur chaque ligne, un `split(',')` suffit) ; `es-en.data` est un format texte custom (blocs séparés par `_____`, indentation à 2 espaces pour les sous-champs) ; `sentences.tsv` a des tags grammaticaux au format `:pos,forme|lemme`.
+- **Filtrage confirmé nécessaire par inspection** : `flags=NOUSAGE` (5508 lignes) contient du bruit réel — prénoms anglais ("john", "jack"), abréviations ("sr.", "dr.") qui ont fui du corpus Tatoeba dans le classement de fréquence espagnol. Filtré, avec `DUPLICATE` (264 lignes).
+- **Catégories grammaticales ajoutées** au passage (absentes du vocabulaire écrit à la main) : `nombre` (num), `déterminant`, `article`, `contraction` — table d'abréviations mise à jour dans `solYSombra.ts`.
+- **Test sur 20 mots puis sur 2000** : JSON valide, 2000 ids uniques, 99% avec une phrase d'exemple, genres corrects sur les noms spot-vérifiés (banda→féminin, héroe→masculin, etc.), 0 lemme perdu faute de correspondance dictionnaire dans le pool de candidats utilisé.
+- **Limite honnête constatée, pas corrigée automatiquement** : les gloses des mots grammaticaux (pronoms, déterminants, prépositions) sont parfois très verbeuses/académiques (Wiktionary), ex. « he, him, masculine personal third person subject and disjunctive pronoun (used as a subject and after prepositions) » pour *él*, contre « to have » pour *tener*. Pas de heuristique de troncature ajoutée : le risque de casser de bonnes gloses courtes existantes (ex. « in, at, on » pour *en*) l'emportait sur le bénéfice. Concerne une minorité de mots (~80 sur 2000) mais ce sont les plus fréquents, donc les premiers vus.
+- **Niveau CECRL** : heuristique par position dans le classement (40% A1/30% A2/30% B1), pas de vraie donnée CECRL dans la source — à valider manuellement.
+- **`words.generated.json` n'est jamais fusionné automatiquement** dans `words.json` (toujours 36 mots) — reste à relire par lots, comme demandé.
+
+**Écran Crédits ajouté** ([CreditsScreen.tsx](mobile/src/screens/CreditsScreen.tsx), accessible depuis Decks & mots → Réglages) — obligation légale des licences CC BY/CC BY-SA, cite les 4 sources avec leur licence respective.
+
+**Non vérifié sur device** : comme le reste depuis la tâche 0, ni le nouveau schéma ni l'écran Crédits n'ont encore tourné sur un vrai iPhone au moment où c'est écrit.
+
 ## Prononciation muette — bug documenté d'expo-speech corrigé (20/08/2026)
 
 Retour utilisateur après test : le bouton "Écouter" réagit visuellement mais aucun son ne sort, sonnerie activée (pas le mode silencieux, déjà écarté par la question posée). Recherché plutôt que deviné : c'est un [bug connu et documenté d'expo-speech sur iOS](https://github.com/expo/expo/issues/8235), présent depuis plusieurs années — la session audio n'est pas toujours activée correctement pour la lecture, indépendamment du bouton silencieux.

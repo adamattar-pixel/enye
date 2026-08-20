@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# sources tierces téléchargées pour la génération de vocabulaire (~60 Mo,
+# voir scripts/generate-vocabulary/README.md pour les retélécharger)
+/scripts/generate-vocabulary/data/

@@ -93,7 +93,7 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
         key={current.word.id}
         card={{
           word: current.word.spanish,
-          translation: current.word.french,
+          translation: current.word.english,
           partOfSpeech: current.word.partOfSpeech,
           gender: current.word.gender,
           level: current.word.level,

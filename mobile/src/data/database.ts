@@ -17,18 +17,25 @@ function parseLifecycle(value: string): SM2CardLifecycle {
   throw new Error(`Valeur de lifecycle invalide en base : "${value}"`);
 }
 
-export const DB_NAME = 'lexis.db';
+// Renommé lors du pivot espagnol→anglais (20/08/2026) : le schéma a
+// changé (french/example_fr → english/example_en). `CREATE TABLE IF NOT
+// EXISTS` ne migre pas une table déjà créée avec l'ancien schéma, donc
+// un nouveau nom de fichier force une base fraîche plutôt qu'un crash
+// au premier import après mise à jour. Pas de données utilisateur
+// réelles à préserver à ce stade (aucun test n'a encore réussi de bout
+// en bout — voir AUDIT.md).
+export const DB_NAME = 'lexis-en.db';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS words (
       id TEXT PRIMARY KEY NOT NULL,
       spanish TEXT NOT NULL,
-      french TEXT NOT NULL,
+      english TEXT NOT NULL,
       part_of_speech TEXT NOT NULL,
       gender TEXT,
       example_es TEXT NOT NULL,
-      example_fr TEXT NOT NULL,
+      example_en TEXT NOT NULL,
       level TEXT NOT NULL,
       tags TEXT NOT NULL,
       frequency_rank INTEGER NOT NULL,
@@ -81,15 +88,15 @@ export async function seedIfEmpty(db: SQLiteDatabase, words: Word[], now: Date =
   await db.withTransactionAsync(async () => {
     for (const word of words) {
       await db.runAsync(
-        `INSERT INTO words (id, spanish, french, part_of_speech, gender, example_es, example_fr, level, tags, frequency_rank, is_user_added)
+        `INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         word.id,
         word.spanish,
-        word.french,
+        word.english,
         word.partOfSpeech,
         word.gender,
         word.exampleEs,
-        word.exampleFr,
+        word.exampleEn,
         word.level,
         JSON.stringify(word.tags),
         word.frequencyRank,
@@ -145,11 +152,11 @@ export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number):
   type Row = {
     id: string;
     spanish: string;
-    french: string;
+    english: string;
     part_of_speech: string;
     gender: string | null;
     example_es: string;
-    example_fr: string;
+    example_en: string;
     level: string;
     tags: string;
     frequency_rank: number;
@@ -178,11 +185,11 @@ export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number):
     word: {
       id: r.id,
       spanish: r.spanish,
-      french: r.french,
+      english: r.english,
       partOfSpeech: r.part_of_speech,
       gender: r.gender,
       exampleEs: r.example_es,
-      exampleFr: r.example_fr,
+      exampleEn: r.example_en,
       level: r.level,
       tags: JSON.parse(r.tags) as string[],
       frequencyRank: r.frequency_rank,
@@ -210,11 +217,11 @@ export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promi
   type Row = {
     id: string;
     spanish: string;
-    french: string;
+    english: string;
     part_of_speech: string;
     gender: string | null;
     example_es: string;
-    example_fr: string;
+    example_en: string;
     level: string;
     tags: string;
     frequency_rank: number;
@@ -241,11 +248,11 @@ export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promi
     word: {
       id: r.id,
       spanish: r.spanish,
-      french: r.french,
+      english: r.english,
       partOfSpeech: r.part_of_speech,
       gender: r.gender,
       exampleEs: r.example_es,
-      exampleFr: r.example_fr,
+      exampleEn: r.example_en,
       level: r.level,
       tags: JSON.parse(r.tags) as string[],
       frequencyRank: r.frequency_rank,
@@ -358,11 +365,11 @@ export async function getAllWords(db: SQLiteDatabase, filter: WordFilter = {}): 
   type Row = {
     id: string;
     spanish: string;
-    french: string;
+    english: string;
     part_of_speech: string;
     gender: string | null;
     example_es: string;
-    example_fr: string;
+    example_en: string;
     level: string;
     tags: string;
     frequency_rank: number;
@@ -373,11 +380,11 @@ export async function getAllWords(db: SQLiteDatabase, filter: WordFilter = {}): 
   return rows.map((r) => ({
     id: r.id,
     spanish: r.spanish,
-    french: r.french,
+    english: r.english,
     partOfSpeech: r.part_of_speech,
     gender: r.gender,
     exampleEs: r.example_es,
-    exampleFr: r.example_fr,
+    exampleEn: r.example_en,
     level: r.level,
     tags: JSON.parse(r.tags) as string[],
     frequencyRank: r.frequency_rank,
@@ -402,15 +409,15 @@ export async function getAllTags(db: SQLiteDatabase): Promise<string[]> {
  * `isUserAdded`. */
 export async function addUserWord(db: SQLiteDatabase, word: Omit<Word, 'isUserAdded'>, now: Date = new Date()): Promise<void> {
   await db.runAsync(
-    `INSERT INTO words (id, spanish, french, part_of_speech, gender, example_es, example_fr, level, tags, frequency_rank, is_user_added)
+    `INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1);`,
     word.id,
     word.spanish,
-    word.french,
+    word.english,
     word.partOfSpeech,
     word.gender,
     word.exampleEs,
-    word.exampleFr,
+    word.exampleEn,
     word.level,
     JSON.stringify(word.tags),
     word.frequencyRank

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
@@ -17,6 +18,7 @@ import { addUserWord, deleteWord, getAllTags, getAllWords } from '../data/databa
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
 import type { Word } from '../data/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import { CreditsScreen } from './CreditsScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
@@ -131,8 +133,8 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
           <Animated.View entering={FadeInRight.duration(250).delay(Math.min(index, 12) * 25)} style={styles.wordRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.wordSpanish}>{item.spanish}</Text>
-              <Text style={styles.wordFrench}>
-                {item.french} · {item.level}
+              <Text style={styles.wordEnglish}>
+                {item.english} · {item.level}
               </Text>
             </View>
             {item.isUserAdded && (
@@ -189,27 +191,27 @@ function AddWordModal({
   styles: Styles;
 }) {
   const [spanish, setSpanish] = useState('');
-  const [french, setFrench] = useState('');
+  const [english, setEnglish] = useState('');
   const [partOfSpeech, setPartOfSpeech] = useState('nom');
   const [gender, setGender] = useState('');
   const [exampleEs, setExampleEs] = useState('');
-  const [exampleFr, setExampleFr] = useState('');
+  const [exampleEn, setExampleEn] = useState('');
   const [level, setLevel] = useState('A1');
   const [tags, setTags] = useState('');
 
   const reset = () => {
     setSpanish('');
-    setFrench('');
+    setEnglish('');
     setPartOfSpeech('nom');
     setGender('');
     setExampleEs('');
-    setExampleFr('');
+    setExampleEn('');
     setLevel('A1');
     setTags('');
   };
 
   const handleSave = async () => {
-    if (!spanish.trim() || !french.trim()) {
+    if (!spanish.trim() || !english.trim()) {
       Alert.alert('Champs manquants', 'Le mot espagnol et sa traduction sont obligatoires.');
       return;
     }
@@ -218,11 +220,11 @@ function AddWordModal({
     await addUserWord(db, {
       id,
       spanish: spanish.trim(),
-      french: french.trim(),
+      english: english.trim(),
       partOfSpeech: partOfSpeech.trim() || 'nom',
       gender: gender.trim() || null,
       exampleEs: exampleEs.trim(),
-      exampleFr: exampleFr.trim(),
+      exampleEn: exampleEn.trim(),
       level,
       tags: tags
         .split(',')
@@ -243,11 +245,11 @@ function AddWordModal({
             <Text style={styles.modalTitle}>Ajouter un mot</Text>
 
             <FormField styles={styles} label="Mot espagnol *" value={spanish} onChangeText={setSpanish} />
-            <FormField styles={styles} label="Traduction française *" value={french} onChangeText={setFrench} />
+            <FormField styles={styles} label="Traduction anglaise *" value={english} onChangeText={setEnglish} />
             <FormField styles={styles} label="Catégorie grammaticale (nom, verbe, adjectif…)" value={partOfSpeech} onChangeText={setPartOfSpeech} />
             <FormField styles={styles} label="Genre (masculin / féminin, si nom)" value={gender} onChangeText={setGender} />
             <FormField styles={styles} label="Phrase d'exemple (espagnol)" value={exampleEs} onChangeText={setExampleEs} />
-            <FormField styles={styles} label="Phrase d'exemple (français)" value={exampleFr} onChangeText={setExampleFr} />
+            <FormField styles={styles} label="Phrase d'exemple (anglais)" value={exampleEn} onChangeText={setExampleEn} />
             <FormField styles={styles} label="Niveau (A1, A2, B1, B2)" value={level} onChangeText={setLevel} />
             <FormField styles={styles} label="Tags (séparés par des virgules)" value={tags} onChangeText={setTags} />
 
@@ -290,6 +292,7 @@ function FormField({
 function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [creditsVisible, setCreditsVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -358,6 +361,12 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       <AnimatedPressable style={styles.button} haptic={Haptics.NotificationFeedbackType.Success} onPress={handleSave}>
         <Text style={styles.buttonText}>Enregistrer</Text>
       </AnimatedPressable>
+
+      <TouchableOpacity style={styles.creditsLink} onPress={() => setCreditsVisible(true)}>
+        <Text style={styles.creditsLinkText}>Crédits et sources du vocabulaire</Text>
+      </TouchableOpacity>
+
+      <CreditsScreen visible={creditsVisible} onClose={() => setCreditsVisible(false)} />
     </ScrollView>
   );
 }
@@ -419,7 +428,7 @@ function createStyles(t: SolYSombraPalette) {
       borderBottomColor: t.translationBackground,
     },
     wordSpanish: { fontSize: 16, fontWeight: '600', color: t.wordText },
-    wordFrench: { fontSize: 13, color: t.metaText, marginTop: 2 },
+    wordEnglish: { fontSize: 13, color: t.metaText, marginTop: 2 },
     deleteLink: { color: t.dot, fontSize: 12 },
     empty: { color: t.metaText, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
 
@@ -450,6 +459,8 @@ function createStyles(t: SolYSombraPalette) {
     },
 
     settingsContent: { padding: 24, paddingBottom: 60 },
+    creditsLink: { alignItems: 'center', paddingVertical: 16 },
+    creditsLinkText: { color: t.label, fontSize: 12, textDecorationLine: 'underline' },
     hourRow: { flexDirection: 'row' },
     tagToggleWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
 

@@ -2,11 +2,11 @@
   {
     "id": "ser",
     "spanish": "ser",
-    "french": "être",
+    "english": "to be",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "Ella es profesora.",
-    "exampleFr": "Elle est professeure.",
+    "exampleEn": "She is a teacher.",
     "level": "A1",
     "tags": ["verbes de base"],
     "frequencyRank": 8
@@ -14,11 +14,11 @@
   {
     "id": "estar",
     "spanish": "estar",
-    "french": "être (état, lieu)",
+    "english": "to be (state, location)",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "Estoy en casa.",
-    "exampleFr": "Je suis à la maison.",
+    "exampleEn": "I am at home.",
     "level": "A1",
     "tags": ["verbes de base"],
     "frequencyRank": 21
@@ -26,11 +26,11 @@
   {
     "id": "tener",
     "spanish": "tener",
-    "french": "avoir",
+    "english": "to have",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "Tengo dos hermanos.",
-    "exampleFr": "J'ai deux frères et sœurs.",
+    "exampleEn": "I have two siblings.",
     "level": "A1",
     "tags": ["verbes de base", "famille"],
     "frequencyRank": 51
@@ -38,11 +38,11 @@
   {
     "id": "hacer",
     "spanish": "hacer",
-    "french": "faire",
+    "english": "to do; to make",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "¿Qué haces esta tarde?",
-    "exampleFr": "Que fais-tu cet après-midi ?",
+    "exampleEn": "What are you doing this afternoon?",
     "level": "A1",
     "tags": ["verbes de base"],
     "frequencyRank": 45
@@ -50,11 +50,11 @@
   {
     "id": "querer",
     "spanish": "querer",
-    "french": "vouloir ; aimer",
+    "english": "to want; to love",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "Quiero aprender español.",
-    "exampleFr": "Je veux apprendre l'espagnol.",
+    "exampleEn": "I want to learn Spanish.",
     "level": "A1",
     "tags": ["verbes de base"],
     "frequencyRank": 88
@@ -62,11 +62,11 @@
   {
     "id": "poder",
     "spanish": "poder",
-    "french": "pouvoir",
+    "english": "to be able to; can",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "¿Puedes ayudarme?",
-    "exampleFr": "Peux-tu m'aider ?",
+    "exampleEn": "Can you help me?",
     "level": "A1",
     "tags": ["verbes de base"],
     "frequencyRank": 77
@@ -74,11 +74,11 @@
   {
     "id": "decir",
     "spanish": "decir",
-    "french": "dire",
+    "english": "to say; to tell",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "No sé qué decir.",
-    "exampleFr": "Je ne sais pas quoi dire.",
+    "exampleEn": "I don't know what to say.",
     "level": "A1",
     "tags": ["verbes de base"],
     "frequencyRank": 66
@@ -86,11 +86,11 @@
   {
     "id": "ir",
     "spanish": "ir",
-    "french": "aller",
+    "english": "to go",
     "partOfSpeech": "verbe",
     "gender": null,
     "exampleEs": "Vamos al mercado.",
-    "exampleFr": "Nous allons au marché.",
+    "exampleEn": "We are going to the market.",
     "level": "A1",
     "tags": ["verbes de base", "déplacement"],
     "frequencyRank": 60
@@ -98,11 +98,11 @@
   {
     "id": "casa",
     "spanish": "casa",
-    "french": "maison",
+    "english": "house",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "Mi casa está cerca del parque.",
-    "exampleFr": "Ma maison est près du parc.",
+    "exampleEn": "My house is near the park.",
     "level": "A1",
     "tags": ["maison", "quotidien"],
     "frequencyRank": 210
@@ -110,11 +110,11 @@
   {
     "id": "dia",
     "spanish": "día",
-    "french": "jour",
+    "english": "day",
     "partOfSpeech": "nom",
     "gender": "masculin",
     "exampleEs": "Hoy es un buen día.",
-    "exampleFr": "Aujourd'hui est un bon jour.",
+    "exampleEn": "Today is a good day.",
     "level": "A1",
     "tags": ["temps", "quotidien"],
     "frequencyRank": 95
@@ -122,11 +122,11 @@
   {
     "id": "tiempo",
     "spanish": "tiempo",
-    "french": "temps",
+    "english": "time",
     "partOfSpeech": "nom",
     "gender": "masculin",
     "exampleEs": "No tengo tiempo hoy.",
-    "exampleFr": "Je n'ai pas le temps aujourd'hui.",
+    "exampleEn": "I don't have time today.",
     "level": "A1",
     "tags": ["temps"],
     "frequencyRank": 130
@@ -134,11 +134,11 @@
   {
     "id": "persona",
     "spanish": "persona",
-    "french": "personne",
+    "english": "person",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "Es una persona muy amable.",
-    "exampleFr": "C'est une personne très aimable.",
+    "exampleEn": "She is a very kind person.",
     "level": "A1",
     "tags": ["quotidien"],
     "frequencyRank": 175
@@ -146,11 +146,11 @@
   {
     "id": "ano",
     "spanish": "año",
-    "french": "année ; an",
+    "english": "year",
     "partOfSpeech": "nom",
     "gender": "masculin",
     "exampleEs": "Vivo aquí desde hace un año.",
-    "exampleFr": "J'habite ici depuis un an.",
+    "exampleEn": "I've lived here for a year.",
     "level": "A1",
     "tags": ["temps"],
     "frequencyRank": 140
@@ -158,11 +158,11 @@
   {
     "id": "hombre",
     "spanish": "hombre",
-    "french": "homme",
+    "english": "man",
     "partOfSpeech": "nom",
     "gender": "masculin",
     "exampleEs": "Ese hombre es mi vecino.",
-    "exampleFr": "Cet homme est mon voisin.",
+    "exampleEn": "That man is my neighbor.",
     "level": "A1",
     "tags": ["personnes"],
     "frequencyRank": 220
@@ -170,11 +170,11 @@
   {
     "id": "mujer",
     "spanish": "mujer",
-    "french": "femme",
+    "english": "woman",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "La mujer camina por la calle.",
-    "exampleFr": "La femme marche dans la rue.",
+    "exampleEn": "The woman is walking down the street.",
     "level": "A1",
     "tags": ["personnes"],
     "frequencyRank": 225
@@ -182,11 +182,11 @@
   {
     "id": "nino",
     "spanish": "niño",
-    "french": "enfant ; garçon",
+    "english": "child; boy",
     "partOfSpeech": "nom",
     "gender": "masculin",
     "exampleEs": "El niño juega en el jardín.",
-    "exampleFr": "L'enfant joue dans le jardin.",
+    "exampleEn": "The child is playing in the garden.",
     "level": "A1",
     "tags": ["famille", "personnes"],
     "frequencyRank": 260
@@ -194,11 +194,11 @@
   {
     "id": "trabajo",
     "spanish": "trabajo",
-    "french": "travail",
+    "english": "work; job",
     "partOfSpeech": "nom",
     "gender": "masculin",
     "exampleEs": "Mañana empiezo un nuevo trabajo.",
-    "exampleFr": "Demain je commence un nouveau travail.",
+    "exampleEn": "Tomorrow I start a new job.",
     "level": "A1",
     "tags": ["travail", "quotidien"],
     "frequencyRank": 190
@@ -206,11 +206,11 @@
   {
     "id": "vida",
     "spanish": "vida",
-    "french": "vie",
+    "english": "life",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "Me gusta mi vida en la ciudad.",
-    "exampleFr": "J'aime ma vie en ville.",
+    "exampleEn": "I like my life in the city.",
     "level": "A1",
     "tags": ["quotidien"],
     "frequencyRank": 115
@@ -218,11 +218,11 @@
   {
     "id": "agua",
     "spanish": "agua",
-    "french": "eau",
+    "english": "water",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "El agua está muy fría.",
-    "exampleFr": "L'eau est très froide.",
+    "exampleEn": "The water is very cold.",
     "level": "A1",
     "tags": ["nourriture", "quotidien"],
     "frequencyRank": 300
@@ -230,11 +230,11 @@
   {
     "id": "comida",
     "spanish": "comida",
-    "french": "nourriture ; repas",
+    "english": "food; meal",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "La comida está lista.",
-    "exampleFr": "Le repas est prêt.",
+    "exampleEn": "The meal is ready.",
     "level": "A1",
     "tags": ["nourriture", "quotidien"],
     "frequencyRank": 340
@@ -242,11 +242,11 @@
   {
     "id": "bueno",
     "spanish": "bueno",
-    "french": "bon",
+    "english": "good",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "Este restaurante es muy bueno.",
-    "exampleFr": "Ce restaurant est très bon.",
+    "exampleEn": "This restaurant is very good.",
     "level": "A1",
     "tags": ["qualificatifs"],
     "frequencyRank": 51
@@ -254,11 +254,11 @@
   {
     "id": "malo",
     "spanish": "malo",
-    "french": "mauvais",
+    "english": "bad",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "El tiempo está muy malo hoy.",
-    "exampleFr": "Le temps est très mauvais aujourd'hui.",
+    "exampleEn": "The weather is very bad today.",
     "level": "A1",
     "tags": ["qualificatifs"],
     "frequencyRank": 410
@@ -266,11 +266,11 @@
   {
     "id": "grande",
     "spanish": "grande",
-    "french": "grand",
+    "english": "big; large",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "Viven en una casa grande.",
-    "exampleFr": "Ils vivent dans une grande maison.",
+    "exampleEn": "They live in a big house.",
     "level": "A1",
     "tags": ["qualificatifs"],
     "frequencyRank": 165
@@ -278,11 +278,11 @@
   {
     "id": "pequeno",
     "spanish": "pequeño",
-    "french": "petit",
+    "english": "small",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "Tengo un perro pequeño.",
-    "exampleFr": "J'ai un petit chien.",
+    "exampleEn": "I have a small dog.",
     "level": "A1",
     "tags": ["qualificatifs"],
     "frequencyRank": 400
@@ -290,11 +290,11 @@
   {
     "id": "nuevo",
     "spanish": "nuevo",
-    "french": "nouveau",
+    "english": "new",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "Compré un coche nuevo.",
-    "exampleFr": "J'ai acheté une nouvelle voiture.",
+    "exampleEn": "I bought a new car.",
     "level": "A1",
     "tags": ["qualificatifs"],
     "frequencyRank": 370
@@ -302,11 +302,11 @@
   {
     "id": "importante",
     "spanish": "importante",
-    "french": "important",
+    "english": "important",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "Es importante estudiar todos los días.",
-    "exampleFr": "Il est important d'étudier tous les jours.",
+    "exampleEn": "It's important to study every day.",
     "level": "A2",
     "tags": ["qualificatifs"],
     "frequencyRank": 520
@@ -314,11 +314,11 @@
   {
     "id": "feliz",
     "spanish": "feliz",
-    "french": "heureux",
+    "english": "happy",
     "partOfSpeech": "adjectif",
     "gender": null,
     "exampleEs": "Estoy muy feliz de verte.",
-    "exampleFr": "Je suis très heureux de te voir.",
+    "exampleEn": "I am very happy to see you.",
     "level": "A2",
     "tags": ["émotions", "qualificatifs"],
     "frequencyRank": 610
@@ -326,11 +326,11 @@
   {
     "id": "bien",
     "spanish": "bien",
-    "french": "bien",
+    "english": "well",
     "partOfSpeech": "adverbe",
     "gender": null,
     "exampleEs": "Todo va bien, gracias.",
-    "exampleFr": "Tout va bien, merci.",
+    "exampleEn": "Everything is going well, thanks.",
     "level": "A1",
     "tags": ["quotidien"],
     "frequencyRank": 26
@@ -338,11 +338,11 @@
   {
     "id": "muy",
     "spanish": "muy",
-    "french": "très",
+    "english": "very",
     "partOfSpeech": "adverbe",
     "gender": null,
     "exampleEs": "Hace muy buen tiempo.",
-    "exampleFr": "Il fait très beau.",
+    "exampleEn": "The weather is very nice.",
     "level": "A1",
     "tags": ["grammaire"],
     "frequencyRank": 43
@@ -350,11 +350,11 @@
   {
     "id": "tambien",
     "spanish": "también",
-    "french": "aussi",
+    "english": "also; too",
     "partOfSpeech": "adverbe",
     "gender": null,
     "exampleEs": "Yo también quiero ir.",
-    "exampleFr": "Moi aussi, je veux y aller.",
+    "exampleEn": "I also want to go.",
     "level": "A1",
     "tags": ["grammaire"],
     "frequencyRank": 120
@@ -362,11 +362,11 @@
   {
     "id": "siempre",
     "spanish": "siempre",
-    "french": "toujours",
+    "english": "always",
     "partOfSpeech": "adverbe",
     "gender": null,
     "exampleEs": "Siempre llega a tiempo.",
-    "exampleFr": "Il arrive toujours à l'heure.",
+    "exampleEn": "He always arrives on time.",
     "level": "A1",
     "tags": ["temps"],
     "frequencyRank": 150
@@ -374,11 +374,11 @@
   {
     "id": "nunca",
     "spanish": "nunca",
-    "french": "jamais",
+    "english": "never",
     "partOfSpeech": "adverbe",
     "gender": null,
     "exampleEs": "Nunca como carne.",
-    "exampleFr": "Je ne mange jamais de viande.",
+    "exampleEn": "I never eat meat.",
     "level": "A1",
     "tags": ["temps"],
     "frequencyRank": 230
@@ -386,11 +386,11 @@
   {
     "id": "manana_adv",
     "spanish": "mañana",
-    "french": "demain",
+    "english": "tomorrow",
     "partOfSpeech": "adverbe",
     "gender": null,
     "exampleEs": "Nos vemos mañana.",
-    "exampleFr": "On se voit demain.",
+    "exampleEn": "See you tomorrow.",
     "level": "A1",
     "tags": ["temps"],
     "frequencyRank": 180
@@ -398,11 +398,11 @@
   {
     "id": "manana_nom",
     "spanish": "mañana",
-    "french": "matin",
+    "english": "morning",
     "partOfSpeech": "nom",
     "gender": "féminin",
     "exampleEs": "Trabajo por la mañana.",
-    "exampleFr": "Je travaille le matin.",
+    "exampleEn": "I work in the morning.",
     "level": "A1",
     "tags": ["temps", "quotidien"],
     "frequencyRank": 181
@@ -410,11 +410,11 @@
   {
     "id": "yo",
     "spanish": "yo",
-    "french": "je ; moi",
+    "english": "I; me",
     "partOfSpeech": "pronom",
     "gender": null,
     "exampleEs": "Yo vivo en Madrid.",
-    "exampleFr": "Moi, j'habite à Madrid.",
+    "exampleEn": "I live in Madrid.",
     "level": "A1",
     "tags": ["grammaire", "pronoms"],
     "frequencyRank": 14
@@ -422,11 +422,11 @@
   {
     "id": "nosotros",
     "spanish": "nosotros",
-    "french": "nous",
+    "english": "we",
     "partOfSpeech": "pronom",
     "gender": null,
     "exampleEs": "Nosotros vamos al cine.",
-    "exampleFr": "Nous allons au cinéma.",
+    "exampleEn": "We are going to the movies.",
     "level": "A1",
     "tags": ["grammaire", "pronoms"],
     "frequencyRank": 250

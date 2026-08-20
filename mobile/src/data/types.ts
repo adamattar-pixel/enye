@@ -1,14 +1,18 @@
 /** Une entrée de vocabulaire, telle que stockée dans words.json et dans
  * la table `words`. Voir WordList/words.sample.json pour le format
- * d'origine (36 mots, non encore validé à l'échelle de 1000-2000). */
+ * d'origine (36 mots).
+ *
+ * Pivot du 20/08/2026 : le couple cible est espagnol→anglais, pas
+ * espagnol→français (décision définitive, voir PLAN.md/AUDIT.md) —
+ * `english`/`exampleEn` remplacent les anciens `french`/`exampleFr`. */
 export interface Word {
   id: string;
   spanish: string;
-  french: string;
+  english: string;
   partOfSpeech: string;
   gender: string | null;
   exampleEs: string;
-  exampleFr: string;
+  exampleEn: string;
   level: string;
   tags: string[];
   frequencyRank: number;

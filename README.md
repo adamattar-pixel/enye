@@ -1,6 +1,6 @@
 # Lexis
 
-App d'apprentissage du vocabulaire espagnol → français, sur le principe d'Anki (SM-2), pilotée depuis les notifications de l'écran verrouillé plutôt que depuis l'app elle-même.
+App d'apprentissage du vocabulaire espagnol → anglais (pivot du 20/08/2026, voir PLAN.md), sur le principe d'Anki (SM-2), pilotée depuis les notifications de l'écran verrouillé plutôt que depuis l'app elle-même.
 
 ## État du projet — pivot vers Expo (20/08/2026)
 

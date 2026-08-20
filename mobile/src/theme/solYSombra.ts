@@ -88,6 +88,13 @@ export const partOfSpeechAbbreviation: Record<string, string> = {
   préposition: 'prép.',
   conjonction: 'conj.',
   interjection: 'interj.',
+  // Ajoutés lors de la génération de vocabulaire depuis doozan/spanish_data
+  // (20/08/2026) — catégories présentes dans la source mais absentes du
+  // vocabulaire écrit à la main jusque-là.
+  nombre: 'num.',
+  déterminant: 'dét.',
+  article: 'art.',
+  contraction: 'contr.',
 };
 
 export function formatMeta(partOfSpeech: string, gender: string | null, level: string): string {

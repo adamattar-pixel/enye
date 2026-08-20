@@ -46,8 +46,8 @@ export async function handleNotificationResponse(
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `${row.word.spanish} → ${row.word.french}`,
-        body: `${row.word.exampleEs}\n${row.word.exampleFr}`,
+        title: `${row.word.spanish} → ${row.word.english}`,
+        body: `${row.word.exampleEs}\n${row.word.exampleEn}`,
         categoryIdentifier: GRADE_CATEGORY,
         data: { wordId: row.word.id },
       },

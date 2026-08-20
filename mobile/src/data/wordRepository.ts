@@ -26,10 +26,10 @@ function parseWordEntry(entry: unknown): Word | null {
   if (
     typeof e.id !== 'string' ||
     typeof e.spanish !== 'string' ||
-    typeof e.french !== 'string' ||
+    typeof e.english !== 'string' ||
     typeof e.partOfSpeech !== 'string' ||
     typeof e.exampleEs !== 'string' ||
-    typeof e.exampleFr !== 'string' ||
+    typeof e.exampleEn !== 'string' ||
     typeof e.level !== 'string' ||
     !Array.isArray(e.tags) ||
     typeof e.frequencyRank !== 'number'
@@ -40,11 +40,11 @@ function parseWordEntry(entry: unknown): Word | null {
   return {
     id: e.id,
     spanish: e.spanish,
-    french: e.french,
+    english: e.english,
     partOfSpeech: e.partOfSpeech,
     gender: typeof e.gender === 'string' ? e.gender : null,
     exampleEs: e.exampleEs,
-    exampleFr: e.exampleFr,
+    exampleEn: e.exampleEn,
     level: e.level,
     tags: e.tags.filter((t): t is string => typeof t === 'string'),
     frequencyRank: e.frequencyRank,

@@ -1,6 +1,8 @@
 # Plan — Lexis
 
-App d'apprentissage du vocabulaire espagnol → français (SM-2, pilotage par notifications). Ce fichier suit l'avancement réel et les décisions prises.
+App d'apprentissage du vocabulaire espagnol → anglais (SM-2, pilotage par notifications). Ce fichier suit l'avancement réel et les décisions prises.
+
+**Pivot linguistique du 20/08/2026, définitif : espagnol→anglais, plus espagnol→français.** Décidé par l'utilisateur en aval du choix de source de vocabulaire (voir section dédiée plus bas). Le schéma `Word` a été renommé partout (`english`/`exampleEn`), les 36 mots déjà écrits à la main retraduits en anglais.
 
 ## Pivot vers Expo (20/08/2026)
 
@@ -26,7 +28,8 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 | Plage horaire des notifications | 8h – 22h |
 | Espacement entre cartes dues simultanément | aléatoire 15-30 min (moyenne 22,5 min → capacité ≈37/j), triées par échéance la plus ancienne, jamais tassé (règle défensive testée dans ReviewScheduler) |
 | Boucle de révision (sans Content Extension) | notification 1 = mot seul + bouton « Ver traducción » ; tap → notification 2 programmée en arrière-plan avec traduction + exemple + 4 boutons de notation. **Validée sur iPhone réel tant que l'app n'a pas été force-quittée** ; si force-quit, le tap ne fait rien jusqu'à la prochaine ouverture manuelle (limite iOS documentée, acceptée — voir AUDIT.md). Depuis le 20/08/2026, l'écran de révision **dans l'app** reprend le même montage en deux temps (demandé après le premier test réel) |
-| Source de `words.json` | liste de fréquence hermitdave/FrequencyWords (CC BY-SA 3.0) comme guide de priorité ; enrichissement généré par lots validés par l'utilisateur — **seul un échantillon de 36 mots existe, non encore validé** |
+| Couple de langues | **Espagnol → anglais** (pivot du 20/08/2026, définitif — plus français) |
+| Source de vocabulaire | [doozan/spanish_data](https://github.com/doozan/spanish_data) (CC BY 4.0, agrège hermitdave/FrequencyWords + Wiktionary + Tatoeba) — remplace la génération manuelle par lots. 2000 mots générés dans `words.generated.json`, **candidat à relire avant intégration dans `words.json`** (toujours 36 mots à ce jour) |
 
 ### Le calcul des plafonds (pourquoi 8+22, pas 15+80)
 
@@ -50,10 +53,16 @@ Trois retours reçus après un vrai test sur iPhone, tous traités :
 2. **Boutons de notation absents sur l'écran de session** → l'utilisateur attendait le même montage en deux temps qu'en notification (mot → « Ver traducción » → traduction + notation), pas encore implémenté dans l'app jusque-là. Ajouté.
 3. **Design jugé « un peu vide »** → padding augmenté (20→24/28 sur les écrans), frise géométrique façon azulejo ajoutée en bas de la carte de révision (déjà prévue dans le cahier des charges d'origine, jamais construite avant).
 
+## Vocabulaire généré depuis doozan/spanish_data (20/08/2026)
+
+Remplace la génération manuelle par lots (trop lente pour atteindre 1000-2000 mots). [mobile/scripts/generate-vocabulary/](mobile/scripts/generate-vocabulary/) télécharge et parse `frequency.csv` + `es-en.data` + `sentences.tsv`, produit `mobile/src/data/words.generated.json` (2000 mots, jamais fusionné automatiquement dans `words.json`). Détail complet, format, limites connues (gloses verbeuses sur les mots grammaticaux, niveaux CECRL approximatifs, tags thématiques vides) : voir le [README du script](mobile/scripts/generate-vocabulary/README.md) et AUDIT.md.
+
+Écran **Crédits** ajouté (Decks & mots → Réglages → Crédits et sources du vocabulaire) citant hermitdave/FrequencyWords, Wiktionary, Tatoeba et doozan/spanish_data avec leurs licences respectives, comme l'exigent CC BY/CC BY-SA.
+
 ## Prochaines actions
 
-- [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation apparaissent bien maintenant avec le flux de révélation, et que le démarrage est plus rapide.
-- [ ] Reprendre la validation de `words.json` et continuer la génération par lots jusqu'à 1000-2000 mots (échantillon actuel : 36, déjà en base).
+- [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation apparaissent bien maintenant avec le flux de révélation, que le démarrage est plus rapide, et que la prononciation fonctionne.
+- [ ] Relire `words.generated.json` (2000 mots) par lots et fusionner les meilleurs dans `words.json` — en particulier vérifier/corriger les gloses des mots grammaticaux (pronoms, déterminants) signalées verbeuses.
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
