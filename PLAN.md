@@ -463,6 +463,16 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté et compilé, scripts injectés vérifiés syntaxiquement valides (`new Function()` en Node), non vérifié de bout en bout.** Même limite que la version précédente : aucun moteur de WebView disponible dans les outils de cette session. **Ne pas présenter comme réparé avant qu'un test réel sur device montre un nombre de segments > 0 pour une vraie vidéo.** Détail complet dans AUDIT.md, y compris l'architecture de repli (petit service local) toujours documentée mais non construite.
 
+## Premier vrai test sur device de la compréhension orale : bouton "Show transcript" introuvable (20/08/2026)
+
+**Retour réel, avec logs** : sur iPhone, `fetchVideoCaptions()` échoue comme attendu (corps vide), mais surtout `TranscriptFetcher` ne trouve jamais le bouton "Show transcript" et le repli DOM ne trouve rien non plus — le panneau de transcription ne s'ouvre probablement pas du tout.
+
+**Hypothèse principale** : la `WebView` charge la version mobile de YouTube (`m.youtube.com`, DOM différent) à cause du user-agent par défaut d'iOS, pas la version desktop pour laquelle les sélecteurs ont été écrits.
+
+**Correctifs appliqués** dans `TranscriptFetcher.tsx` : log de diagnostic `page_context` (URL réelle + échantillon du DOM) ajouté en premier pour confirmer l'hypothèse au prochain test ; `&app=desktop` sur l'URL ET un `userAgent` desktop explicite sur la `WebView` (les deux) ; tentative de fermeture d'un bandeau de consentement cookies avant la recherche du bouton, au cas où ce serait plutôt (ou en plus) la vraie cause.
+
+**Statut : correctifs appliqués et compilés, PAS vérifiés — appliqués sur une hypothèse argumentée, pas sur un log de confirmation déjà vu (je n'ai pas eu accès au résultat de `page_context` avant d'écrire ce correctif).** Détail complet dans AUDIT.md. Prochaine étape : retester sur device et regarder ce que `page_context`/`button_search` rapportent cette fois.
+
 ## Les 6002 mots ont désormais tous un thème (20/08/2026)
 
 **Demande explicite** : après le premier passage (1027/5966 mots tagués, 17,2%), l'utilisateur a demandé que les 6002 mots aient tous un thème.

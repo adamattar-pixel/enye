@@ -10,6 +10,18 @@ export interface TranscriptFetchResult {
   segments: CaptionCue[];
 }
 
+/** Forcé sur la `WebView` ET dans l'URL (`&app=desktop` ci-dessous) —
+ * hypothèse principale du retour de test du 20/08/2026 : sur iPhone, le
+ * user-agent par défaut de la `WebView` ressemble à Safari mobile, et
+ * YouTube sert alors `m.youtube.com` (DOM différent, pas de bouton
+ * "Show transcript" à cet endroit) plutôt que la version desktop pour
+ * laquelle `CLICK_SCRIPT`/`DOM_FALLBACK_SCRIPT` sont écrits. Les deux
+ * leviers sont posés ensemble plutôt qu'un seul : la détection
+ * serveur de YouTube peut se baser sur l'un ou l'autre selon le
+ * contexte, pas garanti qu'un seul suffise. */
+const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+
 /**
  * Deuxième méthode de récupération du CONTENU des sous-titres, en
  * secours de `captions.ts#fetchVideoCaptions` (requête HTTP nue) — voir
@@ -123,11 +135,63 @@ const NETWORK_PATCH_SCRIPT = `
 /** Injecté après le chargement + délai d'hydratation. Cherche le bouton
  * "Show transcript" (`aria-label` d'abord, repli sur une recherche par
  * texte — la page est chargée en anglais via `Accept-Language` pour que
- * ce libellé soit stable) et clique dessus si trouvé. */
+ * ce libellé soit stable) et clique dessus si trouvé.
+ *
+ * **20/08/2026, sur retour de test réel sur iPhone** : `button_search`
+ * ne trouvait jamais rien (`found: false`) et le repli DOM ne trouvait
+ * aucune ligne non plus — le panneau de transcription ne s'ouvrait
+ * probablement jamais. Deux hypothèses à départager, dans l'ordre :
+ * (1) la WebView charge `m.youtube.com` (version mobile, DOM différent
+ * de celui pour lequel ces sélecteurs ont été écrits) à cause du
+ * user-agent par défaut d'iOS — combattu ci-dessous par `&app=desktop`
+ * dans l'URL ET un `userAgent` desktop explicite sur la `WebView` (les
+ * deux, un seul ne suffit pas forcément selon la détection côté
+ * serveur) ; (2) un bandeau de consentement cookies (RGPD) bloque
+ * l'interaction avant que le bouton n'apparaisse — une tentative de
+ * fermeture est faite avant la recherche du bouton, sans certitude que
+ * les sélecteurs ci-dessous couvrent la bonne variante régionale.
+ *
+ * Log de diagnostic `page_context` ajouté en tout premier, AVANT toute
+ * tentative de correction — capture `location.href` et le début du DOM
+ * pour confirmer concrètement laquelle de ces hypothèses est la bonne,
+ * plutôt que de corriger à l'aveugle. **Non revérifié sur device après
+ * ce changement** — voir AUDIT.md.
+ */
 const CLICK_SCRIPT = `
 (function () {
   function post(msg) {
     if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+  }
+
+  // Diagnostic en premier, avant toute tentative de correction — voir
+  // le commentaire au-dessus de CLICK_SCRIPT côté TypeScript.
+  post({
+    type: 'debug',
+    step: 'page_context',
+    href: document.location.href,
+    bodySample: (document.body ? document.body.innerHTML : '').slice(0, 500)
+  });
+
+  function tryDismissConsentBanner() {
+    var textSelectors = ['accept all', 'i agree', 'reject all', 'agree to all'];
+    var candidates = document.querySelectorAll('button, tp-yt-paper-button, yt-button-shape, ytd-button-renderer, form button');
+    for (var i = 0; i < candidates.length; i++) {
+      var text = (candidates[i].innerText || candidates[i].textContent || '').trim().toLowerCase();
+      var aria = (candidates[i].getAttribute && candidates[i].getAttribute('aria-label') || '').toLowerCase();
+      for (var j = 0; j < textSelectors.length; j++) {
+        if (text.indexOf(textSelectors[j]) !== -1 || aria.indexOf(textSelectors[j]) !== -1) {
+          return candidates[i];
+        }
+      }
+    }
+    return null;
+  }
+
+  var consentButton = tryDismissConsentBanner();
+  post({ type: 'debug', step: 'consent_check', found: !!consentButton, onConsentDomain: document.location.href.indexOf('consent.youtube.com') !== -1 });
+  if (consentButton) {
+    consentButton.click();
+    post({ type: 'debug', step: 'consent_dismissed' });
   }
 
   function findShowTranscriptButton() {
@@ -379,9 +443,10 @@ export function useTranscriptFetcher() {
         <WebView
           ref={webviewRef}
           source={{
-            uri: `https://www.youtube.com/watch?v=${pendingVideoId}`,
+            uri: `https://www.youtube.com/watch?v=${pendingVideoId}&app=desktop`,
             headers: { 'Accept-Language': 'en-US,en;q=0.9' },
           }}
+          userAgent={DESKTOP_USER_AGENT}
           injectedJavaScriptBeforeContentLoaded={NETWORK_PATCH_SCRIPT}
           javaScriptEnabled
           onLoadEnd={handleLoadEnd}

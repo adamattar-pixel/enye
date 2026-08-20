@@ -141,6 +141,31 @@ Suite à un retour explicite ("la fonctionnalité est inutilisable en pratique, 
 
 **Statut : implémenté et compilé (`tsc --noEmit` propre, scripts injectés vérifiés syntaxiquement valides via `new Function()` en Node), non vérifié de bout en bout — même limite que l'itération précédente : aucun moteur de WebView disponible dans cette session pour exécuter réellement le scénario.** Ne pas présenter comme "réparé". Le test qui tranchera : ajouter une vraie vidéo espagnole depuis l'app et vérifier un nombre de segments > 0, avec un exemple de segment contenant du texte espagnol réel.
 
+### Troisième itération — premier vrai test sur device, cause probable identifiée : version mobile de YouTube (20/08/2026)
+
+**Constat.** Premier test réel sur iPhone (Expo Go) avec une vraie vidéo à sous-titres espagnols confirmés disponibles. Logs obtenus :
+
+```
+[captions] track list: 1 pistes, 1 en espagnol
+[captions] piste choisie: es (auto-générée)
+[captions] fetch timedtext — HTTP 200 — corps: 0 caractères (vide)
+[TranscriptFetcher] network_patch_installed
+[TranscriptFetcher] button_search {"found":false,"selector":null}
+[TranscriptFetcher] button_search {"found":false,"selector":null}
+[TranscriptFetcher] dom_fallback {"rowCount":0,"segmentCount":0}
+```
+
+Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue exactement comme prévu — cohérent avec le diagnostic PoToken déjà établi, pas une surprise ; (2) côté `TranscriptFetcher`, le patch réseau s'installe bien, mais **le bouton "Show transcript" n'est jamais trouvé, et le repli DOM ne trouve aucune ligne non plus** — signe que le panneau de transcription ne s'ouvre probablement jamais, indépendamment de l'interception réseau elle-même (qui n'a donc jamais eu l'occasion de capturer quoi que ce soit).
+
+**Diagnostic.** Hypothèse principale, pas encore confirmée par un log direct (voir "Non vérifié" ci-dessous) : la `WebView` iOS utilise par défaut un user-agent de type mobile Safari, et YouTube sert alors `m.youtube.com` (structure DOM différente) plutôt que la version desktop pour laquelle `button[aria-label="Show transcript"]`/`ytd-transcript-segment-renderer` ont été écrits — ces sélecteurs n'existent probablement simplement pas sur cette page-là. Hypothèse secondaire, à départager en second (moins probable mais pas exclue) : un bandeau de consentement cookies (RGPD) bloquant l'interaction avant que le bouton n'apparaisse.
+
+**Impact / correctifs appliqués**, dans `TranscriptFetcher.tsx` :
+1. **Log de diagnostic `page_context`** ajouté en tout premier dans `CLICK_SCRIPT`, avant toute tentative de correction — capture `document.location.href` et les 500 premiers caractères de `document.body.innerHTML`. Permettra de confirmer concrètement, au prochain test, laquelle des deux hypothèses ci-dessus est la bonne (ou si c'est autre chose).
+2. **Forçage de la version desktop, sur les deux leviers en même temps** (pas un seul, la détection serveur de YouTube pouvant se baser sur l'un ou l'autre) : `&app=desktop` ajouté à l'URL chargée, ET prop `userAgent` de la `WebView` posée à une chaîne desktop Safari explicite (`DESKTOP_USER_AGENT`).
+3. **Tentative de fermeture d'un bandeau de consentement** ajoutée avant la recherche du bouton (`tryDismissConsentBanner`, recherche par texte "accept all"/"i agree"/"reject all"/"agree to all" sur boutons/`aria-label`) — couvre les variantes les plus courantes vues publiquement, pas garanti exhaustif pour toutes les régions. Un log `consent_check` indique si un tel bouton a été trouvé et si l'URL est passée par `consent.youtube.com` (cas où le consentement est une redirection de page entière, pas juste un bandeau).
+
+**Statut : correctifs appliqués et compilés (`tsc --noEmit` propre, scripts réinjectés vérifiés syntaxiquement valides), appliqués sur la base d'une hypothèse argumentée mais PAS d'un log de confirmation déjà observé — je n'ai pas eu accès aux résultats de `page_context` avant d'écrire ce correctif, faute de pouvoir retester moi-même sur device.** Ne pas marquer "résolu" : le prochain test réel doit montrer (a) ce que `page_context` rapporte comme `href` (confirme ou infirme l'hypothèse mobile/desktop), et (b) si `button_search` trouve enfin le bouton et si `segmentCount` dépasse 0. Si l'hypothèse s'avère fausse (le `href` montre déjà `youtube.com` desktop malgré tout), le vrai problème est ailleurs et il faudra regarder le `bodySample` capturé pour comprendre pourquoi le bouton n'existe pas dans ce DOM précis.
+
 ### Compatibilité Expo Go — toujours non vérifiée sur device, mais l'installation du paquet s'est bien passée
 
 **Constat.** `npx expo install react-native-webview` s'est exécuté proprement (résolution automatique d'une version compatible SDK 54, `13.15.0`), et `expo-doctor` rapporte 18/18 vérifications passées après installation. Le bundle Metro iOS a aussi été récupéré avec succès (`HTTP 200`, ~9,5 Mo) pendant cette session, confirmant que le module se résout et se bundle sans erreur de compilation ou de dépendance manquante.
