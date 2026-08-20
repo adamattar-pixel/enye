@@ -49,7 +49,7 @@ Cadrage initial validé avec l'utilisateur avant tout code ; **implémenté dans
 | Temps couverts (v1) | Indicatif : présent, prétérit, imparfait, futur. Conditionnel présent. Subjonctif : présent, imparfait (forme -ra, la forme -se dérivée et acceptée comme réponse valide). Impératif : affirmatif (fourni par la librairie) et négatif (composé : "no" + subjonctif présent) |
 | Source des données | Fichier statique `conjugations.json`, produit par [mobile/scripts/generate-conjugations/generate.mjs](mobile/scripts/generate-conjugations/generate.mjs), calcul fait à la génération — **aucune dépendance runtime sur le téléphone** |
 | Librairie de génération | **`@v4nn4/ablaut`**, pas `spanish-verbs` comme envisagé initialement — testé avant d'écrire le script, `spanish-verbs` s'est révélé avoir ~43% d'erreurs sur un échantillon de verbes à changement de radical au subjonctif présent (déprécié en plus). `@v4nn4/ablaut` : vérifié à 100,00% sur 339 200 formes espagnoles par ses propres auteurs, retesté ici sans erreur. Voir AUDIT.md et le [README du script](mobile/scripts/generate-conjugations/README.md) |
-| Verbes couverts (v1) | **200**, les plus fréquents parmi les 1228 déjà catégorisés "verbe" dans `words.json` — pas une nouvelle source séparée. Extensible sans changement de code (`node generate.mjs 400`) |
+| Verbes couverts | **1227** (élargi de 200 à quasi-tous les verbes disponibles le 20/08/2026, suite à "vérifie que le répertoire est très grand" — voir plus bas), parmi les 1228 déjà catégorisés "verbe" dans `words.json` — pas une nouvelle source séparée. Extensible sans changement de code si `words.json` en gagne d'autres |
 | Écran de révision | Carte « Sol y sombra » cohérente avec le vocabulaire, adaptée pour une saisie au clavier plutôt qu'une révélation en 2 temps — voir [ConjugationReviewScreen.tsx](mobile/src/screens/ConjugationReviewScreen.tsx) |
 | Rythme quotidien | Réglages séparés du vocabulaire (`conjugationNewCardsPerDay`/`conjugationReviewCapPerDay`, 8+22 par défaut) — les deux entraînements ne se disputent pas les mêmes créneaux |
 | Notifications verrouillées | **Pas intégré en v1** — entraînement dans l'app uniquement, décision de périmètre pour contenir la taille du chantier (voir AUDIT.md) |
@@ -150,13 +150,24 @@ Suite directe de la planification ci-dessus, construits dans la foulée ("code t
 - **"Réinitialiser ma progression"** étendu pour couvrir aussi la conjugaison (un seul bouton pour toute la progression).
 - Vérifié : `tsc --noEmit`, `npm test` (51/51, +8 pour la validation de conjugaison), bundle Metro compilé (7,3 → 7,7 Mo). **Non vérifié sur device** — comme le reste construit cette session, y compris le temps de premier lancement avec ~16 400 lignes à importer en base (mots + conjugaisons combinés) et le confort réel de la saisie au clavier sur un clavier iOS.
 
+## Conjugaison : entraînement aléatoire, historique, répertoire élargi à 1227 verbes (20/08/2026)
+
+Retour après un premier test réel de l'onglet Conjugaison : la partie Règles "marche bien", l'entraînement "ça va" mais "c'est pas aléatoire" — les nouvelles cartes défilaient verbe par verbe dans l'ordre d'import (`ORDER BY rowid`), donc de façon très prévisible. Trois demandes explicites + latitude laissée pour d'autres ajustements :
+
+- **Ordre aléatoire** : nouvelles cartes tirées avec `ORDER BY RANDOM()` côté SQL, puis l'ensemble révisions+nouvelles remélangé côté JS ([shuffle.ts](mobile/src/utils/shuffle.ts), testé) avant présentation — voir AUDIT.md.
+- **Historique de conjugaison** ajouté (3e sous-onglet de "Conjugaison", à côté d'Entraînement/Règles) — mot conjugué, infinitif, temps/mode, personne, note, correction possible, même principe que l'historique du vocabulaire. **Les notifications verrouillées restent vocabulaire uniquement**, confirmé explicitement par l'utilisateur — pas de sous-onglet Notifications pour la conjugaison.
+- **Répertoire élargi de 200 à 1227 verbes** ("vérifie que le répertoire est très grand") — la quasi-totalité des verbes disponibles dans `words.json`, régénéré et revérifié (1 seul rejeté, un artefact de source, pas une vraie erreur de conjugaison). Voir le [README du script](mobile/scripts/generate-conjugations/README.md).
+- **Autres ajustements faits de ma propre initiative** (le volume de cartes a été multiplié par ~6, de 10 400 à ~63 800) : les imports SQLite (`importMissingWords`, `importMissingConjugationCards`) sont passés d'un `INSERT` par ligne à des lots de 80 lignes par requête — sinon le premier lancement (ou le premier lancement après cette mise à jour) aurait probablement été nettement plus lent avec ce volume. Voir AUDIT.md pour le raisonnement et ce qui reste à surveiller (tri `RANDOM()` sur un grand nombre de lignes, pas mesuré sur device).
+
+Vérifié : `tsc --noEmit`, `npm test` (55/55, +4 pour `shuffle.ts`), bundle Metro compilé (7,7 → 9,4 Mo, `conjugations.json` nettement plus gros avec 1227 verbes). **Non vérifié sur device.**
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
-- [ ] **Tester l'onglet Conjugaison sur device** : temps de premier import (~16 400 lignes en base au total avec le vocabulaire), confort de la saisie clavier + tolérance sur les accents jugée bien calibrée ou pas, lisibilité de l'écran Règles avec les accordéons dépliés, et si 5 onglets restent confortables au toucher dans la barre du bas.
+- [ ] **Tester l'onglet Conjugaison sur device** : l'entraînement est-il perçu comme suffisamment aléatoire maintenant, temps de premier import à ce volume (~69 800 lignes en base au total, mots + conjugaisons), confort de la saisie clavier + tolérance sur les accents jugée bien calibrée ou pas, lisibilité de l'écran Règles et du nouvel historique, et si 5 onglets restent confortables au toucher dans la barre du bas.
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
 - [ ] Gloses verbeuses sur les mots grammaticaux (pronoms/déterminants/prépositions) dans le vocabulaire généré — pas corrigées automatiquement (voir AUDIT.md), correctibles au cas par cas si un mot précis pose problème à l'usage (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression).
-- [ ] Intégration de la conjugaison aux notifications verrouillées — explicitement hors périmètre en v1 (voir AUDIT.md), à envisager si l'entraînement en app est jugé utile.
+- [ ] Intégration de la conjugaison aux notifications verrouillées — explicitement hors périmètre, confirmé une deuxième fois par l'utilisateur (vocabulaire uniquement) : à ne plus reproposer sauf demande explicite.
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

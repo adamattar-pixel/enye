@@ -1,7 +1,37 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteBindValue, SQLiteDatabase } from 'expo-sqlite';
 import { createCard, type SM2CardLifecycle, type SM2CardState, type SM2Grade } from '../sm2/types';
 import type { Word } from './types';
 import { CONJUGATION_TENSES, personCountForTense, type ConjugationTense, type ConjugationVerb } from '../conjugation/types';
+import { shuffle } from '../utils/shuffle';
+
+/** Groupe de placeholders `(?, ?, ...)` répété `rowCount` fois, pour un
+ * INSERT multi-lignes en un seul aller-retour au pont natif plutôt
+ * qu'un `runAsync` par ligne — utilisé pour les imports en gros volume
+ * (mots, cartes de conjugaison), où des milliers d'inserts un par un
+ * ajoutaient plusieurs secondes au premier lancement. Taille de lot
+ * choisie pour rester largement sous l'ancienne limite historique de
+ * SQLite (999 paramètres liés) même si l'app tourne un jour sur une
+ * version de SQLite plus ancienne que celle habituellement bundlée. */
+const INSERT_BATCH_SIZE = 80;
+
+function valuesPlaceholders(columnCount: number, rowCount: number): string {
+  const row = `(${Array(columnCount).fill('?').join(', ')})`;
+  return Array(rowCount).fill(row).join(', ');
+}
+
+async function insertInBatches<T>(
+  db: SQLiteDatabase,
+  rows: T[],
+  columnCount: number,
+  sqlPrefix: string,
+  toParams: (row: T) => SQLiteBindValue[]
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
+    const batch = rows.slice(i, i + INSERT_BATCH_SIZE);
+    const params = batch.flatMap(toParams);
+    await db.runAsync(`${sqlPrefix} VALUES ${valuesPlaceholders(columnCount, batch.length)};`, ...params);
+  }
+}
 
 const VALID_GRADES: readonly SM2Grade[] = ['again', 'hard', 'good', 'easy'];
 
@@ -103,38 +133,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
-async function insertWordWithCard(db: SQLiteDatabase, word: Word, now: Date): Promise<void> {
-  await db.runAsync(
-    `INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-    word.id,
-    word.spanish,
-    word.english,
-    word.partOfSpeech,
-    word.gender,
-    word.exampleEs,
-    word.exampleEn,
-    word.level,
-    JSON.stringify(word.tags),
-    word.frequencyRank,
-    word.isUserAdded ? 1 : 0
-  );
-
-  const card = createCard({ dueDate: now });
-  await db.runAsync(
-    `INSERT INTO cards (word_id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-    word.id,
-    card.easeFactor,
-    card.intervalDays,
-    card.repetitions,
-    card.lapses,
-    card.learningStepIndex,
-    card.lifecycle,
-    card.dueDate.toISOString()
-  );
-}
-
 /** Importe dans SQLite tout mot du bundle (`words.json`) pas encore
  * présent en base, avec une carte SM-2 neuve pour chacun — au premier
  * lancement, ça importe tout ; sur une base déjà peuplée, ça complète
@@ -146,6 +144,10 @@ async function insertWordWithCard(db: SQLiteDatabase, word: Word, now: Date): Pr
  * (ex. le passage de 36 à 6000 mots, voir AUDIT.md, ne serait jamais
  * arrivé jusqu'aux installations déjà seedées sans ce changement).
  *
+ * Insertions groupées par lots ([insertInBatches]) plutôt qu'un
+ * `runAsync` par mot — à 6000 mots, un aller-retour par ligne ajoutait
+ * plusieurs secondes au premier lancement.
+ *
  * Pas testé unitairement (pas de SQLite en mémoire disponible sous
  * Jest/jest-expo pour l'instant) — à vérifier sur device réel une fois
  * branché à un écran. Voir AUDIT.md. */
@@ -156,9 +158,45 @@ export async function importMissingWords(db: SQLiteDatabase, words: Word[], now:
   if (missing.length === 0) return 0;
 
   await db.withTransactionAsync(async () => {
-    for (const word of missing) {
-      await insertWordWithCard(db, word, now);
-    }
+    await insertInBatches(
+      db,
+      missing,
+      11,
+      'INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)',
+      (word) => [
+        word.id,
+        word.spanish,
+        word.english,
+        word.partOfSpeech,
+        word.gender,
+        word.exampleEs,
+        word.exampleEn,
+        word.level,
+        JSON.stringify(word.tags),
+        word.frequencyRank,
+        word.isUserAdded ? 1 : 0,
+      ]
+    );
+
+    await insertInBatches(
+      db,
+      missing,
+      8,
+      'INSERT INTO cards (word_id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)',
+      (word) => {
+        const card = createCard({ dueDate: now });
+        return [
+          word.id,
+          card.easeFactor,
+          card.intervalDays,
+          card.repetitions,
+          card.lapses,
+          card.learningStepIndex,
+          card.lifecycle,
+          card.dueDate.toISOString(),
+        ];
+      }
+    );
   });
 
   return missing.length;
@@ -669,10 +707,11 @@ function conjugationCardId(verbId: string, tense: ConjugationTense, person: numb
 /** Importe dans SQLite tout triplet (verbe, temps/mode, personne) de
  * `conjugations.json` pas encore présent en base, avec une carte SM-2
  * neuve pour chacun — même principe que `importMissingWords` : tout au
- * premier lancement, seulement le delta ensuite. 200 verbes × 52 formes
- * (6 personnes × 7 temps/mode + 5 personnes × 2 impératifs) = 10 400
- * cartes possibles au premier import — voir AUDIT.md pour le temps de
- * premier lancement, pas mesuré sur device. */
+ * premier lancement, seulement le delta ensuite. Avec le répertoire
+ * élargi à ~1227 verbes (voir AUDIT.md, 20/08/2026), ça représente
+ * jusqu'à ~63 800 cartes au premier import — insérées par lots
+ * ([insertInBatches]), pas une par une (aurait ajouté une dizaine de
+ * secondes ou plus au premier lancement à ce volume). */
 export async function importMissingConjugationCards(
   db: SQLiteDatabase,
   verbs: ConjugationVerb[],
@@ -694,24 +733,28 @@ export async function importMissingConjugationCards(
   if (missing.length === 0) return 0;
 
   await db.withTransactionAsync(async () => {
-    for (const item of missing) {
-      const card = createCard({ dueDate: now });
-      await db.runAsync(
-        `INSERT INTO conjugation_cards (id, verb_id, tense, person, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        item.id,
-        item.verbId,
-        item.tense,
-        item.person,
-        card.easeFactor,
-        card.intervalDays,
-        card.repetitions,
-        card.lapses,
-        card.learningStepIndex,
-        card.lifecycle,
-        card.dueDate.toISOString()
-      );
-    }
+    await insertInBatches(
+      db,
+      missing,
+      11,
+      'INSERT INTO conjugation_cards (id, verb_id, tense, person, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)',
+      (item) => {
+        const card = createCard({ dueDate: now });
+        return [
+          item.id,
+          item.verbId,
+          item.tense,
+          item.person,
+          card.easeFactor,
+          card.intervalDays,
+          card.repetitions,
+          card.lapses,
+          card.learningStepIndex,
+          card.lifecycle,
+          card.dueDate.toISOString(),
+        ];
+      }
+    );
   });
 
   return missing.length;
@@ -720,13 +763,16 @@ export async function importMissingConjugationCards(
 /** Cartes de conjugaison dues, avec le même principe de plafond séparé
  * nouvelles/révisions que `getDueCardsSplit` (vocabulaire) — voir
  * PLAN.md. Pas de filtre par thème ici (la conjugaison n'a pas de
- * réglage "thèmes actifs", contrairement au vocabulaire). Nouvelles
- * cartes triées par `rowid` (ordre d'insertion) plutôt que par
- * fréquence du verbe : le contenu des verbes n'est pas dupliqué en
- * base (voir plus haut), donc pas de colonne à trier dessus — mais
- * l'import se fait déjà verbe par verbe dans l'ordre de fréquence de
- * `conjugations.json`, donc l'ordre d'insertion l'approxime
- * correctement sans jointure supplémentaire. */
+ * réglage "thèmes actifs", contrairement au vocabulaire).
+ *
+ * **Ordre aléatoire, pas par fréquence/insertion** — retour explicite :
+ * l'ordre précédent (par `rowid`, donc verbe par verbe dans l'ordre
+ * d'import) faisait défiler toutes les formes d'un même verbe avant de
+ * passer au suivant, prévisible et peu utile pour s'entraîner. Les
+ * nouvelles cartes sont tirées avec `ORDER BY RANDOM()` côté SQL, et
+ * l'ensemble révisions+nouvelles est encore mélangé côté JS
+ * ([shuffle]) avant d'être renvoyé, pour que l'ordre de présentation ne
+ * soit pas non plus figé par "toutes les révisions d'abord". */
 export async function getDueConjugationCardsSplit(
   db: SQLiteDatabase,
   now: Date,
@@ -739,12 +785,12 @@ export async function getDueConjugationCardsSplit(
   );
 
   const newRows = await db.getAllAsync<ConjugationCardRow>(
-    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle = 'new' ORDER BY rowid ASC LIMIT ?;`,
+    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle = 'new' ORDER BY RANDOM() LIMIT ?;`,
     now.toISOString(),
     settings.conjugationNewCardsPerDay
   );
 
-  return [...reviewRows, ...newRows].map(mapConjugationCardRow);
+  return shuffle([...reviewRows, ...newRows]).map(mapConjugationCardRow);
 }
 
 export async function updateConjugationCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
@@ -775,4 +821,48 @@ export async function logConjugationReview(
     grade,
     at.toISOString()
   );
+}
+
+export interface ConjugationHistoryRow {
+  id: number;
+  verbId: string;
+  tense: ConjugationTense;
+  person: number;
+  grade: SM2Grade;
+  reviewedAt: Date;
+}
+
+/** Historique de révisions de conjugaison, le plus récent d'abord —
+ * demandé explicitement (20/08/2026), même principe que
+ * `getReviewHistory` côté vocabulaire. Ne renvoie que `verb_id`/`tense`/
+ * `person` (pas l'infinitif ni la forme conjuguée) : le contenu des
+ * verbes n'est pas dupliqué en base (voir plus haut) — c'est à
+ * l'appelant de faire la jointure avec `conjugation/data.ts`
+ * (`getConjugationVerb`) pour afficher l'infinitif et la forme. */
+export async function getConjugationHistory(db: SQLiteDatabase, limit = 200): Promise<ConjugationHistoryRow[]> {
+  type Row = { id: number; verb_id: string; tense: string; person: number; grade: string; reviewed_at: string };
+  const rows = await db.getAllAsync<Row>(
+    `SELECT r.id, c.verb_id, c.tense, c.person, r.grade, r.reviewed_at
+     FROM conjugation_reviews r
+     JOIN conjugation_cards c ON c.id = r.card_id
+     ORDER BY r.reviewed_at DESC
+     LIMIT ?;`,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    verbId: r.verb_id,
+    tense: parseTense(r.tense),
+    person: r.person,
+    grade: parseGrade(r.grade),
+    reviewedAt: new Date(r.reviewed_at),
+  }));
+}
+
+/** Corrige la note d'une entrée d'historique de conjugaison — même
+ * limite assumée que `updateReviewGrade` côté vocabulaire : ne change
+ * que le journal `conjugation_reviews`, ne recalcule pas rétroactivement
+ * l'échéance déjà programmée de la carte. */
+export async function updateConjugationReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+  await db.runAsync('UPDATE conjugation_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
