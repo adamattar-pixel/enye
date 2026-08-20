@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, AppState, FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import type { NotificationResponse } from 'expo-notifications';
 import { SQLiteProvider, useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { DB_NAME, getAllLogs, logAction, clearLogs, migrateDbIfNeeded, type LogRow } from './src/db';
 import {
@@ -28,22 +29,39 @@ function Content() {
     setLogs(await getAllLogs(db));
   }, [db]);
 
-  // Tourne à CHAQUE lancement de l'app — y compris un lancement en
-  // arrière-plan déclenché par un tap sur un bouton de notification
-  // (opensAppToForeground: false). C'est le pattern recommandé par la
-  // doc Expo (pas l'écouteur d'événements classique, qui ne se déclenche
-  // que si du JS tourne déjà) : on relit la dernière réponse à chaque
-  // démarrage plutôt que d'attendre un événement en direct.
+  // Deux chemins, pas un seul — c'était le bug de la première version :
+  // 1) `getLastNotificationResponseAsync()` au montage : couvre le cas où
+  //    l'app était totalement tuée et vient d'être relancée par le tap.
+  // 2) `addNotificationResponseReceivedListener` : couvre le cas où l'app
+  //    tournait déjà (arrière-plan ou premier plan) — son JS ne redémarre
+  //    pas, donc le check du (1) ne se redéclenche jamais tout seul sans
+  //    cet écouteur en direct.
   useEffect(() => {
     (async () => {
-      await processLastNotificationResponseIfAny(db);
+      const response = await Notifications.getLastNotificationResponseAsync();
+      if (response) await processResponse(db, response, 'startup');
       await refreshLogs();
 
       const granted = await ensurePermissions();
       setPermissionGranted(granted);
       await registerCategories();
     })();
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
+      await processResponse(db, response, 'listener');
+      await refreshLogs();
+    });
+    return () => subscription.remove();
   }, [db, refreshLogs]);
+
+  // Rafraîchit aussi quand l'app revient au premier plan (utile pour voir
+  // les entrées journalisées par l'écouteur en direct sans taper "Rafraîchir").
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshLogs();
+    });
+    return () => sub.remove();
+  }, [refreshLogs]);
 
   const handleScheduleTest = async () => {
     if (permissionGranted === false) {
@@ -96,22 +114,27 @@ function Content() {
   );
 }
 
-async function processLastNotificationResponseIfAny(db: SQLiteDatabase): Promise<void> {
-  const response = await Notifications.getLastNotificationResponseAsync();
-  if (!response) return;
-
+async function processResponse(
+  db: SQLiteDatabase,
+  response: NotificationResponse,
+  source: 'startup' | 'listener'
+): Promise<void> {
   const requestId = response.notification.request.identifier;
   const actionIdentifier = response.actionIdentifier;
 
-  const isNew = await logAction(db, requestId, actionIdentifier);
-  if (!isNew) return; // déjà traité lors d'un lancement précédent
+  // `source` fait partie de la clé de dédoublonnage : si les DEUX chemins
+  // captent le même tap (arrive quand l'app était déjà ouverte lors du
+  // tap), on veut voir les deux lignes dans le journal pour le diagnostic,
+  // pas que l'un écrase silencieusement l'autre.
+  const isNew = await logAction(db, `${requestId}:${source}`, `${source}:${actionIdentifier}`);
+  if (!isNew) return;
 
   if (actionIdentifier === REVEAL_ACTION) {
     try {
       await scheduleGradeNotification(5);
-      await logAction(db, `${requestId}-followup-ok`, 'followup_scheduled_ok');
+      await logAction(db, `${requestId}:${source}-followup-ok`, `${source}:followup_scheduled_ok`);
     } catch (error) {
-      await logAction(db, `${requestId}-followup-fail`, `followup_scheduled_fail:${String(error)}`);
+      await logAction(db, `${requestId}:${source}-followup-fail`, `${source}:followup_scheduled_fail:${String(error)}`);
     }
   }
 }
