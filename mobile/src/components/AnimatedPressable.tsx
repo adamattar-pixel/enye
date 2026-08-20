@@ -21,6 +21,11 @@ type Props = {
 const IMPACT_STYLES = new Set(Object.values(Haptics.ImpactFeedbackStyle));
 const NOTIFICATION_TYPES = new Set(Object.values(Haptics.NotificationFeedbackType));
 
+// `Pressable` animée directement (pas un `Pressable` qui contient un
+// `Animated.View` séparé) — voir le commentaire plus bas sur pourquoi ce
+// n'est pas juste une préférence de style.
+const AnimatedPressableBase = Animated.createAnimatedComponent(Pressable);
+
 function triggerHaptic(haptic: HapticOption) {
   if (haptic === 'none') return;
   if (haptic === 'selection') {
@@ -49,6 +54,19 @@ function triggerHaptic(haptic: HapticOption) {
  *
  * `hitSlop` élargit la zone tactile au-delà des limites visuelles du
  * bouton — répond aussi au retour "les boutons sont trop petits".
+ *
+ * **Un seul composant animé, pas un `Pressable` qui enveloppe un
+ * `Animated.View` séparé.** La version précédente appliquait `style`
+ * (donc `flex`, `height`, `borderRadius`...) uniquement à l'`Animated.View`
+ * intérieur, pas au `Pressable` extérieur — qui, sans aucun style propre,
+ * n'avait pas de taille déterminée dans une rangée flex (`flexDirection:
+ * 'row'`). Résultat rapporté : "les boutons apparaissent comme des traits
+ * entassés" (le `Pressable` s'écrase à la taille de son contenu, le
+ * `flex: 1` de l'enfant ne peut pas se résoudre contre un parent sans
+ * taille propre). Fixé en rendant le `Pressable` lui-même animable via
+ * `Animated.createAnimatedComponent` : `style` (mise en page + visuel) et
+ * le `transform` de l'animation vivent maintenant sur le même élément,
+ * qui est bien celui positionné dans la rangée.
  */
 export function AnimatedPressable({
   children,
@@ -70,20 +88,19 @@ export function AnimatedPressable({
   };
 
   return (
-    <Pressable
+    <AnimatedPressableBase
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
       hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      onPress={(e) => {
+      onPress={(e: GestureResponderEvent) => {
         triggerHaptic(haptic);
         onPress?.(e);
       }}
+      style={[style, { transform: [{ scale }] }, disabled ? { opacity: 0.5 } : null]}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }, disabled ? { opacity: 0.5 } : null]}>
-        {children}
-      </Animated.View>
-    </Pressable>
+      {children}
+    </AnimatedPressableBase>
   );
 }

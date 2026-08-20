@@ -30,6 +30,10 @@ export interface SolYSombraPalette {
   buttonOutline: string;
   buttonFilled: string;
   buttonFilledText: string;
+  /** Version claire de `buttonFilled`, même teinte — utilisée pour les
+   * onglets/boutons non sélectionnés qui doivent rester de la même
+   * famille de couleur que l'état sélectionné (voir `TabBar.tsx`). */
+  buttonFilledLight: string;
 }
 
 export const solYSombraLight: SolYSombraPalette = {
@@ -45,6 +49,7 @@ export const solYSombraLight: SolYSombraPalette = {
   buttonOutline: '#E8944A',
   buttonFilled: '#8B3A3A', // deuxième valeur proposée dans la spec : #9C4444
   buttonFilledText: '#FFFFFF',
+  buttonFilledLight: '#E9D2CE',
 };
 
 /**
@@ -67,6 +72,7 @@ export const solYSombraDark: SolYSombraPalette = {
   buttonOutline: '#D98A4D',
   buttonFilled: '#B25454',
   buttonFilledText: '#FFFFFF',
+  buttonFilledLight: '#5C3838',
 };
 
 /** Palette par défaut (claire) — gardée pour les usages qui n'ont pas

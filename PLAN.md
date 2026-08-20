@@ -69,6 +69,14 @@ Nouveau retour après test réel : boutons de notation non réactifs et trop pet
 - **Validation de réglages** : heure de fin ne peut plus précéder l'heure de début (backlog résolu au passage).
 - Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (878 modules, HTTP 200). **Non vérifié sur device** — à confirmer au prochain test réel, en particulier si les boutons répondent maintenant au toucher.
 
+## Vrai bug de mise en page trouvé + barre d'onglets redessinée (20/08/2026)
+
+Retour "les 4 boutons de notation s'affichent comme des traits entassés" a permis de trouver la vraie cause des soucis de boutons depuis le début : `AnimatedPressable` appliquait `style` (donc `flex`, `height`...) uniquement à un `Animated.View` intérieur, jamais au `Pressable` extérieur — celui qui est réellement l'enfant d'une rangée flex. Sans taille propre, ce `Pressable` s'écrasait. Corrigé en rendant le `Pressable` directement animable (`Animated.createAnimatedComponent`), un seul élément portant à la fois la mise en page et l'animation. Ce correctif explique aussi pourquoi les agrandissements précédents (48→56→68px) n'avaient probablement aucun effet visible — voir AUDIT.md pour le détail complet.
+
+Barre d'onglets du bas agrandie verticalement et redessinée en pilules colorées (sélectionné = couleur pleine, non sélectionné = même teinte éclaircie), demandé explicitement — nouveau token `buttonFilledLight` dans la palette.
+
+Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vérifié sur device** — cette fois avec une cause de bug identifiée avec certitude plutôt qu'une hypothèse.
+
 ## Padding centralisé, boutons re-agrandis, mode sombre manuel, prochaine notification (20/08/2026)
 
 Nouveau retour : le padding restait invisible malgré le correctif précédent, les boutons de notation restaient trop petits, plus deux demandes — bascule manuelle clair/sombre en haut à droite, et un onglet affichant l'heure approximative de la prochaine notification.
