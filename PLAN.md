@@ -35,6 +35,31 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 8h–22h = 840 min. Avec un espacement moyen de 22,5 min → capacité ≈37 créneaux/jour (mini 28 si tout à 30 min, maxi 56 si tout à 15 min). Les anciens plafonds (15 nouvelles + 80 révisions = 95/jour) dépassaient largement cette capacité, même dans le meilleur cas — 39 cartes n'auraient jamais eu de créneau. Réglage retenu : 8 + 22 = 30/jour, avec une marge d'environ 19 % sous la capacité moyenne estimée.
 
+## Décisions validées — fonctionnalités futures (20/08/2026, planification uniquement)
+
+**Rien de ce qui suit n'est implémenté.** Cadrage validé avec l'utilisateur en amont du code, pour deux nouveaux onglets — voir AUDIT.md pour les points encore ouverts à trancher avant de coder.
+
+### Onglet « Conjugaison » (entraînement, flashcards)
+
+| Sujet | Décision |
+|---|---|
+| Principe de la carte | Un verbe + une personne + un temps sont donnés ; l'utilisateur tape la conjugaison au clavier ; validation avec tolérance sur les accents (règle exacte non tranchée, voir AUDIT.md) |
+| Répétition espacée | SM-2, réutilise le moteur existant ([Packages/SM2Engine](Packages/SM2Engine) / [mobile/src/sm2/engine.ts](mobile/src/sm2/engine.ts)) — **pas de nouveau moteur**. Chaque triplet (verbe, personne, temps) est une carte indépendante avec son propre calendrier |
+| Personnes couvertes | yo / tú / él-ella-usted / nosotros / vosotros / ellos-ellas-ustedes — paradigme espagnol d'Espagne complet (avec *vosotros*) |
+| Temps couverts (v1, à confirmer) | Indicatif : présent, prétérit, imparfait, futur, conditionnel. Subjonctif : présent, imparfait. Impératif : affirmatif et négatif |
+| Source des données | Fichier statique `conjugations.json` (même logique que `words.generated.json`), produit par un script Node en dev (`mobile/scripts/generate-conjugations/`), calcul fait à la génération — **aucune dépendance runtime sur le téléphone**, cohérent avec la contrainte "tout doit tourner offline dans Expo Go" |
+| Librairie de génération envisagée | npm `spanish-verbs` (conjugaison algorithmique régulière + irrégulière, licence MIT) ; repli sur les tables Wiktionary (comme pour `words.json`) si des irréguliers ciblés sont mal couverts — choix définitif pas encore tranché, voir AUDIT.md |
+| Liste des verbes couverts | Les plus fréquents dans `frequency.csv` (doozan/spanish_data), filtrés sur la catégorie grammaticale "verbe" — nombre de départ à confirmer (proposé : 200-300), extensible ensuite |
+| Écran de révision | Même montage que l'écran de révision vocabulaire (carte → révélation → notation), pour rester cohérent visuellement avec le reste de l'app |
+
+### Onglet « Règles de conjugaison » (référence statique)
+
+| Sujet | Décision |
+|---|---|
+| Nature du contenu | Consultable uniquement, pas de logique dynamique (pas de SM-2, pas de notation) |
+| Organisation | Par groupe de verbes (-ar / -er / -ir), puis par temps : terminaisons régulières + irrégularités les plus fréquentes (ser, estar, tener, ir, hacer, poder, decir, querer... — même base que la liste de verbes fréquents de l'onglet Conjugaison) |
+| Format | JSON statique + composant de rendu, cohérent avec le reste de l'architecture du projet — structure exacte à proposer au moment de l'implémentation (pas encore choisie) |
+
 ## Phases
 
 0. **Preuve de concept notifications** (tâche 0) — **validée et close**. Le montage en deux temps (mot → « Ver traducción » → 2ème notification traduction + 4 boutons de notation) fonctionne sur iPhone réel tant que l'app n'a pas été force-quittée. Limite acceptée : après un force-quit utilisateur, aucun code ne s'exécute en arrière-plan (politique iOS documentée par Apple, identique en natif — voir AUDIT.md) ; dégradation silencieuse et sans perte de données, résolue à la prochaine ouverture manuelle grâce au rechargement de la file. Bug de prototype trouvé et corrigé au passage : il fallait à la fois `getLastNotificationResponseAsync()` au démarrage ET `addNotificationResponseReceivedListener` en direct, pas l'un ou l'autre.
@@ -115,6 +140,8 @@ Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vé
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
 - [ ] Gloses verbeuses sur les mots grammaticaux (pronoms/déterminants/prépositions) dans le vocabulaire généré — pas corrigées automatiquement (voir AUDIT.md), correctibles au cas par cas si un mot précis pose problème à l'usage (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression).
+- [ ] **Onglet Conjugaison (entraînement)** — planifié, pas commencé. Trancher les points ouverts listés dans AUDIT.md avant de coder (tolérance sur les accents, nombre de verbes en v1, source de génération définitive).
+- [ ] **Onglet Règles de conjugaison (référence statique)** — planifié, pas commencé. Structure JSON à proposer au moment de l'implémentation.
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native
