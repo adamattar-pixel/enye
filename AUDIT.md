@@ -2,6 +2,14 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Prononciation muette — bug documenté d'expo-speech corrigé (20/08/2026)
+
+Retour utilisateur après test : le bouton "Écouter" réagit visuellement mais aucun son ne sort, sonnerie activée (pas le mode silencieux, déjà écarté par la question posée). Recherché plutôt que deviné : c'est un [bug connu et documenté d'expo-speech sur iOS](https://github.com/expo/expo/issues/8235), présent depuis plusieurs années — la session audio n'est pas toujours activée correctement pour la lecture, indépendamment du bouton silencieux.
+
+Fix standard : configurer explicitement le mode audio au démarrage via `expo-audio` (`setAudioModeAsync({ playsInSilentMode: true })`), qui a remplacé `expo-av` pour SDK 54. Ajouté dans `App.tsx`, avant tout le reste de l'initialisation. `expo-asset` a dû être ajouté en peer dependency explicite (réclamé par `expo-doctor`, sinon "l'app pourrait planter hors Expo Go") ; `expo-doctor` repasse à 18/18 après.
+
+**Non confirmé sur device** — comme le reste, diagnostiqué à partir d'un rapport de bug connu et du comportement observé, pas encore réécouté en vrai après le correctif.
+
 ## Flux de révélation in-app + esthétique (20/08/2026)
 
 Retour utilisateur après premier test réel : les boutons de notation semblaient absents sur l'écran de session, l'app paraît un peu vide, et il manque du padding sur les bords. Clarifié avec l'utilisateur : il s'attendait à retrouver le même montage en deux temps que la notification (mot seul → « Ver traducción » → traduction + 4 boutons de notation) **à l'intérieur de l'app aussi** — ce n'était pas construit ainsi jusque-là (traduction affichée immédiatement, sans étape de révélation).

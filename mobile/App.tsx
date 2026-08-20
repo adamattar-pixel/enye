@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as SQLite from 'expo-sqlite';
+import { setAudioModeAsync } from 'expo-audio';
 import { DB_NAME, migrateDbIfNeeded, seedIfEmpty } from './src/data/database';
 import { parseWords } from './src/data/wordRepository';
 import wordsJson from './src/data/words.json';
@@ -22,9 +23,13 @@ export default function App() {
       await migrateDbIfNeeded(database);
       await seedIfEmpty(database, parseWords(wordsJson));
 
+      // Bug documenté et de longue date d'expo-speech sur iOS : sans
+      // activer explicitement le mode audio, la prononciation ne joue
+      // parfois aucun son (silencieusement, sans erreur), y compris
+      // sonnerie activée — https://github.com/expo/expo/issues/8235.
       // Permission + catégories en parallèle, pas en séquence — aucune
-      // des deux ne dépend du résultat de l'autre.
-      await Promise.all([ensurePermissions(), registerCategories()]);
+      // des trois ne dépend du résultat des autres.
+      await Promise.all([setAudioModeAsync({ playsInSilentMode: true }), ensurePermissions(), registerCategories()]);
 
       // Deux chemins pour traiter les réponses aux notifications — pas
       // un seul (voir AUDIT.md, tâche 0) :
