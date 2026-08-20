@@ -494,6 +494,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `words.json` reste un JSON valide (6002 entrées), `wordRepository.test.ts` (8/8) et `tsc --noEmit` toujours verts. Pas de code applicatif touché (donnée statique). **Non vérifié sur device** : lisibilité/pertinence perçue des nouveaux thèmes larges en usage réel, notamment si "divers" (plus de la moitié des mots concernés) est jugé décevant à l'usage — à confirmer.
 
+## Espace sous l'icône ☰ encore agrandi (21/08/2026)
+
+**Demande explicite** : le tiroir restait perçu comme trop proche de l'icône ☰ malgré le premier ajustement (16px) — "encore plus bas, bien sous le bouton".
+
+**Implémenté** : `DRAWER_TOP_OFFSET` (TabBar.tsx) passé de 16px à 40px d'espace sous l'icône (en plus de sa propre hauteur, 6+38px).
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — à confirmer que 40px est perçu comme suffisant cette fois.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.

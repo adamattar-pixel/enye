@@ -234,6 +234,14 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Non vérifié, à ne pas présenter comme fonctionnel** : compatibilité réelle de la WebView dans l'Expo Go de l'utilisateur ; récupération de sous-titres de bout en bout (bloquée par l'échec documenté ci-dessus) ; ajout réel d'une vidéo puis session d'entraînement complète sur device ; fiabilité du paramètre `end` de l'IFrame Player API pour arrêter la lecture au bon moment (filet de sécurité JS ajouté par précaution, mais jamais déclenché en conditions réelles).
 
+## Espace sous l'icône ☰ encore agrandi (21/08/2026)
+
+**Constat.** Retour utilisateur après le premier ajustement du 20/08 (16px d'espace ajouté sous l'icône) : le tiroir restait perçu comme trop proche de l'icône — "encore plus bas, bien sous le bouton".
+
+**Impact.** `DRAWER_TOP_OFFSET` ([TabBar.tsx](mobile/src/navigation/TabBar.tsx)) passé de 16px à 40px d'espace sous l'icône (en plus de sa propre hauteur, 6+38px, inchangée). Même mécanisme qu'avant (`SafeAreaView` + marge), seule la valeur de la marge change.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — à confirmer que 40px suffit cette fois, ou si un nouvel ajustement sera encore nécessaire.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.
