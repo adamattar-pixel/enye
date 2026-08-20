@@ -2,6 +2,21 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Animations et retour haptique (20/08/2026)
+
+À la demande explicite ("rends l'app plus moderne avec plein d'animation et aesthetics"). Ajouté `react-native-reanimated` + `react-native-worklets` (dépendance requise séparément par les versions récentes de Reanimated) et `expo-haptics`, tous compatibles SDK 54 (`expo-doctor` : 18/18 après ajout). Pas de `babel.config.js` dans le projet — le plugin Reanimated est censé être auto-configuré par `babel-preset-expo` sans fichier explicite ; le bundle compile et passe `node -c` sans erreur, donc apparemment fonctionnel, **mais le vrai test est l'exécution sur device, pas juste la compilation**.
+
+Ce qui a été ajouté :
+- **[AnimatedPressable.tsx](mobile/src/components/AnimatedPressable.tsx)** : composant réutilisable remplaçant `TouchableOpacity` sur les interactions principales — retrait au toucher (spring) + retour haptique configurable (impact, notification, sélection, ou aucun).
+- **Écran de révision** : la carte entre en fondu/glissé à chaque nouvelle carte (remontée via `key`), la traduction apparaît en différé, haptique distinct par note (Warning sur Otra vez, Medium sur Difícil, Light sur Bien, Success sur Fácil).
+- **Aujourd'hui** : barre de progression animée (largeur interpolée), entrées en cascade.
+- **Statistiques** : barres de prévision qui grandissent depuis 0 au montage, tuiles en cascade.
+- **Barre d'onglets** : point actif animé (spring), retour haptique de sélection au changement d'onglet.
+- **Decks/mots** : liste de mots qui entre en cascade légère, FAB et puces de filtre avec retrait au toucher.
+- Tous les écrans sont passés d'un `StyleSheet.create` statique (au chargement du module) à un calcul par rendu via `useMemo`, nécessaire pour que le mode sombre (palette dynamique) fonctionne — effet de bord positif de ce chantier, pas seulement les animations.
+
+**Non vérifié** : aucune animation n'a été vue jouer réellement — la présence de `entering`/`useAnimatedStyle`/`withTiming` dans un bundle qui compile ne garantit pas qu'elles s'exécutent sans accroc (fluidité, absence de warning "Reanimated 2" au runtime, comportement du plugin worklets) sur un vrai iPhone.
+
 ## Reste de l'app construit d'un bloc (20/08/2026) — RIEN DE CE QUI SUIT N'A ENCORE TOURNÉ SUR DEVICE
 
 À la demande explicite de l'utilisateur ("continue tout le reste et je teste tout à la fin"), le reste du plan a été construit sans repasser par un test intermédiaire sur iPhone. Résumé de ce qui a changé, avec un niveau de confiance honnête pour chaque partie :

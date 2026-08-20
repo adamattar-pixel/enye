@@ -1,5 +1,8 @@
-import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 export type TabKey = 'today' | 'stats' | 'decks';
@@ -16,16 +19,48 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
 
   return (
     <View style={styles.bar}>
-      {TABS.map((tab) => {
-        const active = tab.key === current;
-        return (
-          <TouchableOpacity key={tab.key} style={styles.tab} onPress={() => onChange(tab.key)}>
-            <View style={[styles.dot, active && styles.dotActive]} />
-            <Text style={[styles.label, active && styles.labelActive]}>{tab.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
+      {TABS.map((tab) => (
+        <TabButton
+          key={tab.key}
+          styles={styles}
+          label={tab.label}
+          active={tab.key === current}
+          onPress={() => {
+            if (tab.key !== current) {
+              Haptics.selectionAsync();
+              onChange(tab.key);
+            }
+          }}
+        />
+      ))}
     </View>
+  );
+}
+
+function TabButton({
+  styles,
+  label,
+  active,
+  onPress,
+}: {
+  styles: ReturnType<typeof createStyles>;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const dotScale = useSharedValue(active ? 1 : 0);
+
+  useEffect(() => {
+    dotScale.value = withSpring(active ? 1 : 0, { damping: 12, stiffness: 180 });
+  }, [active, dotScale]);
+
+  const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: dotScale.value }] }));
+
+  return (
+    <AnimatedPressable style={styles.tab} haptic="none" scaleTo={0.92} onPress={onPress}>
+      <Animated.View style={[styles.dot, dotStyle]} />
+      <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
+    </AnimatedPressable>
   );
 }
 
@@ -40,8 +75,7 @@ function createStyles(t: SolYSombraPalette) {
       paddingBottom: 20,
     },
     tab: { flex: 1, alignItems: 'center' },
-    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'transparent', marginBottom: 4 },
-    dotActive: { backgroundColor: t.dot },
+    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: t.dot, marginBottom: 4 },
     label: { fontSize: 11, color: t.metaText, fontWeight: '600' },
     labelActive: { color: t.wordText },
   });

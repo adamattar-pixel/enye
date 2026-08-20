@@ -80,6 +80,10 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
   return (
     <View style={{ flex: 1 }}>
       <ReviewScreen
+        // Remonte le composant à chaque nouvelle carte pour rejouer
+        // l'animation d'entrée (sinon React ne fait que mettre à jour le
+        // texte en place, sans réanimation).
+        key={current.word.id}
         card={{
           word: current.word.spanish,
           translation: current.word.french,

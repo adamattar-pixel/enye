@@ -8,13 +8,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { addUserWord, deleteWord, getAllTags, getAllWords } from '../data/database';
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
 import type { Word } from '../data/types';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
@@ -56,9 +58,14 @@ function SubTabButton({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={[styles.subTabButton, active && styles.subTabButtonActive]} onPress={onPress}>
+    <AnimatedPressable
+      style={[styles.subTabButton, active && styles.subTabButtonActive]}
+      haptic="none"
+      scaleTo={0.94}
+      onPress={onPress}
+    >
       <Text style={[styles.subTabText, active && styles.subTabTextActive]}>{label}</Text>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
@@ -120,8 +127,8 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
         data={words}
         keyExtractor={(w) => w.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View style={styles.wordRow}>
+        renderItem={({ item, index }) => (
+          <Animated.View entering={FadeInRight.duration(250).delay(Math.min(index, 12) * 25)} style={styles.wordRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.wordSpanish}>{item.spanish}</Text>
               <Text style={styles.wordFrench}>
@@ -129,18 +136,20 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
               </Text>
             </View>
             {item.isUserAdded && (
-              <TouchableOpacity onPress={() => handleDelete(item)}>
+              <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} onPress={() => handleDelete(item)}>
                 <Text style={styles.deleteLink}>Supprimer</Text>
-              </TouchableOpacity>
+              </AnimatedPressable>
             )}
-          </View>
+          </Animated.View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>Aucun mot ne correspond à ce filtre.</Text>}
       />
 
-      <TouchableOpacity style={styles.fab} onPress={() => setAddVisible(true)}>
-        <Text style={styles.fabText}>+ Ajouter un mot</Text>
-      </TouchableOpacity>
+      <Animated.View entering={FadeInDown.duration(300)} style={styles.fabWrapper}>
+        <AnimatedPressable style={styles.fab} onPress={() => setAddVisible(true)}>
+          <Text style={styles.fabText}>+ Ajouter un mot</Text>
+        </AnimatedPressable>
+      </Animated.View>
 
       <AddWordModal
         visible={addVisible}
@@ -158,9 +167,9 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
 
 function FilterChip({ styles, label, active, onPress }: { styles: Styles; label: string; active: boolean; onPress: () => void }) {
   return (
-    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+    <AnimatedPressable style={[styles.chip, active && styles.chipActive]} haptic="none" scaleTo={0.92} onPress={onPress}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
@@ -243,12 +252,12 @@ function AddWordModal({
             <FormField styles={styles} label="Tags (séparés par des virgules)" value={tags} onChangeText={setTags} />
 
             <View style={styles.modalButtonRow}>
-              <TouchableOpacity style={[styles.button, styles.buttonOutline]} onPress={onClose}>
+              <AnimatedPressable style={[styles.button, styles.buttonOutline]} haptic="none" onPress={onClose}>
                 <Text style={styles.buttonOutlineText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={handleSave}>
+              </AnimatedPressable>
+              <AnimatedPressable style={styles.button} haptic={Haptics.NotificationFeedbackType.Success} onPress={handleSave}>
                 <Text style={styles.buttonText}>Ajouter</Text>
-              </TouchableOpacity>
+              </AnimatedPressable>
             </View>
           </ScrollView>
         </View>
@@ -331,22 +340,24 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
             {allTags.map((tag) => {
               const enabled = !settings.disabledTags.includes(tag);
               return (
-                <TouchableOpacity
+                <AnimatedPressable
                   key={tag}
                   style={[styles.chip, enabled && styles.chipActive]}
+                  haptic="none"
+                  scaleTo={0.92}
                   onPress={() => toggleTag(tag)}
                 >
                   <Text style={[styles.chipText, enabled && styles.chipTextActive]}>{tag}</Text>
-                </TouchableOpacity>
+                </AnimatedPressable>
               );
             })}
           </View>
         </>
       )}
 
-      <TouchableOpacity style={styles.button} onPress={handleSave}>
+      <AnimatedPressable style={styles.button} haptic={Haptics.NotificationFeedbackType.Success} onPress={handleSave}>
         <Text style={styles.buttonText}>Enregistrer</Text>
-      </TouchableOpacity>
+      </AnimatedPressable>
     </ScrollView>
   );
 }
@@ -412,11 +423,8 @@ function createStyles(t: SolYSombraPalette) {
     deleteLink: { color: t.dot, fontSize: 12 },
     empty: { color: t.metaText, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
 
+    fabWrapper: { position: 'absolute', bottom: 16, left: 20, right: 20 },
     fab: {
-      position: 'absolute',
-      bottom: 16,
-      left: 20,
-      right: 20,
       backgroundColor: t.buttonFilled,
       borderRadius: 24,
       paddingVertical: 14,

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
@@ -19,18 +20,24 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
   const [sessionActive, setSessionActive] = useState(false);
 
   if (sessionActive) {
-    return <ReviewScreenContainer db={db} onExit={() => setSessionActive(false)} />;
+    return (
+      <Animated.View entering={FadeIn.duration(250)} style={styles.root}>
+        <ReviewScreenContainer db={db} onExit={() => setSessionActive(false)} />
+      </Animated.View>
+    );
   }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.content}>
+    <Animated.View style={styles.root}>
+      {/* `key={tab}` force un remontage à chaque changement d'onglet
+       * pour rejouer l'entrée en fondu plutôt qu'un changement instantané. */}
+      <Animated.View key={tab} entering={FadeIn.duration(200)} style={styles.content}>
         {tab === 'today' && <TodayScreen db={db} onStartSession={() => setSessionActive(true)} />}
         {tab === 'stats' && <StatsScreen db={db} />}
         {tab === 'decks' && <DecksScreen db={db} />}
-      </View>
+      </Animated.View>
       <TabBar current={tab} onChange={setTab} />
-    </View>
+    </Animated.View>
   );
 }
 

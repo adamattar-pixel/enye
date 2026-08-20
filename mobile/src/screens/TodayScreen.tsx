@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDueCards, getReviewCountSince } from '../data/database';
 import { getSettings } from '../data/settings';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
@@ -24,6 +26,9 @@ export function TodayScreen({ db, onStartSession }: Props) {
   const [dailyCap, setDailyCap] = useState(30);
   const [loading, setLoading] = useState(true);
 
+  const progressWidth = useSharedValue(0);
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progressWidth.value * 100}%` }));
+
   const refresh = useCallback(async () => {
     const settings = await getSettings(db);
     const cap = settings.newCardsPerDay + settings.reviewCapPerDay;
@@ -35,14 +40,14 @@ export function TodayScreen({ db, onStartSession }: Props) {
     const done = await getReviewCountSince(db, startOfToday());
     setDoneToday(done);
 
+    progressWidth.value = withTiming(cap > 0 ? Math.min(1, done / cap) : 0, { duration: 600 });
+
     setLoading(false);
-  }, [db]);
+  }, [db, progressWidth]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
-
-  const progress = dailyCap > 0 ? Math.min(1, doneToday / dailyCap) : 0;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -51,27 +56,29 @@ export function TodayScreen({ db, onStartSession }: Props) {
 
       {!loading && (
         <>
-          <View style={styles.statCard}>
+          <Animated.View entering={FadeInDown.duration(400).springify()} style={styles.statCard}>
             <Text style={styles.statNumber}>{dueCount}</Text>
             <Text style={styles.statCaption}>carte{dueCount !== 1 ? 's' : ''} due{dueCount !== 1 ? 's' : ''}</Text>
-          </View>
+          </Animated.View>
 
-          <View style={styles.progressRow}>
+          <Animated.View entering={FadeInDown.duration(400).delay(80).springify()} style={styles.progressRow}>
             <Text style={styles.progressText}>
               {doneToday} / {dailyCap} révisées aujourd'hui
             </Text>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+              <Animated.View style={[styles.progressFill, progressStyle]} />
             </View>
-          </View>
+          </Animated.View>
 
-          <TouchableOpacity
-            style={[styles.button, dueCount === 0 && styles.buttonDisabled]}
-            onPress={onStartSession}
-            disabled={dueCount === 0}
-          >
-            <Text style={styles.buttonText}>{dueCount === 0 ? 'Rien à réviser' : 'Commencer la session'}</Text>
-          </TouchableOpacity>
+          <Animated.View entering={FadeInDown.duration(400).delay(160).springify()}>
+            <AnimatedPressable
+              style={[styles.button, dueCount === 0 && styles.buttonDisabled]}
+              onPress={onStartSession}
+              disabled={dueCount === 0}
+            >
+              <Text style={styles.buttonText}>{dueCount === 0 ? 'Rien à réviser' : 'Commencer la session'}</Text>
+            </AnimatedPressable>
+          </Animated.View>
         </>
       )}
     </SafeAreaView>

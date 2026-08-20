@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllReviews, getAllDueDates, getWordCounts } from '../data/database';
 import { computeStreak, computeSuccessRate, computeForecast } from '../stats/statsEngine';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
+type Styles = ReturnType<typeof createStyles>;
 
 const FORECAST_DAYS = 7;
 const DAY_LABELS = ['Auj.', 'J+1', 'J+2', 'J+3', 'J+4', 'J+5', 'J+6'];
@@ -47,30 +49,26 @@ export function StatsScreen({ db }: Props) {
         <Text style={styles.title}>Statistiques</Text>
 
         <View style={styles.statRow}>
-          <StatTile styles={styles} number={streak} caption={`jour${streak !== 1 ? 's' : ''} de suite`} />
-          <StatTile styles={styles} number={`${Math.round(successRate * 100)}%`} caption="taux de réussite" />
+          <StatTile styles={styles} delay={0} number={streak} caption={`jour${streak !== 1 ? 's' : ''} de suite`} />
+          <StatTile styles={styles} delay={60} number={`${Math.round(successRate * 100)}%`} caption="taux de réussite" />
         </View>
 
         <View style={styles.statRow}>
-          <StatTile styles={styles} number={learned} caption="mots appris" />
-          <StatTile styles={styles} number={total} caption="mots au total" />
+          <StatTile styles={styles} delay={120} number={learned} caption="mots appris" />
+          <StatTile styles={styles} delay={180} number={total} caption="mots au total" />
         </View>
 
         <Text style={styles.sectionTitle}>Charge à venir</Text>
         <View style={styles.forecastRow}>
           {forecast.map((count, index) => (
-            <View key={index} style={styles.forecastBarWrapper}>
-              <View style={styles.forecastTrack}>
-                <View
-                  style={[
-                    styles.forecastBar,
-                    { height: `${Math.max(4, (count / maxForecast) * 100)}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.forecastCount}>{count}</Text>
-              <Text style={styles.forecastLabel}>{DAY_LABELS[index]}</Text>
-            </View>
+            <ForecastBar
+              key={index}
+              styles={styles}
+              count={count}
+              heightRatio={Math.max(0.05, count / maxForecast)}
+              label={DAY_LABELS[index]}
+              delay={index * 60}
+            />
           ))}
         </View>
       </ScrollView>
@@ -82,16 +80,50 @@ function StatTile({
   styles,
   number,
   caption,
+  delay,
 }: {
-  styles: ReturnType<typeof createStyles>;
+  styles: Styles;
   number: number | string;
   caption: string;
+  delay: number;
 }) {
   return (
-    <View style={styles.tile}>
+    <Animated.View entering={FadeInDown.duration(400).delay(delay).springify()} style={styles.tile}>
       <Text style={styles.tileNumber}>{number}</Text>
       <Text style={styles.tileCaption}>{caption}</Text>
-    </View>
+    </Animated.View>
+  );
+}
+
+function ForecastBar({
+  styles,
+  count,
+  heightRatio,
+  label,
+  delay,
+}: {
+  styles: Styles;
+  count: number;
+  heightRatio: number;
+  label: string;
+  delay: number;
+}) {
+  const height = useSharedValue(0);
+
+  useEffect(() => {
+    height.value = withDelay(delay, withTiming(heightRatio, { duration: 500 }));
+  }, [heightRatio, delay, height]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ height: `${height.value * 100}%` }));
+
+  return (
+    <Animated.View entering={FadeInUp.duration(300).delay(delay)} style={styles.forecastBarWrapper}>
+      <View style={styles.forecastTrack}>
+        <Animated.View style={[styles.forecastBar, animatedStyle]} />
+      </View>
+      <Text style={styles.forecastCount}>{count}</Text>
+      <Text style={styles.forecastLabel}>{label}</Text>
+    </Animated.View>
   );
 }
 
