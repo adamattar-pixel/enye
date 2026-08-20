@@ -69,6 +69,10 @@ Nouveau retour après test réel : boutons de notation non réactifs et trop pet
 - **Validation de réglages** : heure de fin ne peut plus précéder l'heure de début (backlog résolu au passage).
 - Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (878 modules, HTTP 200). **Non vérifié sur device** — à confirmer au prochain test réel, en particulier si les boutons répondent maintenant au toucher.
 
+## Bouton "Encore des cartes" en fin de session (20/08/2026)
+
+Demandé explicitement : pouvoir demander de nouvelles cartes une fois celles du jour terminées. Le plafond `newCardsPerDay` n'était déjà qu'une limite par requête, pas un verrou persisté — `getMoreNewCards` (database.ts) redemande simplement un nouveau lot, affiché via un bouton sur l'écran "Aucune carte due" de la session. Voir AUDIT.md pour le détail. Vérifié : `tsc`, tests, bundle. Non testé sur device.
+
 ## Vrai bug de mise en page trouvé + barre d'onglets redessinée (20/08/2026)
 
 Retour "les 4 boutons de notation s'affichent comme des traits entassés" a permis de trouver la vraie cause des soucis de boutons depuis le début : `AnimatedPressable` appliquait `style` (donc `flex`, `height`...) uniquement à un `Animated.View` intérieur, jamais au `Pressable` extérieur — celui qui est réellement l'enfant d'une rangée flex. Sans taille propre, ce `Pressable` s'écrasait. Corrigé en rendant le `Pressable` directement animable (`Animated.createAnimatedComponent`), un seul élément portant à la fois la mise en page et l'animation. Ce correctif explique aussi pourquoi les agrandissements précédents (48→56→68px) n'avaient probablement aucun effet visible — voir AUDIT.md pour le détail complet.

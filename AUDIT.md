@@ -25,6 +25,16 @@ Retour utilisateur après un nouveau test réel : les boutons de notation (Otra 
 
 **Vérifié pour ce chantier** : `tsc --noEmit` sans erreur, `npm test` (43 tests) vert, bundle Metro compilé et servi (`curl` sur `/index.ts.bundle`, HTTP 200, `node -c` sans erreur de syntaxe, 878 modules). **Non vérifié** : comportement réel des boutons, de l'historique et des animations sur iPhone — seul un test réel le confirmera.
 
+## Bouton "Encore des cartes" en fin de session (20/08/2026)
+
+Demandé explicitement : pouvoir demander de nouvelles cartes si la session du jour est terminée. Constat en écrivant ce correctif : le plafond `newCardsPerDay` (8 par défaut) n'a **jamais été un verrou en base** — `getDueCardsSplit` ne fait que limiter le nombre de nouvelles cartes sélectionnées *par appel*, sans mémoriser combien ont déjà été servies aujourd'hui. Rien n'empêchait donc techniquement d'en redemander, seulement l'UI ne le permettait pas encore.
+
+Ajouté : `getMoreNewCards(db, now, disabledTags, limit)` ([database.ts](mobile/src/data/database.ts)), qui réutilise la même logique de sélection des nouvelles cartes que `getDueCardsSplit` (extraite dans un helper partagé `fetchNewCardRows`) mais sans dépendre du plafond déjà utilisé pour la session en cours. Bouton "Encore des cartes" affiché dans [ReviewScreenContainer.tsx](mobile/src/screens/ReviewScreenContainer.tsx) quand la session se termine ("Aucune carte due pour l'instant") : redemande un lot de la taille de `newCardsPerDay`, ou affiche "Plus de nouveaux mots" si le stock de mots `new` est vraiment épuisé.
+
+**Pas de garde-fou artificiel ajouté contre l'abus de ce bouton** (ex. limite de lots par jour) — décision volontaire, pas un oubli : le plafond quotidien existe pour lisser l'introduction de nouveaux mots par défaut, pas pour empêcher un utilisateur qui a du temps libre d'en voir plus s'il le demande explicitement. Cohérent avec l'esprit de la demande.
+
+**Vérifié** : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vérifié sur device.**
+
 ## Cause réelle des boutons "en traits entassés" trouvée : bug de mise en page, pas Reanimated (20/08/2026)
 
 Retour utilisateur : à la révélation de la traduction, les 4 boutons de notation ne s'affichent pas correctement — "plats", "des traits entassés". Ce symptôme, combiné au fait qu'il persistait malgré tous les correctifs précédents (retrait de Reanimated, agrandissements successifs), a permis de trouver la vraie cause : un **bug de mise en page dans `AnimatedPressable.tsx`**, présent depuis sa réécriture sur l'API `Animated` native (voir plus bas dans ce fichier, section « Retrait de react-native-reanimated ») — et donc jamais lié à Reanimated en premier lieu, contrairement à l'hypothèse retenue jusque-là pour les boutons "qui ne répondent pas".

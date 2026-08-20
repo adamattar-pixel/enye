@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDueCardsSplit, updateCard, logReview, type DueCardRow } from '../data/database';
+import { getDueCardsSplit, getMoreNewCards, updateCard, logReview, type DueCardRow } from '../data/database';
 import { getSettings } from '../data/settings';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
 import { refillNotificationQueue } from '../notifications/queue';
 import { ReviewScreen } from './ReviewScreen';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
@@ -24,6 +25,7 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [current, setCurrent] = useState<DueCardRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchingMore, setFetchingMore] = useState(false);
 
   const loadNext = useCallback(async () => {
     const settings = await getSettings(db);
@@ -61,6 +63,24 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
     [db, current, loadNext]
   );
 
+  // Le plafond "nouvelles cartes / jour" n'est qu'une limite par appel à
+  // `getDueCardsSplit`, pas un verrou en base — redemander un lot ici
+  // (`getMoreNewCards`) revient à relancer la même requête sans attendre
+  // le lendemain, ce qui correspond exactement à "si je finis celles
+  // d'aujourd'hui, donne m'en d'autres" (demandé explicitement).
+  const handleMoreCards = useCallback(async () => {
+    setFetchingMore(true);
+    const settings = await getSettings(db);
+    const more = await getMoreNewCards(db, new Date(), settings.disabledTags, settings.newCardsPerDay);
+    setFetchingMore(false);
+
+    if (more.length === 0) {
+      Alert.alert('Plus de nouveaux mots', "Il n'y a plus de nouveau mot disponible pour l'instant.");
+      return;
+    }
+    setCurrent(more[0]);
+  }, [db]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
@@ -73,6 +93,11 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
     return (
       <SafeAreaView style={styles.center}>
         <Text style={styles.doneText}>Aucune carte due pour l'instant — bravo !</Text>
+
+        <AnimatedPressable style={styles.moreButton} haptic="selection" disabled={fetchingMore} onPress={handleMoreCards}>
+          <Text style={styles.moreButtonText}>{fetchingMore ? '…' : 'Encore des cartes'}</Text>
+        </AnimatedPressable>
+
         <TouchableOpacity style={styles.exitButton} onPress={onExit}>
           <Text style={styles.exitButtonText}>‹ Retour</Text>
         </TouchableOpacity>
@@ -112,7 +137,15 @@ function createStyles(t: SolYSombraPalette) {
       justifyContent: 'center',
       padding: 20,
     },
-    doneText: { color: t.wordText, fontSize: 16, textAlign: 'center', marginBottom: 16 },
+    doneText: { color: t.wordText, fontSize: 16, textAlign: 'center', marginBottom: 20 },
+    moreButton: {
+      backgroundColor: t.buttonFilled,
+      paddingVertical: 14,
+      paddingHorizontal: 28,
+      borderRadius: 24,
+      marginBottom: 12,
+    },
+    moreButtonText: { color: t.buttonFilledText, fontWeight: '700', fontSize: 15 },
     exitButton: { paddingVertical: 10, paddingHorizontal: 16 },
     exitButtonText: { color: t.buttonOutline, fontWeight: '600' },
     exitLink: { alignItems: 'center', paddingVertical: 14, backgroundColor: t.cardBackground },

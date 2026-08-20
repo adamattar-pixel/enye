@@ -242,22 +242,50 @@ export async function getDueCardsSplit(
     settings.reviewCapPerDay
   );
 
-  const newCandidateRows = await db.getAllAsync<WordCardRow>(
+  const newRows = await fetchNewCardRows(db, now, settings.disabledTags, settings.newCardsPerDay);
+
+  return [...reviewRows, ...newRows].map(mapWordCardRow);
+}
+
+async function fetchNewCardRows(
+  db: SQLiteDatabase,
+  now: Date,
+  disabledTags: string[],
+  limit: number
+): Promise<WordCardRow[]> {
+  const candidateRows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
      WHERE c.due_date <= ? AND c.lifecycle = 'new'
      ORDER BY w.frequency_rank ASC
      LIMIT ?;`,
     now.toISOString(),
     // Marge pour compenser les mots filtrés ensuite par `disabledTags`.
-    settings.newCardsPerDay * 5 + 50
+    limit * 5 + 50
   );
 
-  const disabled = new Set(settings.disabledTags);
-  const newRows = newCandidateRows
+  const disabled = new Set(disabledTags);
+  return candidateRows
     .filter((r) => !(JSON.parse(r.tags) as string[]).some((tag) => disabled.has(tag)))
-    .slice(0, settings.newCardsPerDay);
+    .slice(0, limit);
+}
 
-  return [...reviewRows, ...newRows].map(mapWordCardRow);
+/** Un lot supplémentaire de nouvelles cartes, au-delà du plafond
+ * quotidien — pour le bouton "Encore des cartes" affiché quand la
+ * session est terminée (voir `ReviewScreenContainer.tsx`). Le plafond
+ * `newCardsPerDay` n'est pas un verrou en base (aucun compteur "déjà
+ * servies aujourd'hui" n'est persisté) : c'est juste une limite par
+ * appel à `getDueCardsSplit`, donc redemander un lot ici revient
+ * simplement à relancer la même requête sans attendre le lendemain — ce
+ * qui est exactement le comportement demandé ("si je finis celles
+ * d'aujourd'hui, donne m'en d'autres"). */
+export async function getMoreNewCards(
+  db: SQLiteDatabase,
+  now: Date,
+  disabledTags: string[],
+  limit: number
+): Promise<DueCardRow[]> {
+  const rows = await fetchNewCardRows(db, now, disabledTags, limit);
+  return rows.map(mapWordCardRow);
 }
 
 /** Un mot précis avec son état de carte, indépendamment de si sa
