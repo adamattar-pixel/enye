@@ -25,7 +25,7 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 | Plafond de révisions / jour | 22 (total 30/j — cohérent avec la fenêtre 8h-22h, voir calcul ci-dessous) |
 | Plage horaire des notifications | 8h – 22h |
 | Espacement entre cartes dues simultanément | aléatoire 15-30 min (moyenne 22,5 min → capacité ≈37/j), triées par échéance la plus ancienne, jamais tassé (règle défensive testée dans ReviewScheduler) |
-| Boucle de révision (sans Content Extension) | notification 1 = mot seul + bouton « Ver traducción » ; tap → notification 2 programmée en arrière-plan avec traduction + exemple + 4 boutons de notation — **en cours de validation réelle, voir tâche 0** |
+| Boucle de révision (sans Content Extension) | notification 1 = mot seul + bouton « Ver traducción » ; tap → notification 2 programmée en arrière-plan avec traduction + exemple + 4 boutons de notation. **Validée sur iPhone réel tant que l'app n'a pas été force-quittée** ; si force-quit, le tap ne fait rien jusqu'à la prochaine ouverture manuelle (limite iOS documentée, acceptée — voir AUDIT.md) |
 | Source de `words.json` | liste de fréquence hermitdave/FrequencyWords (CC BY-SA 3.0) comme guide de priorité ; enrichissement généré par lots validés par l'utilisateur — **seul un échantillon de 36 mots existe, non encore validé** |
 
 ### Le calcul des plafonds (pourquoi 8+22, pas 15+80)
@@ -34,7 +34,7 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 ## Phases
 
-0. **Preuve de concept notifications** (tâche 0) — **en cours**. Prototype construit ([mobile/](mobile/)), en attente du retour de test sur iPhone réel. Risque identifié par la recherche : le pattern à utiliser est `getLastNotificationResponseAsync()` au démarrage (pas l'écouteur classique, qui ne se déclenche pas app fermée) ; historique de bugs Expo sur ce scénario exact, y compris un rapport non résolu de troncature d'écriture asynchrone dans le handler. D'où le test sur device avant tout le reste.
+0. **Preuve de concept notifications** (tâche 0) — **validée et close**. Le montage en deux temps (mot → « Ver traducción » → 2ème notification traduction + 4 boutons de notation) fonctionne sur iPhone réel tant que l'app n'a pas été force-quittée. Limite acceptée : après un force-quit utilisateur, aucun code ne s'exécute en arrière-plan (politique iOS documentée par Apple, identique en natif — voir AUDIT.md) ; dégradation silencieuse et sans perte de données, résolue à la prochaine ouverture manuelle grâce au rechargement de la file. Bug de prototype trouvé et corrigé au passage : il fallait à la fois `getLastNotificationResponseAsync()` au démarrage ET `addNotificationResponseReceivedListener` en direct, pas l'un ou l'autre.
 1. **Réglages SM-2** — **fait** (8 nouvelles + 22 révisions = 30/j, voir ci-dessus).
 2. **Portage SM-2 en TypeScript** — pas commencé. Les 13 tests de `Packages/SM2Engine` (Swift) servent de spécification ; à porter d'abord, faire passer ensuite.
 3. **Persistance + chargement de `words.json`** — pas commencé côté Expo. Contenu de `words.json` toujours incomplet (36/1000-2000 mots, non validés).
@@ -44,10 +44,9 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 ## Prochaines actions
 
-- [ ] Utilisateur : tester le prototype de la tâche 0 sur iPhone réel et rapporter le résultat (protocole donné en conversation).
-- [ ] Claude : ne pas avancer au-delà de la tâche 0 tant que le retour de test n'est pas arrivé (consigne explicite de l'utilisateur).
-- [ ] Une fois validé : porter SM-2 puis ReviewScheduler en TypeScript, tests d'abord.
-- [ ] Reprendre la validation de `words.json` (échantillon 36 mots) avant l'étape 3.
+- [ ] Porter SM-2 (`Packages/SM2Engine`) en TypeScript — tests d'abord, à partir des 13 tests Swift existants.
+- [ ] Porter ReviewScheduler (`Packages/ReviewScheduler`) en TypeScript — même principe, à partir des 9 tests Swift existants.
+- [ ] Reprendre la validation de `words.json` (échantillon 36 mots, format proposé) avant l'étape 3 (persistance).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native
