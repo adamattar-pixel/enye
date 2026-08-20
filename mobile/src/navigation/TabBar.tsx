@@ -26,13 +26,15 @@ const TABS: { key: TabKey; label: string }[] = [
  * (même ligne, "même plan"), avec un espacement fixe entre les deux pour
  * ne jamais les faire se chevaucher.
  *
- * Un appui ouvre une petite carte flottante (pas un tiroir plein écran —
- * jugé trop grand en hauteur/largeur après un premier essai), ancrée sous
- * l'icône, dimensionnée à son contenu. Onglets empilés verticalement,
- * séparés par un trait fin et discret qui ne touche pas les bords de la
- * carte (pas une bordure pleine largeur). L'onglet actif est marqué par
- * une fine barre de couleur à gauche de la ligne plutôt qu'un bloc de
- * fond plein, pour rester sobre.
+ * Un appui ouvre un tiroir ancré au bord droit, du bas de l'icône ☰
+ * jusqu'en bas de l'écran (70% de la largeur) — une carte dimensionnée à
+ * son contenu a été essayée entre-temps mais jugée trop petite ; ce
+ * tiroir plein en hauteur est le format retenu, avec juste une largeur
+ * légèrement réduite par rapport à la toute première version (78%→70%).
+ * Onglets empilés verticalement, séparés par un trait fin et discret qui
+ * ne touche pas les bords du tiroir (pas une bordure pleine largeur).
+ * L'onglet actif est marqué par une fine barre de couleur à gauche de la
+ * ligne plutôt qu'un bloc de fond plein, pour rester sobre.
  *
  * Entrée en glissement pur (droite → gauche), sans fondu — demandé
  * explicitement en remplacement de `FadeInView` (qui couple toujours
@@ -78,17 +80,19 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
         <>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Fermer le menu des onglets" />
           <SlideInFromRight style={styles.drawer}>
-            {TABS.map((tab, index) => (
-              <View key={tab.key}>
-                <TabRow
-                  styles={styles}
-                  label={tab.label}
-                  active={tab.key === current}
-                  onPress={() => handleSelect(tab.key)}
-                />
-                {index < TABS.length - 1 && <View style={styles.divider} />}
-              </View>
-            ))}
+            <SafeAreaView style={styles.drawerInner}>
+              {TABS.map((tab, index) => (
+                <View key={tab.key}>
+                  <TabRow
+                    styles={styles}
+                    label={tab.label}
+                    active={tab.key === current}
+                    onPress={() => handleSelect(tab.key)}
+                  />
+                  {index < TABS.length - 1 && <View style={styles.divider} />}
+                </View>
+              ))}
+            </SafeAreaView>
           </SlideInFromRight>
         </>
       )}
@@ -152,35 +156,37 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: 'rgba(0,0,0,0.35)',
       zIndex: 20,
     },
-    // Petite carte flottante dimensionnée à son contenu (pas un tiroir
-    // plein écran — jugé trop grand), ancrée sous l'icône ☰.
+    // Tiroir ancré au bord droit, du bas de l'icône ☰ jusqu'en bas de
+    // l'écran — jugé trop petit en carte dimensionnée à son contenu
+    // (itération précédente), revenu à un tiroir plein en hauteur, avec
+    // juste une largeur légèrement réduite (70% au lieu de 78%).
     drawer: {
       position: 'absolute',
       top: 52,
-      right: 12,
-      width: '56%',
-      maxWidth: 230,
+      right: 0,
+      bottom: 0,
+      width: '70%',
+      maxWidth: 300,
       backgroundColor: t.cardBackground,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: t.cardBorder,
-      overflow: 'hidden',
+      borderLeftWidth: 1,
+      borderLeftColor: t.cardBorder,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
+      shadowOffset: { width: -6, height: 0 },
       shadowOpacity: 0.16,
-      shadowRadius: 18,
+      shadowRadius: 20,
       elevation: 10,
       zIndex: 25,
     },
+    drawerInner: { flex: 1 },
 
-    row: { paddingVertical: 13, paddingHorizontal: 18, borderLeftWidth: 3, borderLeftColor: 'transparent' },
+    row: { paddingVertical: 18, paddingHorizontal: 24, borderLeftWidth: 3, borderLeftColor: 'transparent' },
     rowActive: { borderLeftColor: t.buttonFilled },
-    rowLabel: { fontSize: 14, fontWeight: '600', color: t.wordText },
+    rowLabel: { fontSize: 16, fontWeight: '600', color: t.wordText },
     rowLabelActive: { color: t.buttonFilled, fontWeight: '700' },
 
     // Trait sobre et discret entre deux onglets — hairline (le plus fin
     // possible), opacité réduite, et surtout PAS pleine largeur (retiré
-    // des bords de la carte via une marge horizontale).
-    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.cardBorder, marginHorizontal: 18, opacity: 0.6 },
+    // des bords du tiroir via une marge horizontale).
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.cardBorder, marginHorizontal: 24, opacity: 0.6 },
   });
 }

@@ -405,14 +405,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier la pertinence des résultats de recherche et la robustesse de l'extraction si YouTube modifie la structure de cette page (technique non officielle, comme documenté pour le reste de `listening/`).
 
-## Barre d'onglets remplacée par un menu ☰ (20/08/2026, 4 itérations le même jour)
+## Barre d'onglets remplacée par un menu ☰ (20/08/2026, 5 itérations le même jour)
 
 **Demande d'origine, ambiguë** : remplacer la barre de pilules fixe en bas d'écran par "trois traits horizontaux" (icône ☰) qui ouvre "un truc" pour choisir l'onglet — clarifiée via question à choix (maquettes ASCII) plutôt que devinée : icône qui ouvre un menu, pas une bande toujours visible.
 
-**État final, après 4 ajustements successifs demandés dans la même journée** — [TabBar.tsx](mobile/src/navigation/TabBar.tsx) :
+**État final, après 5 ajustements successifs demandés dans la même journée** — [TabBar.tsx](mobile/src/navigation/TabBar.tsx) :
 - Icône ☰ **en haut à droite**, alignée exactement sur la même ligne que le bouton clair/sombre déjà présent là (même `paddingTop`), à plat sans fond/ombre propre — "sur le même plan" que le reste de l'écran. Positionnée à droite (pas à gauche comme les deux premiers essais) précisément pour ne plus se superposer au libellé "LEXIS" de chaque écran, qui est toujours à gauche.
-- Un appui ouvre une **petite carte flottante dimensionnée à son contenu**, ancrée sous l'icône (~56% de la largeur, `maxWidth` 230) — pas le tiroir plein écran en hauteur de la 3e itération, jugé "trop grand en hauteur et largeur" après l'avoir vu tourner.
-- Onglets empilés verticalement, séparés par un **trait fin et discret** (hairline, opacité réduite, avec une marge de chaque côté — ne touche pas les bords de la carte), pas une bordure pleine largeur.
+- Un appui ouvre un **tiroir ancré au bord droit, du bas de l'icône jusqu'en bas de l'écran** (70% de la largeur) — la 4e itération avait réduit ça à une petite carte dimensionnée à son contenu, jugée ensuite "trop petite" ; le tiroir plein en hauteur est revenu, avec juste une largeur légèrement réduite par rapport à la toute première version (78%→70%).
+- Onglets empilés verticalement, séparés par un **trait fin et discret** (hairline, opacité réduite, avec une marge de chaque côté — ne touche pas les bords du tiroir), pas une bordure pleine largeur.
 - Onglet actif marqué par une **fine barre de couleur à gauche de la ligne** plutôt qu'un bloc de fond plein, pour rester sobre/moderne.
 - **Entrée en glissement pur droite→gauche, sans fondu** — `FadeInView` (utilisé pour la 3e itération) couple toujours opacité + translation, donc un petit composant animé dédié (`SlideInFromRight`, `Animated.Value` + `Animated.timing` sur `translateX` uniquement) a été écrit directement dans `TabBar.tsx` plutôt que d'ajouter un mode à `FadeInView` — pour ne pas changer le comportement des autres écrans qui l'utilisent avec fondu intentionnellement.
 - Toucher un onglet le sélectionne et referme le menu ; toucher en dehors (fond semi-transparent) referme sans changer d'onglet.
@@ -437,6 +437,15 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 **Implémenté** : `ConjugationReviewScreen.tsx` et `ListeningReviewScreen.tsx` (même souci, même composant `TextInput`, corrigé sur les deux par cohérence) enveloppés dans un `Pressable` plein écran qui appelle `Keyboard.dismiss()` au toucher, plutôt qu'un bouton supplémentaire — touche le champ ou les boutons à l'intérieur normalement, ferme le clavier partout ailleurs sur l'écran.
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device.**
+
+## Clavier toujours sombre + Historique déplacé dans Statistiques (20/08/2026)
+
+**Demandes explicites, groupées** : (1) le clavier doit toujours être sombre, quel que soit le thème clair/sombre de l'app ; (2) déplacer l'onglet Historique de Réglages vers Statistiques.
+
+- **Clavier sombre** : `keyboardAppearance="dark"` ajouté aux 5 `TextInput` de l'app (conjugaison, compréhension orale ×2, recherche de mot dans Decks & mots, champs numériques de Réglages) — prop iOS uniquement (`react-native`), sans effet sur Android, qui n'a pas d'équivalent direct.
+- **Historique déplacé** : `HistoryView` (liste des révisions + correction de note) déplacée telle quelle de [SettingsScreen.tsx](mobile/src/screens/SettingsScreen.tsx) vers [StatsScreen.tsx](mobile/src/screens/StatsScreen.tsx), qui gagne des sous-onglets Statistiques/Historique (même patron que Conjugaison/Écoute/Réglages) — comportement inchangé, juste déplacé. Réglages garde Réglages/Notifications (2 sous-onglets au lieu de 3).
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier la teinte réelle du clavier iOS et la lisibilité du nouvel emplacement de l'historique.
 
 ## Prochaines actions
 

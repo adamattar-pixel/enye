@@ -104,6 +104,7 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
               autoCorrect={false}
               placeholder="Tape ce que tu as entendu…"
               placeholderTextColor={theme.metaText}
+              keyboardAppearance="dark"
               onSubmitEditing={handleVerify}
               returnKeyType="done"
               multiline

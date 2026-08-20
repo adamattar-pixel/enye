@@ -245,7 +245,7 @@ function FormField({
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput style={styles.input} value={value} onChangeText={onChangeText} />
+      <TextInput style={styles.input} value={value} onChangeText={onChangeText} keyboardAppearance="dark" />
     </View>
   );
 }

@@ -107,6 +107,7 @@ export function ConjugationReviewScreen({ card, onGrade }: Props) {
               autoFocus
               placeholder="Tape la conjugaison…"
               placeholderTextColor={theme.metaText}
+              keyboardAppearance="dark"
               onSubmitEditing={handleSubmit}
               returnKeyType="done"
             />

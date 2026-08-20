@@ -284,6 +284,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
                 autoCorrect={false}
                 placeholder="Rechercher une vidéo en espagnol…"
                 editable={!searching}
+                keyboardAppearance="dark"
                 onSubmitEditing={handleSearch}
                 returnKeyType="search"
               />

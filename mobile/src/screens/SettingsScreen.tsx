@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getAllTags, getReviewHistory, resetProgress, updateReviewGrade, type ReviewHistoryRow } from '../data/database';
+import { getAllTags, resetProgress } from '../data/database';
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
 import { getNextNotificationTime } from '../notifications/queue';
-import type { SM2Grade } from '../sm2/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
@@ -13,24 +12,15 @@ import { CreditsScreen } from './CreditsScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
-type SubView = 'settings' | 'history' | 'notifications';
+type SubView = 'settings' | 'notifications';
 type Styles = ReturnType<typeof createStyles>;
 
-const GRADE_LABELS: Record<SM2Grade, string> = {
-  again: 'Otra vez',
-  hard: 'Difícil',
-  good: 'Bien',
-  easy: 'Fácil',
-};
-
-const GRADES: SM2Grade[] = ['again', 'hard', 'good', 'easy'];
-
-/** Réglages, historique et prochaine notification — regroupés dans un
- * onglet à part (sous-onglets internes), séparé de « Decks & mots » qui
- * ne garde que la liste de mots. Demandé explicitement le 20/08/2026 :
- * ces trois vues vivaient auparavant comme sous-onglets de Decks & mots
- * aux côtés de « Mots », mélangeant gestion du contenu et
- * réglages/consultation. */
+/** Réglages et prochaine notification — regroupés dans un onglet à part
+ * (sous-onglets internes), séparé de « Decks & mots » qui ne garde que
+ * la liste de mots. L'historique des révisions, qui vivait ici aussi,
+ * a été déplacé dans l'onglet Statistiques le 20/08/2026 (demandé
+ * explicitement — voir StatsScreen.tsx) : les deux parlent de ce qui
+ * s'est passé pendant les révisions, pas de configuration de l'app. */
 export function SettingsScreen({ db }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -43,13 +33,11 @@ export function SettingsScreen({ db }: Props) {
         <Text style={styles.title}>Réglages</Text>
         <View style={styles.subTabs}>
           <SubTabButton styles={styles} label="Réglages" active={subView === 'settings'} onPress={() => setSubView('settings')} />
-          <SubTabButton styles={styles} label="Historique" active={subView === 'history'} onPress={() => setSubView('history')} />
           <SubTabButton styles={styles} label="Notifications" active={subView === 'notifications'} onPress={() => setSubView('notifications')} />
         </View>
       </View>
 
       {subView === 'settings' && <SettingsView db={db} styles={styles} />}
-      {subView === 'history' && <HistoryView db={db} styles={styles} />}
       {subView === 'notifications' && <NotificationsView db={db} styles={styles} theme={theme} />}
     </ScreenContainer>
   );
@@ -228,106 +216,13 @@ function NumberField({
       <TextInput
         style={styles.input}
         keyboardType="number-pad"
+        keyboardAppearance="dark"
         value={String(value)}
         onChangeText={(t) => {
           const n = parseInt(t, 10);
           if (!Number.isNaN(n)) onChange(n);
         }}
       />
-    </View>
-  );
-}
-
-// MARK: - Historique
-
-/** Liste des révisions passées (mot, traduction, note) avec la
- * possibilité de corriger une note mal cliquée. La correction ne change
- * que le journal utilisé pour les stats — elle ne recalcule pas
- * l'échéance déjà programmée de la carte, ce qui est expliqué dans le
- * texte d'aide en haut de l'écran plutôt que laissé implicite. */
-function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
-  const [rows, setRows] = useState<ReviewHistoryRow[]>([]);
-  const [editing, setEditing] = useState<ReviewHistoryRow | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    setRows(await getReviewHistory(db));
-    setLoading(false);
-  }, [db]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  const handlePickGrade = async (grade: SM2Grade) => {
-    if (!editing) return;
-    await updateReviewGrade(db, editing.id, grade);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setEditing(null);
-    await refresh();
-  };
-
-  if (loading) return null;
-
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={styles.historyHint}>
-        Touchez une note pour la corriger en cas de mauvais clic. Corriger ici met à jour les statistiques mais ne
-        change pas la prochaine date de révision déjà programmée pour ce mot.
-      </Text>
-      <FlatList
-        data={rows}
-        keyExtractor={(r) => String(r.id)}
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item, index }) => (
-          <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.historyRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.wordSpanish}>{item.spanish}</Text>
-              <Text style={styles.wordEnglish}>{item.english}</Text>
-              <Text style={styles.historyDate}>
-                {item.reviewedAt.toLocaleDateString()} · {item.reviewedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
-            <AnimatedPressable
-              style={[styles.gradeBadge, styles[`gradeBadge_${item.grade}` as const]]}
-              haptic={Haptics.ImpactFeedbackStyle.Light}
-              onPress={() => setEditing(item)}
-            >
-              <Text style={styles.gradeBadgeText}>{GRADE_LABELS[item.grade]}</Text>
-            </AnimatedPressable>
-          </FadeInView>
-        )}
-        ListEmptyComponent={<Text style={styles.empty}>Aucune révision pour l'instant.</Text>}
-      />
-
-      <Modal visible={editing !== null} animationType="fade" transparent onRequestClose={() => setEditing(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.editCard}>
-            {editing && (
-              <>
-                <Text style={styles.modalTitle}>{editing.spanish}</Text>
-                <Text style={styles.wordEnglish}>{editing.english}</Text>
-                <View style={styles.editGradeGrid}>
-                  {GRADES.map((grade) => (
-                    <AnimatedPressable
-                      key={grade}
-                      style={[styles.editGradeButton, styles[`gradeBadge_${grade}` as const]]}
-                      haptic="none"
-                      scaleTo={0.94}
-                      onPress={() => handlePickGrade(grade)}
-                    >
-                      <Text style={styles.gradeBadgeText}>{GRADE_LABELS[grade]}</Text>
-                    </AnimatedPressable>
-                  ))}
-                </View>
-                <AnimatedPressable style={[styles.button, styles.buttonOutline, { marginTop: 4 }]} haptic="none" onPress={() => setEditing(null)}>
-                  <Text style={styles.buttonOutlineText}>Annuler</Text>
-                </AnimatedPressable>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -423,35 +318,6 @@ function createStyles(t: SolYSombraPalette) {
     chipActive: { backgroundColor: t.buttonFilled },
     chipText: { fontSize: 12, color: t.wordText, fontWeight: '600' },
     chipTextActive: { color: t.buttonFilledText },
-
-    listContent: { paddingTop: 8, paddingBottom: 60 },
-    wordSpanish: { fontSize: 16, fontWeight: '600', color: t.wordText },
-    wordEnglish: { fontSize: 13, color: t.metaText, marginTop: 2 },
-    empty: { color: t.metaText, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
-
-    historyHint: { fontSize: 12, color: t.metaText, paddingTop: 4, paddingBottom: 12, lineHeight: 17 },
-    historyRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: t.translationBackground,
-      gap: 12,
-    },
-    historyDate: { fontSize: 11, color: t.metaText, marginTop: 4 },
-    gradeBadge: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, minWidth: 76, alignItems: 'center' },
-    gradeBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
-    gradeBadge_again: { backgroundColor: '#B5533C' },
-    gradeBadge_hard: { backgroundColor: '#C98A3E' },
-    gradeBadge_good: { backgroundColor: '#4C7A5E' },
-    gradeBadge_easy: { backgroundColor: '#3D6E8C' },
-
-    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-    modalTitle: { fontFamily: 'Georgia', fontSize: 20, fontWeight: '600', color: t.wordText, marginBottom: 16 },
-
-    editCard: { backgroundColor: t.cardBackground, borderRadius: 20, padding: 24, margin: 24, alignSelf: 'stretch' },
-    editGradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18, marginBottom: 8 },
-    editGradeButton: { flexBasis: '47%', paddingVertical: 14, borderRadius: 20, alignItems: 'center' },
 
     field: { marginBottom: 14 },
     fieldLabel: { fontSize: 12, color: t.metaText, marginBottom: 6 },
