@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn, FadeInUp } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import { AzulejoFrieze } from '../components/AzulejoFrieze';
 import { formatMeta, useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 import type { SM2Grade } from '../sm2/types';
 
@@ -28,18 +29,27 @@ const GRADE_HAPTICS: Record<SM2Grade, () => Promise<void>> = {
 };
 
 /**
- * L'écran de révision, style « Sol y sombra ». Purement présentation :
- * données et callback de notation passés par l'appelant — voir
- * `ReviewScreenContainer.tsx` pour le branchement à SM-2/SQLite.
+ * L'écran de révision, style « Sol y sombra ». Reprend le même montage
+ * en deux temps que la notification (mot seul → « Ver traducción » →
+ * traduction + notation), pour que l'app et la notification se
+ * comportent pareil — demandé explicitement après le premier test.
+ * Purement présentation : données et callback de notation passés par
+ * l'appelant, voir `ReviewScreenContainer.tsx`.
  *
  * La carte est remontée (`key={card.word}` côté appelant) à chaque
- * nouvelle carte pour rejouer l'animation d'entrée — sensation de
- * défilement plutôt qu'un simple changement de texte figé.
+ * nouvelle carte pour rejouer l'animation d'entrée ET repartir sur
+ * `revealed = false`.
  */
 export function ReviewScreen({ card, onGrade }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const meta = formatMeta(card.partOfSpeech, card.gender, card.level);
+  const [revealed, setRevealed] = useState(false);
+
+  const handleReveal = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRevealed(true);
+  };
 
   const handleGrade = (grade: SM2Grade) => {
     GRADE_HAPTICS[grade]();
@@ -67,20 +77,34 @@ export function ReviewScreen({ card, onGrade }: Props) {
         </View>
         <Text style={styles.meta}>{meta}</Text>
 
-        <Animated.View entering={FadeIn.delay(150).duration(300)} style={styles.translationBlock}>
-          <Text style={styles.translationText}>{card.translation}</Text>
-        </Animated.View>
+        {revealed ? (
+          <>
+            <Animated.View entering={FadeIn.duration(300)} style={styles.translationBlock}>
+              <Text style={styles.translationText}>{card.translation}</Text>
+            </Animated.View>
 
-        <View style={styles.ticketDash} />
+            <View style={styles.ticketDash} />
 
-        <View style={styles.buttonRowTop}>
-          <GradeButton styles={styles} label="Otra vez" variant="outline" onPress={() => handleGrade('again')} />
-          <GradeButton styles={styles} label="Difícil" variant="outline" onPress={() => handleGrade('hard')} />
-        </View>
-        <View style={styles.buttonRowBottom}>
-          <GradeButton styles={styles} label="Bien" variant="filled" onPress={() => handleGrade('good')} />
-          <GradeButton styles={styles} label="Fácil" variant="filled" onPress={() => handleGrade('easy')} />
-        </View>
+            <Animated.View entering={FadeInUp.duration(300).delay(80)}>
+              <View style={styles.buttonRowTop}>
+                <GradeButton styles={styles} label="Otra vez" variant="outline" onPress={() => handleGrade('again')} />
+                <GradeButton styles={styles} label="Difícil" variant="outline" onPress={() => handleGrade('hard')} />
+              </View>
+              <View style={styles.buttonRowBottom}>
+                <GradeButton styles={styles} label="Bien" variant="filled" onPress={() => handleGrade('good')} />
+                <GradeButton styles={styles} label="Fácil" variant="filled" onPress={() => handleGrade('easy')} />
+              </View>
+            </Animated.View>
+          </>
+        ) : (
+          <Animated.View entering={FadeIn.duration(250)}>
+            <AnimatedPressable style={styles.revealButton} haptic="none" onPress={handleReveal}>
+              <Text style={styles.revealButtonText}>Ver traducción</Text>
+            </AnimatedPressable>
+          </Animated.View>
+        )}
+
+        <AzulejoFrieze theme={theme} />
       </Animated.View>
     </SafeAreaView>
   );
@@ -115,14 +139,15 @@ function createStyles(t: SolYSombraPalette) {
       flex: 1,
       backgroundColor: t.cardBackground,
       justifyContent: 'center',
-      paddingHorizontal: 20,
+      paddingHorizontal: 28,
+      paddingVertical: 32,
     },
     card: {
       backgroundColor: t.cardBackground,
       borderWidth: 1.5,
       borderColor: t.cardBorder,
       borderRadius: 16,
-      padding: 20,
+      padding: 22,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.08,
@@ -175,6 +200,19 @@ function createStyles(t: SolYSombraPalette) {
       color: t.metaText,
       marginTop: 4,
       marginBottom: 20,
+    },
+    revealButton: {
+      height: 48,
+      borderRadius: 24,
+      borderWidth: 1.5,
+      borderColor: t.buttonOutline,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    revealButtonText: {
+      color: t.buttonOutline,
+      fontWeight: '600',
+      fontSize: 15,
     },
     translationBlock: {
       backgroundColor: t.translationBackground,

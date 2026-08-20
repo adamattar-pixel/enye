@@ -130,7 +130,7 @@ function ForecastBar({
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: t.cardBackground },
-    content: { padding: 20, paddingBottom: 40 },
+    content: { padding: 24, paddingBottom: 40 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 24 },
     statRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },

@@ -25,7 +25,7 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 | Plafond de révisions / jour | 22 (total 30/j — cohérent avec la fenêtre 8h-22h, voir calcul ci-dessous) |
 | Plage horaire des notifications | 8h – 22h |
 | Espacement entre cartes dues simultanément | aléatoire 15-30 min (moyenne 22,5 min → capacité ≈37/j), triées par échéance la plus ancienne, jamais tassé (règle défensive testée dans ReviewScheduler) |
-| Boucle de révision (sans Content Extension) | notification 1 = mot seul + bouton « Ver traducción » ; tap → notification 2 programmée en arrière-plan avec traduction + exemple + 4 boutons de notation. **Validée sur iPhone réel tant que l'app n'a pas été force-quittée** ; si force-quit, le tap ne fait rien jusqu'à la prochaine ouverture manuelle (limite iOS documentée, acceptée — voir AUDIT.md) |
+| Boucle de révision (sans Content Extension) | notification 1 = mot seul + bouton « Ver traducción » ; tap → notification 2 programmée en arrière-plan avec traduction + exemple + 4 boutons de notation. **Validée sur iPhone réel tant que l'app n'a pas été force-quittée** ; si force-quit, le tap ne fait rien jusqu'à la prochaine ouverture manuelle (limite iOS documentée, acceptée — voir AUDIT.md). Depuis le 20/08/2026, l'écran de révision **dans l'app** reprend le même montage en deux temps (demandé après le premier test réel) |
 | Source de `words.json` | liste de fréquence hermitdave/FrequencyWords (CC BY-SA 3.0) comme guide de priorité ; enrichissement généré par lots validés par l'utilisateur — **seul un échantillon de 36 mots existe, non encore validé** |
 
 ### Le calcul des plafonds (pourquoi 8+22, pas 15+80)
@@ -43,9 +43,16 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 6. **Audio, finitions, mode sombre** — **fait**. Bouton "Écouter" sur l'écran de révision (`expo-speech`, `language: 'es-ES'`, pas de sélection de voix précise — voir contrainte ci-dessus). Mode sombre : palette déclinée et bascule automatique selon le réglage système (`useColorScheme`), **non validée visuellement** — à eyeballer sur device réel, voir AUDIT.md.
 7. **Animations et finitions visuelles** — **fait**, à la demande explicite ("rends l'app plus moderne avec plein d'animation"). `react-native-reanimated` : entrée en fondu/glissé des écrans et des cartes, barre de progression et graphique de prévision animés, retrait au toucher (spring) + retour haptique (`expo-haptics`) sur les boutons principaux, transitions entre onglets. Détail dans AUDIT.md.
 
+## Premier retour sur device réel (20/08/2026)
+
+Trois retours reçus après un vrai test sur iPhone, tous traités :
+1. **Démarrage lent** → cause identifiée et corrigée (voir AUDIT.md, notifications programmées en parallèle au lieu d'en séquence, plus bloquant pour l'affichage).
+2. **Boutons de notation absents sur l'écran de session** → l'utilisateur attendait le même montage en deux temps qu'en notification (mot → « Ver traducción » → traduction + notation), pas encore implémenté dans l'app jusque-là. Ajouté.
+3. **Design jugé « un peu vide »** → padding augmenté (20→24/28 sur les écrans), frise géométrique façon azulejo ajoutée en bas de la carte de révision (déjà prévue dans le cahier des charges d'origine, jamais construite avant).
+
 ## Prochaines actions
 
-- [ ] **Tout tester sur iPhone réel** — rien de ce qui a été construit depuis la tâche 0 n'a encore tourné sur device (voir AUDIT.md pour le détail de ce qui est vérifié vs supposé).
+- [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation apparaissent bien maintenant avec le flux de révélation, et que le démarrage est plus rapide.
 - [ ] Reprendre la validation de `words.json` et continuer la génération par lots jusqu'à 1000-2000 mots (échantillon actuel : 36, déjà en base).
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.

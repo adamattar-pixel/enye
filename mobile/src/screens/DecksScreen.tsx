@@ -394,7 +394,7 @@ function NumberField({
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: t.cardBackground },
-    header: { padding: 20, paddingBottom: 8 },
+    header: { padding: 24, paddingBottom: 8 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 16 },
     subTabs: { flexDirection: 'row', gap: 8 },
@@ -403,14 +403,14 @@ function createStyles(t: SolYSombraPalette) {
     subTabText: { color: t.wordText, fontWeight: '600', fontSize: 13 },
     subTabTextActive: { color: t.buttonFilledText },
 
-    filterRow: { flexGrow: 0, paddingHorizontal: 20, marginBottom: 8 },
-    filterRowContent: { gap: 8, paddingRight: 20 },
+    filterRow: { flexGrow: 0, paddingHorizontal: 24, marginBottom: 8 },
+    filterRowContent: { gap: 8, paddingRight: 24 },
     chip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 16, backgroundColor: t.translationBackground },
     chipActive: { backgroundColor: t.buttonFilled },
     chipText: { fontSize: 12, color: t.wordText, fontWeight: '600' },
     chipTextActive: { color: t.buttonFilledText },
 
-    listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+    listContent: { paddingHorizontal: 24, paddingBottom: 100 },
     wordRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -423,7 +423,7 @@ function createStyles(t: SolYSombraPalette) {
     deleteLink: { color: t.dot, fontSize: 12 },
     empty: { color: t.metaText, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
 
-    fabWrapper: { position: 'absolute', bottom: 16, left: 20, right: 20 },
+    fabWrapper: { position: 'absolute', bottom: 20, left: 24, right: 24 },
     fab: {
       backgroundColor: t.buttonFilled,
       borderRadius: 24,
@@ -449,7 +449,7 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: t.cardBackground,
     },
 
-    settingsContent: { padding: 20, paddingBottom: 60 },
+    settingsContent: { padding: 24, paddingBottom: 60 },
     hourRow: { flexDirection: 'row' },
     tagToggleWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
 

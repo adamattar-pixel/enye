@@ -2,6 +2,19 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Flux de révélation in-app + esthétique (20/08/2026)
+
+Retour utilisateur après premier test réel : les boutons de notation semblaient absents sur l'écran de session, l'app paraît un peu vide, et il manque du padding sur les bords. Clarifié avec l'utilisateur : il s'attendait à retrouver le même montage en deux temps que la notification (mot seul → « Ver traducción » → traduction + 4 boutons de notation) **à l'intérieur de l'app aussi** — ce n'était pas construit ainsi jusque-là (traduction affichée immédiatement, sans étape de révélation).
+
+**Hypothèse non retenue, à garder en tête si le problème persiste** : avant de conclure que c'était uniquement un problème de design attendu, une hypothèse technique a été envisagée — `react-native-reanimated` v4 + `react-native-worklets` (installés via `expo install`) nécessitent la New Architecture, et une éventuelle incompatibilité avec Expo Go aurait pu expliquer des éléments (notamment les boutons utilisant `AnimatedPressable`, basé sur `useSharedValue`/`useAnimatedStyle`) qui ne s'affichent pas alors que d'autres éléments (basés sur `entering`/`FadeIn`, un mécanisme différent) s'affichent bien. Recherche faite : Expo Go SDK 54 tourne en New Architecture par défaut, donc en théorie compatible — mais non confirmé sur ce device précis. **Si les boutons de notation restent invisibles après ce correctif (flux de révélation ajouté), c'est cette hypothèse qu'il faudra creuser en premier**, en remplaçant `AnimatedPressable` par l'API `Animated` native de React Native (sans dépendance à Reanimated/worklets) pour isoler la cause.
+
+Implémenté :
+- **Écran de révision** ([ReviewScreen.tsx](mobile/src/screens/ReviewScreen.tsx)) : état `revealed` local, réinitialisé à chaque nouvelle carte (`key` côté `ReviewScreenContainer`). Mot + bouton « Ver traducción » d'abord ; au tap, traduction + 4 boutons de notation apparaissent avec une animation d'entrée.
+- **Padding** : augmenté sur tous les écrans (bords à 20px → 24-28px). Interprétation de « padding sur les extrémités » — à corriger si ce n'était pas le bon endroit.
+- **[AzulejoFrieze.tsx](mobile/src/components/AzulejoFrieze.tsx)** : frise de petits losanges (View tournées à 45°, pas de SVG) en bas de la carte de révision, discrète (opacité 0,3-0,45), reprend une idée du cahier des charges d'origine ("frise géométrique azulejo... pas une image bitmap") jamais implémentée avant ce chantier. Aucun cliché national (pas de drapeau, taureau, etc.), conforme à la contrainte d'origine.
+
+**Non vérifié** : comme tout le reste depuis la tâche 0, ce correctif n'a pas encore tourné sur device au moment où il est écrit.
+
 ## Lenteur au démarrage — cause identifiée et corrigée (20/08/2026)
 
 Repéré sur relecture du code suite à une question de l'utilisateur ("l'app est lente au démarrage non ?"), avant même un test réel — donc une hypothèse forte, pas encore confirmée sur device. Deux points bloquaient l'affichage :

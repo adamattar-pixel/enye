@@ -87,7 +87,7 @@ export function TodayScreen({ db, onStartSession }: Props) {
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: t.cardBackground, padding: 20 },
+    screen: { flex: 1, backgroundColor: t.cardBackground, padding: 24 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 24 },
     statCard: {
