@@ -38,15 +38,15 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 1. **Réglages SM-2** — **fait** (8 nouvelles + 22 révisions = 30/j, voir ci-dessus).
 2. **Portage SM-2 en TypeScript** — **fait**. [mobile/src/sm2/](mobile/src/sm2/) (`types.ts`, `engine.ts`, `engine.test.ts`), 13/13 tests portés depuis `Packages/SM2Engine` et verts, aucune divergence de comportement trouvée.
 3. **Persistance + chargement de `words.json`** — pas commencé côté Expo. Contenu de `words.json` toujours incomplet (36/1000-2000 mots, non validés).
-4. **Planificateur de notifications** — la logique pure (`Packages/ReviewScheduler`, 9 tests) existe en Swift, à porter en TypeScript sur le même principe que SM-2.
-5. **Écrans** (Aujourd'hui, Session, Statistiques, Decks/mots) — pas commencé.
+4. **Planificateur de notifications** — **fait**. [mobile/src/scheduler/](mobile/src/scheduler/) (`types.ts`, `reviewScheduler.ts`, `reviewScheduler.test.ts`), 9/9 tests portés depuis `Packages/ReviewScheduler` et verts. Pas encore branché à `expo-notifications` (juste la logique pure de placement des créneaux pour l'instant).
+5. **Écrans** (Aujourd'hui, Session, Statistiques, Decks/mots) — **en cours**. Écran de révision fait (style Sol y sombra, données mock — voir AUDIT.md), les 3 autres pas commencés.
 6. **Audio, finitions, mode sombre** — pas commencé.
 
 ## Prochaines actions
 
-- [ ] Porter ReviewScheduler (`Packages/ReviewScheduler`) en TypeScript — même principe que SM-2, à partir des 9 tests Swift existants.
 - [ ] Reprendre la validation de `words.json` (échantillon 36 mots, format proposé) avant l'étape 3 (persistance).
-- [ ] Brancher `mobile/src/sm2/` sur l'écran de révision (actuellement données mock, voir le style Sol y sombra déjà en place).
+- [ ] Persistance : charger `words.json` en SQLite (`expo-sqlite`) au premier lancement.
+- [ ] Brancher `mobile/src/sm2/` et `mobile/src/scheduler/` sur l'écran de révision et sur `expo-notifications` (actuellement données mock).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

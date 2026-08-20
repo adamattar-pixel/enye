@@ -14,6 +14,14 @@ Implémenté : [mobile/src/sm2/types.ts](mobile/src/sm2/types.ts), [engine.ts](m
 
 Setup de test ajouté au projet Expo : `jest-expo` + `jest` + `@types/jest` en devDependencies (commande officielle SDK 54 : `npx expo install jest-expo jest @types/jest -- --dev` sous Windows), `"jest": { "preset": "jest-expo" }` dans `package.json`, `"types": ["jest"]` dans `tsconfig.json`. Lancer les tests : `npx jest --watchAll=false` (ou `npm test` pour le mode watch).
 
+## Portage ReviewScheduler en TypeScript (20/08/2026)
+
+Implémenté : [mobile/src/scheduler/types.ts](mobile/src/scheduler/types.ts), [reviewScheduler.ts](mobile/src/scheduler/reviewScheduler.ts), [reviewScheduler.test.ts](mobile/src/scheduler/reviewScheduler.test.ts) — port direct de `Packages/ReviewScheduler` (Swift). Les 9 tests Swift traduits 1:1, **9/9 verts**, aucune divergence de comportement.
+
+**Divergence de signature (documentée, pas de comportement) :** la version Swift permet d'injecter un `Calendar` pour les tests ; TypeScript/`Date` n'a pas d'équivalent objet-calendrier passable en paramètre. La version TS n'expose donc pas ce paramètre — le comportement (fenêtre, espacement, report au lendemain) reste identique, seule la façon de fixer le fuseau horaire en test diffère (voir incident ci-dessous).
+
+**Incident résolu — fuseau horaire des tests sous Windows/Node :** fixer `process.env.TZ = 'UTC'` en tête du fichier de test échouait silencieusement (décalage de 2h constaté sur tous les résultats) — sur cette machine, Node/V8 ne relit pas cette variable une fois le processus démarré ; le fuseau horaire local effectif reste celui figé au lancement. Fix : fixer `TZ=UTC` **avant** le démarrage de Node, via `cross-env` dans le script npm (`"test": "cross-env TZ=UTC jest --watchAll"`, `mobile/package.json`) plutôt que dans le code du test. `cross-env` ajouté en devDependency (nécessaire pour que la syntaxe `TZ=UTC commande` fonctionne aussi sur Windows, où `cmd.exe` ne la supporte pas nativement contrairement à bash).
+
 ## Écran de révision — style Sol y sombra (20/08/2026)
 
 Implémenté : [mobile/src/screens/ReviewScreen.tsx](mobile/src/screens/ReviewScreen.tsx) + [mobile/src/theme/solYSombra.ts](mobile/src/theme/solYSombra.ts). Carte crème/bordure ocre, liseré pointillé façon ticket, bloc traduction fond rose pâle, 4 boutons de notation en pilules (2 lignes de 2 : Otra vez/Difícil en contour ocre, Bien/Fácil en plein bordeaux). Visible par défaut au lancement de l'app (mock data, pas encore branché à SM-2/à la vraie file — tâches 3-4).
