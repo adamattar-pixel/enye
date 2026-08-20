@@ -143,107 +143,28 @@ export async function updateCard(db: SQLiteDatabase, wordId: string, card: SM2Ca
   );
 }
 
-/** Cartes dues à `now` ou avant, triées par échéance la plus ancienne
- * d'abord (même ordre que ReviewScheduler) — `limit` doit refléter les
- * plafonds quotidiens (8 nouvelles + 22 révisions = 30, voir PLAN.md),
- * pas appliqué ici : c'est à l'appelant de séparer nouvelles/révisions
- * avant d'appeler cette fonction si besoin. */
-export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number): Promise<DueCardRow[]> {
-  type Row = {
-    id: string;
-    spanish: string;
-    english: string;
-    part_of_speech: string;
-    gender: string | null;
-    example_es: string;
-    example_en: string;
-    level: string;
-    tags: string;
-    frequency_rank: number;
-    is_user_added: number;
-    ease_factor: number;
-    interval_days: number;
-    repetitions: number;
-    lapses: number;
-    learning_step_index: number;
-    lifecycle: string;
-    due_date: string;
-  };
+type WordCardRow = {
+  id: string;
+  spanish: string;
+  english: string;
+  part_of_speech: string;
+  gender: string | null;
+  example_es: string;
+  example_en: string;
+  level: string;
+  tags: string;
+  frequency_rank: number;
+  is_user_added: number;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  lapses: number;
+  learning_step_index: number;
+  lifecycle: string;
+  due_date: string;
+};
 
-  const rows = await db.getAllAsync<Row>(
-    `SELECT w.*, c.ease_factor, c.interval_days, c.repetitions, c.lapses, c.learning_step_index, c.lifecycle, c.due_date
-     FROM cards c
-     JOIN words w ON w.id = c.word_id
-     WHERE c.due_date <= ?
-     ORDER BY c.due_date ASC
-     LIMIT ?;`,
-    now.toISOString(),
-    limit
-  );
-
-  return rows.map((r) => ({
-    word: {
-      id: r.id,
-      spanish: r.spanish,
-      english: r.english,
-      partOfSpeech: r.part_of_speech,
-      gender: r.gender,
-      exampleEs: r.example_es,
-      exampleEn: r.example_en,
-      level: r.level,
-      tags: JSON.parse(r.tags) as string[],
-      frequencyRank: r.frequency_rank,
-      isUserAdded: r.is_user_added === 1,
-    },
-    card: {
-      easeFactor: r.ease_factor,
-      intervalDays: r.interval_days,
-      repetitions: r.repetitions,
-      lapses: r.lapses,
-      learningStepIndex: r.learning_step_index,
-      lifecycle: parseLifecycle(r.lifecycle),
-      dueDate: new Date(r.due_date),
-    },
-  }));
-}
-
-/** Un mot précis avec son état de carte, indépendamment de si sa
- * `due_date` est passée ou non — utilisé quand on note une carte depuis
- * une notification, où on veut son état courant, pas seulement "les
- * cartes dues maintenant" (elle pourrait avoir été programmée pour dans
- * quelques minutes et notée en avance, ou en retard sur son horaire
- * prévu si l'app a été fermée). */
-export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promise<DueCardRow | null> {
-  type Row = {
-    id: string;
-    spanish: string;
-    english: string;
-    part_of_speech: string;
-    gender: string | null;
-    example_es: string;
-    example_en: string;
-    level: string;
-    tags: string;
-    frequency_rank: number;
-    is_user_added: number;
-    ease_factor: number;
-    interval_days: number;
-    repetitions: number;
-    lapses: number;
-    learning_step_index: number;
-    lifecycle: string;
-    due_date: string;
-  };
-
-  const r = await db.getFirstAsync<Row>(
-    `SELECT w.*, c.ease_factor, c.interval_days, c.repetitions, c.lapses, c.learning_step_index, c.lifecycle, c.due_date
-     FROM cards c
-     JOIN words w ON w.id = c.word_id
-     WHERE w.id = ?;`,
-    wordId
-  );
-  if (!r) return null;
-
+function mapWordCardRow(r: WordCardRow): DueCardRow {
   return {
     word: {
       id: r.id,
@@ -268,6 +189,90 @@ export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promi
       dueDate: new Date(r.due_date),
     },
   };
+}
+
+const WORD_CARD_SELECT = `SELECT w.*, c.ease_factor, c.interval_days, c.repetitions, c.lapses, c.learning_step_index, c.lifecycle, c.due_date
+     FROM cards c
+     JOIN words w ON w.id = c.word_id`;
+
+/** Cartes dues à `now` ou avant, triées par échéance la plus ancienne
+ * d'abord (même ordre que ReviewScheduler) — `limit` est un plafond
+ * global, sans distinction nouvelles/révisions. Utilisé par l'écran
+ * Aujourd'hui pour le simple compteur "X cartes dues" ; la session de
+ * révision elle-même utilise `getDueCardsSplit`, qui applique le
+ * plafond 8 nouvelles + 22 révisions séparément (voir PLAN.md). */
+export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number): Promise<DueCardRow[]> {
+  const rows = await db.getAllAsync<WordCardRow>(
+    `${WORD_CARD_SELECT}
+     WHERE c.due_date <= ?
+     ORDER BY c.due_date ASC
+     LIMIT ?;`,
+    now.toISOString(),
+    limit
+  );
+  return rows.map(mapWordCardRow);
+}
+
+/** Cartes dues pour une session, avec les plafonds nouvelles/révisions
+ * appliqués séparément (`settings.newCardsPerDay` / `settings.reviewCapPerDay`,
+ * 8 + 22 par défaut — voir PLAN.md, "Le calcul des plafonds") plutôt
+ * qu'un plafond combiné qui laissait les nouvelles cartes noyer les
+ * révisions ou l'inverse selon l'ordre d'échéance. Les cartes en
+ * révision passent d'abord (elles sont réellement en retard), les
+ * nouvelles cartes sont ajoutées ensuite par ordre de fréquence.
+ *
+ * `disabledTags` (réglage "thèmes actifs") n'exclut que les NOUVELLES
+ * cartes — un mot déjà en cours de révision reste dû même si son tag a
+ * été désactivé depuis, pour ne jamais faire disparaître une carte déjà
+ * commencée (voir `settings.ts`). Le filtre par tag se fait en JS après
+ * une requête large plutôt qu'en SQL (`tags` est stocké en JSON, pas en
+ * table de jointure) — acceptable au volume de mots actuel (des
+ * milliers, pas des millions), à revoir si ça devient un goulot. */
+export async function getDueCardsSplit(
+  db: SQLiteDatabase,
+  now: Date,
+  settings: { newCardsPerDay: number; reviewCapPerDay: number; disabledTags: string[] }
+): Promise<DueCardRow[]> {
+  const reviewRows = await db.getAllAsync<WordCardRow>(
+    `${WORD_CARD_SELECT}
+     WHERE c.due_date <= ? AND c.lifecycle != 'new'
+     ORDER BY c.due_date ASC
+     LIMIT ?;`,
+    now.toISOString(),
+    settings.reviewCapPerDay
+  );
+
+  const newCandidateRows = await db.getAllAsync<WordCardRow>(
+    `${WORD_CARD_SELECT}
+     WHERE c.due_date <= ? AND c.lifecycle = 'new'
+     ORDER BY w.frequency_rank ASC
+     LIMIT ?;`,
+    now.toISOString(),
+    // Marge pour compenser les mots filtrés ensuite par `disabledTags`.
+    settings.newCardsPerDay * 5 + 50
+  );
+
+  const disabled = new Set(settings.disabledTags);
+  const newRows = newCandidateRows
+    .filter((r) => !(JSON.parse(r.tags) as string[]).some((tag) => disabled.has(tag)))
+    .slice(0, settings.newCardsPerDay);
+
+  return [...reviewRows, ...newRows].map(mapWordCardRow);
+}
+
+/** Un mot précis avec son état de carte, indépendamment de si sa
+ * `due_date` est passée ou non — utilisé quand on note une carte depuis
+ * une notification, où on veut son état courant, pas seulement "les
+ * cartes dues maintenant" (elle pourrait avoir été programmée pour dans
+ * quelques minutes et notée en avance, ou en retard sur son horaire
+ * prévu si l'app a été fermée). */
+export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promise<DueCardRow | null> {
+  const r = await db.getFirstAsync<WordCardRow>(
+    `${WORD_CARD_SELECT}
+     WHERE w.id = ?;`,
+    wordId
+  );
+  return r ? mapWordCardRow(r) : null;
 }
 
 /** Journalise une note donnée — sert de base aux statistiques (série de
@@ -436,6 +441,51 @@ export async function addUserWord(db: SQLiteDatabase, word: Omit<Word, 'isUserAd
     card.lifecycle,
     card.dueDate.toISOString()
   );
+}
+
+export interface ReviewHistoryRow {
+  id: number;
+  wordId: string;
+  spanish: string;
+  english: string;
+  grade: SM2Grade;
+  reviewedAt: Date;
+}
+
+/** Historique de révisions avec le mot et sa traduction, le plus récent
+ * d'abord — sert à l'écran « Historique » où l'utilisateur peut corriger
+ * une note mal cliquée. Distinct de `getAllReviews`, qui ne renvoie que
+ * grade/date (suffisant pour les stats agrégées, pas assez pour afficher
+ * une liste consultable). */
+export async function getReviewHistory(db: SQLiteDatabase, limit = 200): Promise<ReviewHistoryRow[]> {
+  type Row = { id: number; word_id: string; spanish: string; english: string; grade: string; reviewed_at: string };
+  const rows = await db.getAllAsync<Row>(
+    `SELECT r.id, r.word_id, w.spanish, w.english, r.grade, r.reviewed_at
+     FROM reviews r
+     JOIN words w ON w.id = r.word_id
+     ORDER BY r.reviewed_at DESC
+     LIMIT ?;`,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    wordId: r.word_id,
+    spanish: r.spanish,
+    english: r.english,
+    grade: parseGrade(r.grade),
+    reviewedAt: new Date(r.reviewed_at),
+  }));
+}
+
+/** Corrige la note d'une entrée d'historique déjà journalisée (cas d'un
+ * mauvais clic). Ne modifie QUE le journal `reviews`, utilisé pour les
+ * statistiques (série de jours, taux de réussite) : ne recalcule pas
+ * rétroactivement l'intervalle SM-2 de la carte, qui a déjà été avancée
+ * en fonction de la note d'origine. Corriger ici change donc l'historique
+ * affiché et les stats de réussite, mais pas la prochaine date de
+ * révision de la carte — limite assumée, à faire savoir dans l'UI. */
+export async function updateReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+  await db.runAsync('UPDATE reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
 
 export async function deleteWord(db: SQLiteDatabase, wordId: string): Promise<void> {

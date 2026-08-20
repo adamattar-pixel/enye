@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeInUp, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllReviews, getAllDueDates, getWordCounts } from '../data/database';
 import { computeStreak, computeSuccessRate, computeForecast } from '../stats/statsEngine';
+import { FadeInView } from '../components/FadeInView';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
@@ -88,10 +88,10 @@ function StatTile({
   delay: number;
 }) {
   return (
-    <Animated.View entering={FadeInDown.duration(400).delay(delay).springify()} style={styles.tile}>
+    <FadeInView duration={400} delay={delay} style={styles.tile}>
       <Text style={styles.tileNumber}>{number}</Text>
       <Text style={styles.tileCaption}>{caption}</Text>
-    </Animated.View>
+    </FadeInView>
   );
 }
 
@@ -108,22 +108,24 @@ function ForecastBar({
   label: string;
   delay: number;
 }) {
-  const height = useSharedValue(0);
+  const height = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    height.value = withDelay(delay, withTiming(heightRatio, { duration: 500 }));
+    const animation = Animated.timing(height, { toValue: heightRatio, duration: 500, delay, useNativeDriver: false });
+    animation.start();
+    return () => animation.stop();
   }, [heightRatio, delay, height]);
 
-  const animatedStyle = useAnimatedStyle(() => ({ height: `${height.value * 100}%` }));
-
   return (
-    <Animated.View entering={FadeInUp.duration(300).delay(delay)} style={styles.forecastBarWrapper}>
+    <FadeInView duration={300} delay={delay} style={styles.forecastBarWrapper}>
       <View style={styles.forecastTrack}>
-        <Animated.View style={[styles.forecastBar, animatedStyle]} />
+        <Animated.View
+          style={[styles.forecastBar, { height: height.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}
+        />
       </View>
       <Text style={styles.forecastCount}>{count}</Text>
       <Text style={styles.forecastLabel}>{label}</Text>
-    </Animated.View>
+    </FadeInView>
   );
 }
 

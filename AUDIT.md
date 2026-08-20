@@ -2,7 +2,46 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
-## Pivot espagnol→anglais + génération de vocabulaire depuis doozan/spanish_data (20/08/2026)
+## Retrait de react-native-reanimated, boutons agrandis, historique de révisions, padding (20/08/2026)
+
+Retour utilisateur après un nouveau test réel : les boutons de notation (Otra vez/Difícil/Bien/Fácil) ne réagissaient pas au toucher et étaient perçus comme trop petits, plus de padding demandé sur les 4 côtés, et une demande d'historique consultable des révisions avec correction possible de la note.
+
+**Cause retenue pour les boutons qui ne réagissaient pas : `react-native-reanimated` v4 + `react-native-worklets`.** C'était déjà l'hypothèse non retenue notée plus bas dans ce fichier (section « Flux de révélation in-app »), gardée « à creuser en premier » si le problème persistait après le flux de révélation — c'est exactement ce qui s'est passé. Plutôt que de chercher un correctif de configuration Reanimated (plugin Babel, New Architecture, version worklets) sans pouvoir tester sur ce device précis, **toute dépendance à Reanimated/worklets a été retirée du projet** et remplacée par l'API `Animated` intégrée à React Native, qui ne dépend d'aucun module natif tiers et ne peut donc pas souffrir du même type d'incompatibilité avec Expo Go :
+- [AnimatedPressable.tsx](mobile/src/components/AnimatedPressable.tsx) : reconstruit sur `Animated.Value` + `Animated.timing` (retrait au toucher) au lieu de `useSharedValue`/`useAnimatedStyle`. `hitSlop` de 10px ajouté sur les 4 côtés — répond aussi au retour "trop petits" indépendamment de la cause du bug.
+- [FadeInView.tsx](mobile/src/components/FadeInView.tsx) (nouveau) : remplace tous les usages de `entering={FadeIn/FadeInDown/FadeInUp/FadeInRight}` par un composant basé sur `Animated.Value` + `interpolate`, rejoué à chaque montage.
+- Toutes les animations pilotées par valeur (barre de progression sur Aujourd'hui, barres de prévision sur Statistiques, point actif de la barre d'onglets) portées de `useSharedValue`/`withTiming`/`withSpring`/`withDelay` vers `Animated.Value`/`Animated.timing`/`Animated.spring`.
+- `react-native-reanimated` et `react-native-worklets` retirés de `package.json` (`npm uninstall`) — plus aucune trace dans le bundle compilé au-delà de deux commentaires de code qui citent le nom en toutes lettres (vérifié par recherche dans le bundle Metro).
+- Boutons de notation (`pill`) : hauteur 48 → 56px.
+
+**Non confirmé sur device** : l'hypothèse tient (Reanimated nécessite la New Architecture + un plugin Babel correctement configuré, ce projet n'a pas de `babel.config.js` explicite pour ça) mais n'a jamais été vérifiée en isolant précisément quelle partie de Reanimated posait problème — seul un nouveau test réel confirmera si les boutons répondent maintenant. Si le problème persiste malgré ce retrait complet, la cause est ailleurs (pas Reanimated) et il faudra chercher du côté d'un conflit de `Pressable`/scroll parent ou d'un souci de zIndex/overlay.
+
+**Historique des révisions ajouté** — nouvel onglet « Historique » dans Decks & mots (à côté de « Mots » et « Réglages »), voir [DecksScreen.tsx](mobile/src/screens/DecksScreen.tsx) (`HistoryView`) et [database.ts](mobile/src/data/database.ts) (`getReviewHistory`, `updateReviewGrade`). Liste le mot, sa traduction et la note donnée, la plus récente en premier ; toucher une ligne ouvre un sélecteur pour corriger la note en cas de mauvais clic.
+
+**Limite assumée et affichée dans l'UI, pas cachée** : corriger une note dans l'historique ne met à jour que le journal `reviews` (utilisé pour les stats — série de jours, taux de réussite). Elle ne recalcule **pas** rétroactivement l'intervalle SM-2 ni la prochaine date d'échéance de la carte, qui ont déjà été avancés au moment de la note d'origine — recalculer cela correctement demanderait de rejouer tout l'historique SM-2 de la carte depuis ce point, non implémenté. Un texte d'aide au-dessus de la liste explique cette limite à l'utilisateur.
+
+**Padding revu sur les 4 côtés** : l'écran de révision avait déjà `paddingHorizontal`/`paddingVertical` (donc techniquement les 4 côtés) avant cette demande ; vérifié qu'aucun écran (Aujourd'hui, Statistiques, Decks & mots, Historique) n'a de côté sans padding — ajout d'un `paddingTop` sur la liste de mots et l'historique qui n'en avaient pas explicitement (ils héritaient de l'espace laissé par le header, ce qui n'est pas la même chose qu'un padding propre à la zone si le header change).
+
+**Validation de réglages ajoutée au passage** (backlog identifié plus bas dans ce fichier, section « Reste de l'app construit d'un bloc ») : l'heure de fin ne peut plus être enregistrée avant l'heure de début dans Decks & mots → Réglages.
+
+**Vérifié pour ce chantier** : `tsc --noEmit` sans erreur, `npm test` (43 tests) vert, bundle Metro compilé et servi (`curl` sur `/index.ts.bundle`, HTTP 200, `node -c` sans erreur de syntaxe, 878 modules). **Non vérifié** : comportement réel des boutons, de l'historique et des animations sur iPhone — seul un test réel le confirmera.
+
+## Séparation nouvelles cartes / révisions + thèmes désactivés (20/08/2026)
+
+Backlog identifié dans ce fichier (section « Reste de l'app construit d'un bloc ») traité à la demande de continuer le travail restant. Deux limites connues corrigées ensemble, car la même fonction (`getDueCards`) les concernait toutes les deux :
+
+**Avant** : un seul plafond combiné (`limit`, ex. `DAILY_CARD_LIMIT = 30` dans `ReviewScreenContainer.tsx`, `QUEUE_SIZE = 50` dans `queue.ts`) appliqué à une requête unique triée par échéance, sans distinguer nouvelles cartes et révisions. Le réglage `disabledTags` (thèmes actifs) existait dans `AppSettings` et était modifiable dans Decks & mots → Réglages, mais n'était lu nulle part — désactiver un thème n'avait aucun effet observable.
+
+**Après** : `getDueCardsSplit(db, now, settings)` (nouveau, [database.ts](mobile/src/data/database.ts)) fait deux requêtes SQL séparées — cartes en révision (`lifecycle != 'new'`, plafonnées à `reviewCapPerDay`, triées par échéance) puis nouvelles cartes (`lifecycle = 'new'`, plafonnées à `newCardsPerDay`, triées par fréquence) — et filtre ces dernières en JS pour exclure celles dont un tag figure dans `disabledTags`. Le filtre par tag se fait en JS après une requête large (marge de `newCardsPerDay * 5 + 50` candidats) plutôt qu'en SQL, car `tags` est stocké en JSON dans la colonne, pas dans une table de jointure — acceptable au volume de mots actuel (des milliers, pas des millions).
+
+Branché dans les 3 endroits qui pilotaient auparavant ce plafond différemment : `ReviewScreenContainer.tsx` (session), `TodayScreen.tsx` (compteur affiché), `queue.ts` (`refillNotificationQueue`, qui piochait auparavant jusqu'à 50 cartes indistinctement).
+
+**Décision de conception, pas explicitement demandée, documentée pour correction si besoin** : un mot déjà en cours de révision reste dû même si son tag est désactivé depuis (le filtre `disabledTags` ne s'applique qu'aux nouvelles cartes) — pour ne jamais faire disparaître une carte déjà commencée simplement parce qu'un thème a été décoché après coup. Cohérent avec le commentaire déjà présent dans `settings.ts` au moment où `disabledTags` avait été défini sans être branché.
+
+**Refactor de passage** : `getDueCards` et `getWordWithCard` partageaient un type `Row` et un bloc de mapping SQL→objet dupliqués trois fois dans le fichier ; extraits en `WordCardRow`/`mapWordCardRow`/`WORD_CARD_SELECT` réutilisés par les trois fonctions (`getDueCards`, `getWordWithCard`, `getDueCardsSplit`) — pas un changement de comportement, seulement pour ne pas tripler la nouvelle logique de mapping une quatrième fois.
+
+**Vérifié** : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (HTTP 200, `node -c` sans erreur). **Non vérifié sur device** : la répartition effective en session réelle (est-ce qu'on voit bien un mélange nouvelles/révisions cohérent, est-ce que désactiver un thème dans Réglages a l'effet attendu) n'a pas pu être testée sans SQLite fonctionnel dans l'environnement Jest — même limite que le reste de `database.ts`, voir plus bas dans ce fichier.
+
+## Retrait de react-native-reanimated, boutons agrandis, historique de révisions, padding (20/08/2026)
 
 **Décision définitive, actée avec l'utilisateur** : le couple cible du projet passe d'espagnol→français à espagnol→anglais, pour toute la suite du projet — pas seulement ce lot de contenu. Déclenchée par le choix d'une source de vocabulaire fiable ([doozan/spanish_data](https://github.com/doozan/spanish_data), CC BY 4.0, agrégeant hermitdave/FrequencyWords CC BY-SA 3.0 + Wiktionary CC BY-SA + Tatoeba CC BY 2.0 FR) qui ne fournit que de l'anglais, pas de français.
 

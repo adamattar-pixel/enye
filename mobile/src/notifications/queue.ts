@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDueCards } from '../data/database';
+import { getDueCardsSplit } from '../data/database';
 import type { AppSettings } from '../data/settings';
 import { schedule } from '../scheduler/reviewScheduler';
 import { createNotificationWindow, type DueItem } from '../scheduler/types';
@@ -25,7 +25,14 @@ export async function refillNotificationQueue(
 ): Promise<number> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 
-  const due = await getDueCards(db, now, QUEUE_SIZE);
+  // Respecte le plafond nouvelles/révisions du jour (8 + 22 par défaut,
+  // voir PLAN.md) plutôt que de piocher indistinctement jusqu'à
+  // `QUEUE_SIZE` parmi toutes les cartes dues — sinon des révisions en
+  // retard pouvaient être noyées par un afflux de nouvelles cartes, ou
+  // l'inverse. `QUEUE_SIZE` reste un plafond de sécurité en dessous de la
+  // limite iOS de 64 notifications en attente, au cas où les réglages
+  // (modifiables sans borne haute) dépasseraient 50.
+  const due = (await getDueCardsSplit(db, now, settings)).slice(0, QUEUE_SIZE);
   if (due.length === 0) return 0;
 
   const window = createNotificationWindow({

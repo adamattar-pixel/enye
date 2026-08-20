@@ -1,18 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDueCards, updateCard, logReview, type DueCardRow } from '../data/database';
+import { getDueCardsSplit, updateCard, logReview, type DueCardRow } from '../data/database';
 import { getSettings } from '../data/settings';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
 import { refillNotificationQueue } from '../notifications/queue';
 import { ReviewScreen } from './ReviewScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
-
-// Plafond quotidien retenu (8 nouvelles + 22 révisions, voir PLAN.md).
-// La séparation nouvelles/révisions n'est pas encore faite ici — sert
-// pour l'instant de plafond global sur `getDueCards`.
-const DAILY_CARD_LIMIT = 30;
 
 type Props = {
   db: SQLiteDatabase;
@@ -31,7 +26,8 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
   const [loading, setLoading] = useState(true);
 
   const loadNext = useCallback(async () => {
-    const due = await getDueCards(db, new Date(), DAILY_CARD_LIMIT);
+    const settings = await getSettings(db);
+    const due = await getDueCardsSplit(db, new Date(), settings);
     setCurrent(due[0] ?? null);
   }, [db]);
 

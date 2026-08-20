@@ -1,6 +1,5 @@
-import { useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useEffect, useMemo, useRef } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
@@ -48,17 +47,15 @@ function TabButton({
   active: boolean;
   onPress: () => void;
 }) {
-  const dotScale = useSharedValue(active ? 1 : 0);
+  const dotScale = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
-    dotScale.value = withSpring(active ? 1 : 0, { damping: 12, stiffness: 180 });
+    Animated.spring(dotScale, { toValue: active ? 1 : 0, damping: 12, stiffness: 180, useNativeDriver: true }).start();
   }, [active, dotScale]);
-
-  const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: dotScale.value }] }));
 
   return (
     <AnimatedPressable style={styles.tab} haptic="none" scaleTo={0.92} onPress={onPress}>
-      <Animated.View style={[styles.dot, dotStyle]} />
+      <Animated.View style={[styles.dot, { transform: [{ scale: dotScale }] }]} />
       <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
     </AnimatedPressable>
   );

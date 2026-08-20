@@ -1,12 +1,11 @@
-import type { ReactNode } from 'react';
-import { Pressable, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { useRef } from 'react';
+import { Animated, Pressable, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 type HapticOption = Haptics.ImpactFeedbackStyle | Haptics.NotificationFeedbackType | 'selection' | 'none';
 
 type Props = {
-  children: ReactNode;
+  children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   onPress?: (e: GestureResponderEvent) => void;
   disabled?: boolean;
@@ -37,9 +36,20 @@ function triggerHaptic(haptic: HapticOption) {
   }
 }
 
-/** Bouton avec un léger retrait au toucher (spring) et un retour
- * haptique — remplace `TouchableOpacity` sur les interactions
- * principales pour une sensation plus « app native » que l'opacité seule. */
+/**
+ * Bouton avec un léger retrait au toucher + retour haptique — remplace
+ * `TouchableOpacity` sur les interactions principales.
+ *
+ * Basé sur l'API `Animated` intégrée à React Native (pas
+ * `react-native-reanimated`) — voir AUDIT.md, 20/08/2026 : suspecté (pas
+ * confirmé formellement) d'être la cause de boutons qui ne réagissaient
+ * pas au toucher et d'animations invisibles sur device. `Animated` ne
+ * dépend d'aucun module natif tiers, donc ne peut pas souffrir du même
+ * type de problème de compatibilité avec Expo Go.
+ *
+ * `hitSlop` élargit la zone tactile au-delà des limites visuelles du
+ * bouton — répond aussi au retour "les boutons sont trop petits".
+ */
 export function AnimatedPressable({
   children,
   style,
@@ -49,25 +59,31 @@ export function AnimatedPressable({
   scaleTo = 0.96,
   accessibilityLabel,
 }: Props) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.timing(scale, { toValue: scaleTo, duration: 90, useNativeDriver: true }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.timing(scale, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+  };
 
   return (
     <Pressable
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
-      onPressIn={() => {
-        scale.value = withTiming(scaleTo, { duration: 90 });
-      }}
-      onPressOut={() => {
-        scale.value = withTiming(1, { duration: 180 });
-      }}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       onPress={(e) => {
         triggerHaptic(haptic);
         onPress?.(e);
       }}
     >
-      <Animated.View style={[style, animatedStyle, disabled && { opacity: 0.5 }]}>{children}</Animated.View>
+      <Animated.View style={[style, { transform: [{ scale }] }, disabled ? { opacity: 0.5 } : null]}>
+        {children}
+      </Animated.View>
     </Pressable>
   );
 }

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeIn, FadeInUp } from 'react-native-reanimated';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import { FadeInView } from '../components/FadeInView';
 import { AzulejoFrieze } from '../components/AzulejoFrieze';
 import { formatMeta, useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 import type { SM2Grade } from '../sm2/types';
@@ -31,10 +31,8 @@ const GRADE_HAPTICS: Record<SM2Grade, () => Promise<void>> = {
 /**
  * L'écran de révision, style « Sol y sombra ». Reprend le même montage
  * en deux temps que la notification (mot seul → « Ver traducción » →
- * traduction + notation), pour que l'app et la notification se
- * comportent pareil — demandé explicitement après le premier test.
- * Purement présentation : données et callback de notation passés par
- * l'appelant, voir `ReviewScreenContainer.tsx`.
+ * traduction + notation). Purement présentation : données et callback
+ * de notation passés par l'appelant, voir `ReviewScreenContainer.tsx`.
  *
  * La carte est remontée (`key={card.word}` côté appelant) à chaque
  * nouvelle carte pour rejouer l'animation d'entrée ET repartir sur
@@ -58,7 +56,7 @@ export function ReviewScreen({ card, onGrade }: Props) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <Animated.View entering={FadeInDown.duration(350).springify().damping(16)} style={styles.card}>
+      <FadeInView duration={350} distance={20} style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.label}>LEXIS</Text>
           <View style={styles.dot} />
@@ -79,13 +77,13 @@ export function ReviewScreen({ card, onGrade }: Props) {
 
         {revealed ? (
           <>
-            <Animated.View entering={FadeIn.duration(300)} style={styles.translationBlock}>
+            <FadeInView duration={300} style={styles.translationBlock}>
               <Text style={styles.translationText}>{card.translation}</Text>
-            </Animated.View>
+            </FadeInView>
 
             <View style={styles.ticketDash} />
 
-            <Animated.View entering={FadeInUp.duration(300).delay(80)}>
+            <FadeInView duration={300} delay={80}>
               <View style={styles.buttonRowTop}>
                 <GradeButton styles={styles} label="Otra vez" variant="outline" onPress={() => handleGrade('again')} />
                 <GradeButton styles={styles} label="Difícil" variant="outline" onPress={() => handleGrade('hard')} />
@@ -94,18 +92,18 @@ export function ReviewScreen({ card, onGrade }: Props) {
                 <GradeButton styles={styles} label="Bien" variant="filled" onPress={() => handleGrade('good')} />
                 <GradeButton styles={styles} label="Fácil" variant="filled" onPress={() => handleGrade('easy')} />
               </View>
-            </Animated.View>
+            </FadeInView>
           </>
         ) : (
-          <Animated.View entering={FadeIn.duration(250)}>
+          <FadeInView duration={250}>
             <AnimatedPressable style={styles.revealButton} haptic="none" onPress={handleReveal}>
               <Text style={styles.revealButtonText}>Ver traducción</Text>
             </AnimatedPressable>
-          </Animated.View>
+          </FadeInView>
         )}
 
         <AzulejoFrieze theme={theme} />
-      </Animated.View>
+      </FadeInView>
     </SafeAreaView>
   );
 }
@@ -202,8 +200,8 @@ function createStyles(t: SolYSombraPalette) {
       marginBottom: 20,
     },
     revealButton: {
-      height: 48,
-      borderRadius: 24,
+      height: 56,
+      borderRadius: 28,
       borderWidth: 1.5,
       borderColor: t.buttonOutline,
       alignItems: 'center',
@@ -233,17 +231,19 @@ function createStyles(t: SolYSombraPalette) {
     },
     buttonRowTop: {
       flexDirection: 'row',
-      gap: 10,
-      marginBottom: 10,
+      gap: 12,
+      marginBottom: 12,
     },
     buttonRowBottom: {
       flexDirection: 'row',
-      gap: 10,
+      gap: 12,
     },
     pill: {
       flex: 1,
-      height: 48,
-      borderRadius: 24,
+      // Boutons agrandis (48 → 56) suite au retour "trop petits" — voir
+      // AUDIT.md, 20/08/2026.
+      height: 56,
+      borderRadius: 28,
       alignItems: 'center',
       justifyContent: 'center',
     },

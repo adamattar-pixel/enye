@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDueCards, getReviewCountSince } from '../data/database';
+import { getDueCardsSplit, getReviewCountSince } from '../data/database';
 import { getSettings } from '../data/settings';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import { FadeInView } from '../components/FadeInView';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
@@ -26,21 +26,24 @@ export function TodayScreen({ db, onStartSession }: Props) {
   const [dailyCap, setDailyCap] = useState(30);
   const [loading, setLoading] = useState(true);
 
-  const progressWidth = useSharedValue(0);
-  const progressStyle = useAnimatedStyle(() => ({ width: `${progressWidth.value * 100}%` }));
+  const progressWidth = useRef(new Animated.Value(0)).current;
 
   const refresh = useCallback(async () => {
     const settings = await getSettings(db);
     const cap = settings.newCardsPerDay + settings.reviewCapPerDay;
     setDailyCap(cap);
 
-    const due = await getDueCards(db, new Date(), cap);
+    const due = await getDueCardsSplit(db, new Date(), settings);
     setDueCount(due.length);
 
     const done = await getReviewCountSince(db, startOfToday());
     setDoneToday(done);
 
-    progressWidth.value = withTiming(cap > 0 ? Math.min(1, done / cap) : 0, { duration: 600 });
+    Animated.timing(progressWidth, {
+      toValue: cap > 0 ? Math.min(1, done / cap) : 0,
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
 
     setLoading(false);
   }, [db, progressWidth]);
@@ -56,21 +59,26 @@ export function TodayScreen({ db, onStartSession }: Props) {
 
       {!loading && (
         <>
-          <Animated.View entering={FadeInDown.duration(400).springify()} style={styles.statCard}>
+          <FadeInView duration={400} style={styles.statCard}>
             <Text style={styles.statNumber}>{dueCount}</Text>
             <Text style={styles.statCaption}>carte{dueCount !== 1 ? 's' : ''} due{dueCount !== 1 ? 's' : ''}</Text>
-          </Animated.View>
+          </FadeInView>
 
-          <Animated.View entering={FadeInDown.duration(400).delay(80).springify()} style={styles.progressRow}>
+          <FadeInView duration={400} delay={80} style={styles.progressRow}>
             <Text style={styles.progressText}>
               {doneToday} / {dailyCap} révisées aujourd'hui
             </Text>
             <View style={styles.progressTrack}>
-              <Animated.View style={[styles.progressFill, progressStyle]} />
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  { width: progressWidth.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+                ]}
+              />
             </View>
-          </Animated.View>
+          </FadeInView>
 
-          <Animated.View entering={FadeInDown.duration(400).delay(160).springify()}>
+          <FadeInView duration={400} delay={160}>
             <AnimatedPressable
               style={[styles.button, dueCount === 0 && styles.buttonDisabled]}
               onPress={onStartSession}
@@ -78,7 +86,7 @@ export function TodayScreen({ db, onStartSession }: Props) {
             >
               <Text style={styles.buttonText}>{dueCount === 0 ? 'Rien à réviser' : 'Commencer la session'}</Text>
             </AnimatedPressable>
-          </Animated.View>
+          </FadeInView>
         </>
       )}
     </SafeAreaView>

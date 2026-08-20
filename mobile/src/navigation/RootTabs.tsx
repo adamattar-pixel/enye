@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { DecksScreen } from '../screens/DecksScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
 import { TabBar, type TabKey } from './TabBar';
+import { FadeInView } from '../components/FadeInView';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 /** Les 4 écrans du cahier des charges : Aujourd'hui / Statistiques /
@@ -21,23 +21,23 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
 
   if (sessionActive) {
     return (
-      <Animated.View entering={FadeIn.duration(250)} style={styles.root}>
+      <FadeInView duration={250} direction="none" style={styles.root}>
         <ReviewScreenContainer db={db} onExit={() => setSessionActive(false)} />
-      </Animated.View>
+      </FadeInView>
     );
   }
 
   return (
-    <Animated.View style={styles.root}>
+    <FadeInView duration={0} direction="none" style={styles.root}>
       {/* `key={tab}` force un remontage à chaque changement d'onglet
        * pour rejouer l'entrée en fondu plutôt qu'un changement instantané. */}
-      <Animated.View key={tab} entering={FadeIn.duration(200)} style={styles.content}>
+      <FadeInView key={tab} duration={200} direction="none" style={styles.content}>
         {tab === 'today' && <TodayScreen db={db} onStartSession={() => setSessionActive(true)} />}
         {tab === 'stats' && <StatsScreen db={db} />}
         {tab === 'decks' && <DecksScreen db={db} />}
-      </Animated.View>
+      </FadeInView>
       <TabBar current={tab} onChange={setTab} />
-    </Animated.View>
+    </FadeInView>
   );
 }
 
