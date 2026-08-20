@@ -18,16 +18,22 @@ const TABS: { key: TabKey; label: string }[] = [
 
 /**
  * Remplace l'ancienne barre de pilules fixe en bas d'écran par une icône
- * ☰ en haut de l'écran (demandé le 20/08/2026, puis ajusté le même jour
- * après un premier essai jugé pas assez intégré : l'icône flottait
- * au-dessus du reste avec une ombre/un fond distinct — remplacée par une
- * icône à plat, "sur le même plan" que le reste de l'écran, sans carte ni
- * ombre propre). Un appui ouvre un grand panneau rectangulaire plein
- * (pas de coins très arrondis, pas transparent) listant les onglets les
- * uns sous les autres, séparés par un trait — pas un bandeau horizontal
- * défilant comme la toute première version. Toucher un onglet le
- * sélectionne et referme le panneau ; toucher en dehors referme sans
- * changer d'onglet.
+ * ☰ en haut à droite, alignée sur la même ligne que le bouton clair/sombre
+ * déjà présent là (`ThemeToggleButton`, dans RootTabs.tsx) — troisième
+ * itération du 20/08/2026 : les deux premiers essais plaçaient l'icône en
+ * haut à GAUCHE, à la même hauteur que le libellé "LEXIS" de chaque
+ * écran, ce qui la faisait visuellement se superposer au logo. Déplacée
+ * à droite, sur exactement le même `paddingTop` que le bouton clair/sombre
+ * (même ligne, "même plan"), avec un espacement fixe entre les deux pour
+ * ne jamais les faire se chevaucher.
+ *
+ * Un appui ouvre un tiroir plein écran en hauteur mais pas en largeur
+ * (~78% de l'écran, ancré à droite, sous l'icône) plutôt que le grand
+ * rectangle centré de la version précédente — glisse légèrement depuis la
+ * droite. Onglets empilés verticalement, séparés par un trait fin et
+ * discret qui ne touche pas les bords du tiroir (pas une bordure pleine
+ * largeur). L'onglet actif est marqué par une fine barre de couleur à
+ * gauche de la ligne plutôt qu'un bloc de fond plein, pour rester sobre.
  *
  * Comme l'ancienne barre, ce composant n'est monté que hors session de
  * révision (voir RootTabs.tsx) — pas besoin de le cacher explicitement
@@ -65,20 +71,22 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
       {open && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Fermer le menu des onglets" />
-          <SafeAreaView style={styles.panelSafeArea} pointerEvents="box-none">
-            <FadeInView duration={220} direction="up" distance={16} style={styles.panel}>
+          <FadeInView duration={220} direction="right" distance={-24} style={styles.drawer}>
+            <SafeAreaView style={styles.drawerSafeArea}>
+              <View style={styles.drawerHeaderSpace} />
               {TABS.map((tab, index) => (
-                <TabRow
-                  key={tab.key}
-                  styles={styles}
-                  label={tab.label}
-                  active={tab.key === current}
-                  isLast={index === TABS.length - 1}
-                  onPress={() => handleSelect(tab.key)}
-                />
+                <View key={tab.key}>
+                  <TabRow
+                    styles={styles}
+                    label={tab.label}
+                    active={tab.key === current}
+                    onPress={() => handleSelect(tab.key)}
+                  />
+                  {index < TABS.length - 1 && <View style={styles.divider} />}
+                </View>
               ))}
-            </FadeInView>
-          </SafeAreaView>
+            </SafeAreaView>
+          </FadeInView>
         </>
       )}
     </>
@@ -89,22 +97,15 @@ function TabRow({
   styles,
   label,
   active,
-  isLast,
   onPress,
 }: {
   styles: ReturnType<typeof createStyles>;
   label: string;
   active: boolean;
-  isLast: boolean;
   onPress: () => void;
 }) {
   return (
-    <AnimatedPressable
-      style={[styles.row, !isLast && styles.rowDivider, active && styles.rowActive]}
-      haptic="none"
-      scaleTo={0.98}
-      onPress={onPress}
-    >
+    <AnimatedPressable style={[styles.row, active && styles.rowActive]} haptic="none" scaleTo={0.98} onPress={onPress}>
       <Text style={[styles.rowLabel, active && styles.rowLabelActive]}>{label}</Text>
     </AnimatedPressable>
   );
@@ -113,12 +114,16 @@ function TabRow({
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     hamburgerSafeArea: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 },
-    hamburgerRow: { flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 22, paddingTop: 14 },
+    // `paddingTop: 6` reproduit exactement celui de `ThemeToggleButton`
+    // (RootTabs.tsx) — même ligne horizontale. `paddingRight: 68` réserve
+    // la largeur du bouton clair/sombre (38) + une marge (16) + un
+    // espacement propre (14) pour qu'ils ne se touchent jamais.
+    hamburgerRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingRight: 68, paddingTop: 6 },
     // Icône seule, sans fond/ombre/carte propre — reste "sur le même
     // plan" visuel que le reste de l'écran plutôt que de flotter
     // au-dessus comme un bouton d'action séparé.
     hamburgerButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-    hamburgerIcon: { fontSize: 22, color: t.wordText, fontWeight: '700' },
+    hamburgerIcon: { fontSize: 20, color: t.wordText, fontWeight: '700' },
 
     backdrop: {
       position: 'absolute',
@@ -129,32 +134,39 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: 'rgba(0,0,0,0.35)',
       zIndex: 20,
     },
-    panelSafeArea: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 25 },
-    // Grand rectangle plein, coins à peine arrondis (pas la même
-    // rondeur que les cartes/pilules ailleurs dans l'app) — demandé
-    // explicitement comme "rectangulaire plein et grand", par
-    // opposition au bandeau horizontal étroit de la première version.
-    panel: {
-      marginTop: 60,
-      marginHorizontal: 16,
+    // Tiroir plein en hauteur, pas en largeur — ancré au bord droit, sous
+    // l'icône qui l'ouvre. Ombre portée vers la gauche (le tiroir
+    // recouvre le contenu, pas l'inverse).
+    drawer: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: '78%',
+      maxWidth: 340,
       backgroundColor: t.cardBackground,
-      borderRadius: 6,
-      borderWidth: 1.5,
-      borderColor: t.cardBorder,
-      overflow: 'hidden',
+      borderLeftWidth: 1,
+      borderLeftColor: t.cardBorder,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.18,
+      shadowOffset: { width: -6, height: 0 },
+      shadowOpacity: 0.16,
       shadowRadius: 20,
-      elevation: 6,
+      elevation: 10,
+      zIndex: 25,
     },
-    // Onglets empilés les uns sur les autres, séparés par un trait —
-    // demandé explicitement, par opposition aux pilules côte à côte de
-    // la version précédente.
-    row: { paddingVertical: 20, paddingHorizontal: 24 },
-    rowDivider: { borderBottomWidth: 1, borderBottomColor: t.cardBorder },
-    rowActive: { backgroundColor: t.translationBackground },
+    drawerSafeArea: { flex: 1 },
+    drawerHeaderSpace: { height: 54 },
+
+    row: { paddingVertical: 18, paddingHorizontal: 24, borderLeftWidth: 3, borderLeftColor: 'transparent' },
+    rowActive: { borderLeftColor: t.buttonFilled },
     rowLabel: { fontSize: 16, fontWeight: '600', color: t.wordText },
     rowLabelActive: { color: t.buttonFilled, fontWeight: '700' },
+
+    // Trait sobre et discret entre deux onglets — hairline (le plus fin
+    // possible), opacité réduite, et surtout PAS pleine largeur (retiré
+    // des bords du tiroir via une marge horizontale) : demandé
+    // explicitement en remplacement de la bordure pleine largeur de la
+    // version précédente.
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.cardBorder, marginHorizontal: 24, opacity: 0.6 },
   });
 }

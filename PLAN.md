@@ -251,7 +251,7 @@ export interface ListeningSegment {
 
 **Contrairement au vocabulaire et à la conjugaison, il n'y a pas de fichier JSON statique bundlé** : les vidéos sont ajoutées dynamiquement par l'utilisateur pendant qu'il utilise l'app, donc SQLite est la seule source de vérité pour le contenu ET pour la progression — plus proche du design historique de `words`/`cards` (contenu + progression toutes deux en base) que de `conjugation_cards` (progression seule, contenu en JSON importé).
 
-Schéma SQLite proposé (additif dans `migrateDbIfNeeded()`, même style que l'existant) :
+Schéma SQLite proposé à l'origine (additif dans `migrateDbIfNeeded()`, même style que l'existant) — **gardé comme trace du raisonnement, mais le schéma réel implémenté dans [database.ts](mobile/src/data/database.ts) diffère dans quelques détails mineurs** (ex. `duration_seconds` en `INTEGER` plutôt qu'en `REAL` ci-dessous) : se fier au code, pas à ce bloc, pour la structure exacte :
 
 ```sql
 CREATE TABLE IF NOT EXISTS listening_videos (
@@ -370,108 +370,7 @@ Exemple concret avec `VIDEO_COOLDOWN = 3` et seulement A, B disponibles (dues) :
 
 Comme expliqué plus haut : le segment est choisi aléatoirement parmi les segments **dus** de la vidéo choisie (`due_date <= now`), pas parmi tous ses segments. Un segment qui vient d'être noté a sa `due_date` repoussée dans le futur par `review()` (comportement déjà existant du moteur SM-2, inchangé) — il ne réapparaîtra donc pas immédiatement, sans avoir besoin d'un tracker "derniers segments vus" séparé. Si la vidéo choisie n'a qu'un seul segment dû, il est réutilisé (comportement attendu et sans alternative, pas un bug).
 
-### Constantes proposées
-
-```ts
-export const VIDEO_COOLDOWN = 3;              // demandé explicitement
-export const LISTENING_NEW_SEGMENTS_PER_DAY = 5;   // proposition, pas testée à l'usage
-export const LISTENING_REVIEW_CAP_PER_DAY = 15;    // proposition, pas testée à l'usage
-```
-
-Les deux derniers seraient des réglages utilisateur persistés (`AppSettings.listeningNewSegmentsPerDay`/`listeningReviewCapPerDay`), même patron que `conjugationNewCardsPerDay`/`conjugationReviewCapPerDay` — valeurs de départ plus basses que le vocabulaire/la conjugaison **par hypothèse, pas par mesure** : un exercice de dictée (écouter, taper une phrase entière, comparer) demande plus de temps/effort qu'une carte de vocabulaire ou une forme conjuguée isolée. À ajuster une fois testé en usage réel.
-
-### Pipeline complet
-
-```text
-URL YouTube (collée par l'utilisateur)
-  ↓ parsing (regex, plusieurs formats : watch?v=, youtu.be/, embed/, shorts/)
-videoId
-  ↓ fetch oEmbed (officiel)
-métadonnées (titre, chaîne, miniature ; durée = null si indisponible)
-  ↓ fetch + parsing non officiel (à vérifier en tout début d'implémentation)
-captions (liste des pistes, choix de la piste espagnole, contenu horodaté)
-  ↓ si aucune piste : captionStatus = 'unavailable', vidéo quand même
-    ajoutée à la bibliothèque (visible, non exploitable) — dégradation
-    silencieuse demandée explicitement, pas une erreur bloquante
-segments (1 cue de sous-titre = 1 segment en v1 — pas de fusion de
-  phrases pour rester simple, cohérent avec "ne complexifie pas
-  inutilement" ; amélioration possible plus tard, pas en v1)
-  ↓ import en base (listening_videos + listening_segments + une
-    listening_cards neuve par segment, même patron que
-    importMissingWords/importMissingConjugationCards)
-vidéo exploitable (captionStatus ≠ 'unavailable' ET ≥ 1 segment)
-  ↓
-getDueListeningCardsSplit() → cooldown vidéo → vidéo choisie → segment dû choisi
-  ↓
-lecteur YouTube (WebView + IFrame API, start/end du segment)
-  ↓
-réponse tapée par l'utilisateur
-  ↓
-validation (mobile/src/validation/textAnswer.ts, accents + ponctuation)
-  ↓
-note (voir point ouvert ci-dessous : mappage auto correct/incorrect →
-  grade SM-2, ou 4 boutons comme le reste de l'app)
-  ↓
-review() (sm2/engine.ts, inchangé) → updateListeningCard + logListeningReview
-```
-
-### UI proposée (pas codée, juste l'intégration prévue)
-
-- **6e onglet "Écoute"** (ou "Compréhension orale" si la barre le permet — à mesurer, voir Risques) dans [TabBar.tsx](mobile/src/navigation/TabBar.tsx)/[RootTabs.tsx](mobile/src/navigation/RootTabs.tsx), même patron que Conjugaison (`ActiveSession` étendu avec `'listening'`).
-- `ListeningScreen.tsx` : 2 sous-onglets, même patron que `ConjugationScreen.tsx`/`SettingsScreen.tsx` :
-  - **Entraînement** : nombre de segments dus + bouton "Commencer la session" (copie du patron `TrainingView` de `ConjugationScreen.tsx`).
-  - **Bibliothèque** : liste des vidéos ajoutées (titre, statut des captions, nombre de segments), formulaire "+ Ajouter une vidéo" (`TextInput` URL + bouton, avec état de chargement pendant le fetch metadata+captions).
-- `ListeningReviewContainer.tsx` + `ListeningReviewScreen.tsx` : copie du patron `ConjugationReviewContainer.tsx`/`ConjugationReviewScreen.tsx` (chargement du prochain segment dû, `TextInput` de réponse, résultat, notation, "Exercice suivant"), avec le lecteur vidéo en haut de la carte à la place du prompt "verbe + temps + personne".
-- Nouveau composant `mobile/src/components/YouTubePlayer.tsx` : wrapper autour d'une `WebView` (nouvelle dépendance, voir ci-dessous) chargeant une page HTML minimale embarquant l'IFrame Player API, exposant au composant React `play()`/`seekTo(startTime)` et un événement "segment terminé" (soit via le paramètre `end` natif de l'API, soit via un minuteur JS côté page si `end` s'avère peu fiable en pratique — **à vérifier**, pas supposé).
-
-### Résilience — dégradation silencieuse, comme demandé explicitement
-
-| Cas | Comportement proposé |
-|---|---|
-| Captions indisponibles à l'ajout | `captionStatus = 'unavailable'`, vidéo ajoutée quand même à la bibliothèque, visible mais marquée non exploitable, jamais sélectionnée par `getDueListeningCardsSplit` (filtre `WHERE caption_status != 'unavailable'` côté requête ou côté jointure) |
-| Vidéo supprimée/privée/indisponible après coup | Non détecté proactivement en v1 (pas de vérification périodique) — si le lecteur ne peut pas la charger au moment de l'exercice, l'échec est local à cet essai (voir ligne suivante), la vidéo reste en base telle quelle jusqu'à ce que l'utilisateur la supprime manuellement |
-| Échec réseau (fetch metadata/captions, ou chargement du lecteur) | Try/catch à chaque étape, jamais de crash — à l'ajout : message d'erreur dans le formulaire, rien n'est inséré en base ; en session : écran d'erreur simple avec retour à Entraînement, la carte reste due pour la prochaine tentative |
-| Erreur du player YouTube (vidéo bloquée à l'intégration, région, etc.) | La WebView/l'IFrame API expose un événement d'erreur documenté (codes d'erreur du player) — à afficher comme message simple, pas de tentative de contournement |
-
-### Fichiers concernés (proposition, pas figée)
-
-**Nouveaux :**
-- `mobile/src/listening/types.ts`
-- `mobile/src/listening/selection.ts` (logique pure de cooldown + sélection — testable sans réseau ni SQLite)
-- `mobile/src/listening/youtubeUrl.ts` (parsing d'URL → videoId — pure, testable)
-- `mobile/src/listening/metadata.ts` (fetch oEmbed)
-- `mobile/src/listening/captions.ts` (fetch + parsing des sous-titres — non testable unitairement sans mock réseau, à vérifier manuellement)
-- `mobile/src/validation/textAnswer.ts` (extraction généralisée depuis `conjugation/validate.ts`)
-- `mobile/src/components/YouTubePlayer.tsx`
-- `mobile/src/screens/ListeningScreen.tsx`
-- `mobile/src/screens/ListeningReviewContainer.tsx`
-- `mobile/src/screens/ListeningReviewScreen.tsx`
-
-**Modifiés :**
-- `mobile/src/data/database.ts` (4 nouvelles tables + fonctions CRUD, même patron que la section Conjugaison)
-- `mobile/src/data/settings.ts` (`listeningNewSegmentsPerDay`/`listeningReviewCapPerDay`)
-- `mobile/src/conjugation/validate.ts` (réexporte la logique partagée au lieu de la dupliquer)
-- `mobile/src/navigation/TabBar.tsx` / `RootTabs.tsx` (6e onglet)
-- `mobile/package.json` / `app.json` (nouvelle dépendance WebView, voir Risques)
-
-**Pas de changement attendu dans `App.tsx`** : contrairement au vocabulaire/à la conjugaison, il n'y a pas de contenu bundlé à importer au démarrage (la bibliothèque est vide au premier lancement, remplie au fil de l'usage) — seul `migrateDbIfNeeded()` (déjà appelé) a besoin des nouvelles tables.
-
-### Tests prévus
-
-- `listening/selection.test.ts` : cooldown avec 4 vidéos A/B/C/D (aucune répétition avant `VIDEO_COOLDOWN`) ; absence de biais par nombre de segments (vidéo à 100 segments dus vs vidéo à 2, test statistique sur de nombreux tirages façon `shuffle.test.ts`) ; cas 1/2/3/4 vidéos disponibles avec `VIDEO_COOLDOWN = 3` (relâchement progressif) ; segment renvoyé appartient toujours à la vidéo choisie.
-- `listening/youtubeUrl.test.ts` : extraction du `videoId` pour les formats `watch?v=`, `youtu.be/`, `embed/`, `shorts/`, et rejet propre d'une URL invalide.
-- `validation/textAnswer.test.ts` : reprend et étend les cas déjà couverts par `conjugation/validate.test.ts` (accents), ajoute la ponctuation (exemple exact de la mission : "No sé lo que quieres decir." vs "No se lo que quieres decir") et confirme qu'une réponse tronquée reste incorrecte.
-- `conjugation/validate.test.ts` : doit continuer à passer sans modification après l'extraction, comme garde-fou de non-régression.
-- **Persistance (vidéos/segments/cartes/historique) : pas testable unitairement**, même limite déjà documentée pour `database.ts` (pas de SQLite en mémoire disponible sous Jest/jest-expo) — à vérifier manuellement sur device au moment de l'implémentation, pas promis comme testé automatiquement.
-
-### Points à valider avant implémentation (pas devinés ici)
-
-1. **`react-native-webview` fonctionne-t-il réellement dans l'Expo Go installé sur l'iPhone de l'utilisateur (SDK 54) sans development build ?** C'est la question la plus bloquante de tout ce chantier — si la réponse est non, toute l'approche WebView doit être reconsidérée, et ça remettrait en cause la contrainte "pas de development build" pour cette seule fonctionnalité. À vérifier en tout premier, avant d'écrire quoi que ce soit d'autre.
-2. **La récupération de captions (endpoint non officiel) fonctionne-t-elle encore aujourd'hui, et le paramètre `end` de l'IFrame Player API arrête-t-il fiablement la lecture au bon moment ?** Aucun appel réseau fait pendant cette session de planification — à vérifier en tout début d'implémentation, avant de construire le reste par-dessus une hypothèse non vérifiée.
-3. **Mappage résultat binaire (✓/✗) → note SM-2 à 4 valeurs.** La maquette UX donnée dans la mission ne montre que "✓ Correct"/"✗ Incorrect" suivi de "Réécouter"/"Exercice suivant" — pas de 4 boutons de notation comme pour le vocabulaire/la conjugaison. Deux options : (A) mappage automatique correct→"Bien", incorrect→"Otra vez" (colle à la maquette donnée telle quelle) ; (B) réutiliser le patron à 4 boutons de la conjugaison après affichage du résultat, pour un signal SM-2 plus nuancé mais qui s'écarte de la maquette fournie. **Recommandation : option A**, mais à confirmer.
-4. **Nom exact du 6e onglet dans la barre du bas** ("Écoute" tient sur une pilule à 6 onglets, "Compréhension orale" est nettement plus long) — à trancher en fonction de ce que rend réellement la barre une fois testée à 6 pilules.
-5. **Valeurs de départ `LISTENING_NEW_SEGMENTS_PER_DAY`/`LISTENING_REVIEW_CAP_PER_DAY`** (proposées à 5/15 par hypothèse, jamais testées).
-6. **Fusion future de segments trop courts/fragmentés** (sous-titres auto-générés parfois coupés en plein milieu d'une phrase) — explicitement hors v1, à revisiter seulement si ça s'avère gênant en usage réel.
+**Le reste de cette planification d'origine (constantes, pipeline détaillé, UI, résilience, liste de fichiers, tests prévus, 6 points à valider) a été retiré de ce fichier le 20/08/2026, lors d'un nettoyage demandé explicitement** : tout ça a depuis été implémenté et est décrit avec la réalité du code (pas la proposition) dans la section "Onglet « Compréhension orale » — implémenté" plus bas, qui fait référence — garder les deux versions (proposition + implémentation réelle, parfois légèrement différentes en détail, ex. le schéma SQL exact) aurait été trompeur pour quiconque relit ce fichier plus tard. Les tableaux ci-dessus (réutilisation, officiel/non-officiel, modèle de données, sélection vidéo-puis-segment) restent utiles comme raisonnement de fond et n'ont pas bougé.
 
 ## Quatre retours après test réel : vocabulaire aléatoire, notification exacte, stat conjugaison, thèmes (20/08/2026)
 
@@ -506,15 +405,19 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier la pertinence des résultats de recherche et la robustesse de l'extraction si YouTube modifie la structure de cette page (technique non officielle, comme documenté pour le reste de `listening/`).
 
-## Barre d'onglets remplacée par une icône ☰ + bandeau défilant (20/08/2026)
+## Barre d'onglets remplacée par un menu ☰ (20/08/2026, 3 itérations le même jour)
 
-**Demande explicite** : remplacer la barre de pilules fixe en bas d'écran par "trois traits horizontaux" (icône ☰) qui ouvre "un truc" défilant de la gauche vers la droite pour choisir l'onglet. Formulation ambiguë au départ — clarifiée via question à choix (avec maquettes ASCII) plutôt que devinée : l'utilisateur a choisi l'interprétation "icône ☰ qui ouvre un bandeau d'onglets défilant horizontalement", pas une bande toujours visible en haut/bas.
+**Demande d'origine, ambiguë** : remplacer la barre de pilules fixe en bas d'écran par "trois traits horizontaux" (icône ☰) qui ouvre "un truc" pour choisir l'onglet — clarifiée via question à choix (maquettes ASCII) plutôt que devinée : icône qui ouvre un menu, pas une bande toujours visible.
 
-**Implémenté (première version).** [TabBar.tsx](mobile/src/navigation/TabBar.tsx) entièrement réécrit : icône ☰ fixe en haut à gauche (symétrique du bouton clair/sombre en haut à droite) ; un appui ouvre un bandeau (carte arrondie, sous l'icône) contenant tous les onglets en pilules dans une `ScrollView` horizontale — glisser du doigt pour voir tous les onglets, toucher un onglet le sélectionne et referme le bandeau ; toucher en dehors (fond semi-transparent) referme aussi sans changer d'onglet. Les libellés complets tiennent maintenant ("Decks & mots" n'a plus besoin d'être raccourci en "Decks", contrainte d'espace qui n'existe plus). Aucun changement structurel nécessaire dans `RootTabs.tsx` : `TabBar` reste monté uniquement hors session de révision, exactement comme avant.
+**État final, après 3 ajustements successifs demandés dans la même journée** — [TabBar.tsx](mobile/src/navigation/TabBar.tsx) :
+- Icône ☰ **en haut à droite**, alignée exactement sur la même ligne que le bouton clair/sombre déjà présent là (même `paddingTop`), à plat sans fond/ombre propre — "sur le même plan" que le reste de l'écran. Positionnée à droite (pas à gauche comme les deux premiers essais) précisément pour ne plus se superposer au libellé "LEXIS" de chaque écran, qui est toujours à gauche.
+- Un appui ouvre un **tiroir plein écran en hauteur mais pas en largeur** (~78% de l'écran, ancré au bord droit, sous l'icône), pas le grand rectangle centré ni le bandeau horizontal des deux versions précédentes.
+- Onglets empilés verticalement, séparés par un **trait fin et discret** (hairline, opacité réduite, avec une marge de chaque côté — ne touche pas les bords du tiroir), pas une bordure pleine largeur.
+- Onglet actif marqué par une **fine barre de couleur à gauche de la ligne** plutôt qu'un bloc de fond plein, pour rester sobre/moderne.
+- Toucher un onglet le sélectionne et referme le tiroir ; toucher en dehors (fond semi-transparent) referme sans changer d'onglet.
+- Aucun changement structurel dans `RootTabs.tsx` : `TabBar` reste monté uniquement hors session de révision, exactement comme avant.
 
-**Ajusté le même jour, après retour** ("les trois traits doivent être sur le même plan que le reste de l'application", "le strip doit être vertical et rectangulaire plein et grand avec les boutons arrangés l'un sur l'autre avec un trait entre eux") : icône ☰ sans fond/ombre propre (posée à plat sur l'écran, plus une carte flottante séparée) ; le bandeau horizontal devient un grand panneau rectangulaire (coins à peine arrondis, pas les mêmes coins très ronds que le reste de l'app) listant les onglets empilés verticalement, chacun séparé du suivant par un trait, plutôt que des pilules côte à côte.
-
-**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès à chaque itération. **Non vérifié sur device** — en particulier le confort du geste (ouvrir/toucher une ligne/refermer) et la zone de toucher de l'icône ☰, jamais vus tourner en dehors du bundle.
+**Statut : implémenté.** Vérifié à chaque itération : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier le confort du geste (ouvrir/toucher une ligne/refermer), jamais vu tourner en dehors du bundle.
 
 ## Débogage de la récupération de captions — WebView en secours de la requête HTTP nue (20/08/2026)
 

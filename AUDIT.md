@@ -48,16 +48,9 @@ Mission de cadrage explicite : inspecter l'architecture, concevoir la fonctionna
 
 ### YouTube — lecteur vs récupération de captions
 
-**Constat.** Deux besoins de nature très différente ont été confondus dans beaucoup de tutoriels/bibliothèques communautaires trouvés en cherchant, et il fallait les séparer clairement : lire une vidéo YouTube (officiellement supporté) et en extraire le texte des sous-titres (pas officiellement supporté pour des vidéos tierces).
+**Constat d'origine (planification, avant tout appel réseau)** : lire une vidéo YouTube (IFrame Player API, officiel et documenté) et en extraire le texte des sous-titres (pas officiellement supporté pour des vidéos tierces) sont deux besoins de nature différente, à ne pas confondre. Lecteur et métadonnées (oEmbed) : décidés dès la planification, aucune ambiguïté. Durée de la vidéo : pas de source officielle sans clé API, champ `durationSeconds` nullable, non bloquant.
 
-- Lecture vidéo via IFrame Player API (WebView), avec `start`/`end` en secondes : **officiel et documenté** publiquement par YouTube. **Statut : décidé**, sous réserve du point bloquant ci-dessous (compatibilité Expo Go).
-- Métadonnées (titre/chaîne/miniature) via oEmbed : **officiel et documenté**, sans clé API. **Statut : décidé.**
-- Durée de la vidéo : pas de source officielle sans clé API payante/à créer. **Statut : décidé** — champ `durationSeconds` nullable, non bloquant pour le fonctionnement (les segments ont leurs propres horodatages, indépendants de la durée totale).
-- Liste des pistes de sous-titres + contenu horodaté : dépend d'un JSON embarqué dans la page HTML de la vidéo et/ou d'un endpoint `timedtext` non documenté. **Aucune API publique YouTube ne couvre ce besoin pour une vidéo tierce quelconque** (`captions.download` de l'API officielle exige l'autorisation OAuth du propriétaire de la vidéo — inapplicable ici par construction, pas par choix). **Statut : risque connu, non vérifié.** Aucun appel réseau n'a été fait pendant cette session de planification — ne pas présenter cette méthode comme fiable avant de l'avoir testée en tout début d'implémentation.
-
-**Impact.** Si la récupération de captions cesse de fonctionner un jour (changement côté YouTube), l'app doit continuer à tourner : les vidéos concernées passent simplement à `captionStatus: 'unavailable'` au prochain ajout tenté, rien ne casse rétroactivement pour les vidéos déjà en bibliothèque (le transcript déjà récupéré et stocké en base reste utilisable indéfiniment, seul l'AJOUT de nouvelles vidéos serait affecté).
-
-**Statut global de ce thème : décidé pour la partie officielle (lecteur, métadonnées), risque connu et explicitement non vérifié pour la partie captions.**
+**La partie captions a depuis été testée en profondeur, à deux reprises** (une fois à l'implémentation, une fois lors d'une session de débogage dédiée) — **voir la section "Débogage dédié de la récupération de captions" plus bas dans ce fichier pour le résultat réel**, nettement plus complet que ce qui pouvait être anticipé ici avant tout test réseau. Ce paragraphe d'origine est gardé uniquement pour la trace de la distinction officiel/non-officiel, pas comme statut à jour.
 
 ### Compatibilité Expo Go — point le plus bloquant de tout le chantier
 
@@ -67,57 +60,9 @@ Mission de cadrage explicite : inspecter l'architecture, concevoir la fonctionna
 
 **Statut : à vérifier en tout premier, avant tout le reste du code de cette fonctionnalité.** `npx expo install react-native-webview` suivi d'un test minimal (une WebView vide qui s'affiche) sur l'iPhone réel de l'utilisateur, avant d'investir du temps dans le pipeline captions/segments/SM-2.
 
-### Sélection aléatoire — cooldown vidéo, biais par segment, cas limite
+### Sélection aléatoire, segmentation, validation, persistance, résilience — planifiées ici, depuis implémentées
 
-**Constat.** La mission demande explicitement (1) qu'une vidéo ne puisse pas réapparaître dans les `VIDEO_COOLDOWN` (3) derniers exercices, (2) que la sélection se fasse vidéo d'abord puis segment (pas segment global) pour ne jamais avantager une vidéo à cause de son nombre de segments, et (3) un comportement défini quand trop peu de vidéos sont disponibles pour respecter le cooldown.
-
-**Décisions prises (détail algorithmique complet dans PLAN.md)** :
-- Le cooldown est dérivé de `listening_reviews` (pas de nouvelle table d'historique dédiée) — limite assumée : ne compte que les exercices terminés/notés, pas les sessions commencées puis abandonnées.
-- La sélection vidéo se fait sur l'ensemble des `video_id` distincts parmi les segments **dus** (au sens SM-2), pas sur tous les segments de toutes les vidéos — élimine structurellement le biais par nombre de segments (une vidéo compte une fois dans l'ensemble éligible, quel que soit son nombre de segments dus).
-- Cas limite (trop peu de vidéos) : relâchement progressif de la fenêtre de cooldown (3 → 2 → 1 → 0) jusqu'à ce qu'au moins une vidéo devienne éligible, jamais de blocage.
-- Sélection du segment dans la vidéo choisie : parmi les segments **dus** de cette vidéo (pas tous ses segments) — la notation SM-2 repousse déjà `due_date` dans le futur après une note, donc pas besoin d'un tracker "derniers segments vus" séparé.
-
-**Impact.** Cette conception intègre le cooldown au système SM-2 existant (`getDueListeningCardsSplit`, même patron que `getDueCardsSplit`/`getDueConjugationCardsSplit`) plutôt que de construire un sélecteur aléatoire parallèle déconnecté de la progression de l'utilisateur — évite d'avoir deux notions différentes de "quoi montrer maintenant" qui pourraient diverger.
-
-**Statut : décidé (algorithme précis documenté dans PLAN.md), non implémenté, non testé.** Tests unitaires prévus (cooldown, absence de biais, cas 1/2/3/4 vidéos) — voir PLAN.md section Tests.
-
-### Segmentation
-
-**Constat.** Les segments viennent directement des "cues" (unités individuelles horodatées) du fichier de sous-titres récupéré — 1 cue = 1 segment en v1, sans fusion de phrases. Les sous-titres auto-générés (ASR) sont parfois fragmentés en plein milieu d'une phrase et contiennent plus d'erreurs de transcription que des sous-titres humains.
-
-**Impact.** Un exercice de dictée basé sur un segment mal transcrit ou coupé en plein milieu d'une phrase pénaliserait injustement l'utilisateur (sa réponse correcte serait comparée à un transcript source déjà fautif). `captionStatus` distingue `available` (humain) de `auto_generated` (ASR) pour que l'utilisateur puisse juger si une vidéo à captions auto-générées vaut la peine d'être gardée dans sa bibliothèque — pas de filtrage automatique des vidéos ASR en v1, juste de la transparence dans l'UI de la bibliothèque.
-
-**Statut : décidé pour la v1 (pas de fusion de phrases), risque connu et documenté (qualité variable des sous-titres auto-générés), pas de mitigation automatique proposée au-delà de l'affichage du statut.**
-
-### Validation
-
-**Constat.** `conjugation/validate.ts` existe déjà et gère la tolérance aux accents (normalisation NFD + suppression des diacritiques), mais sa fonction exportée a une signature propre à la conjugaison (paramètres `tense`/`personIndex` pour la règle -ra/-se), et elle ne supprime pas la ponctuation. **Testé contre l'exemple donné dans la mission** ("No sé lo que quieres decir." vs "No se lo que quieres decir" sans point) : avec la logique actuelle telle quelle, cet exemple précis échouerait à cause du point final — la ponctuation doit être ignorée des deux côtés pour que l'exemple donné par l'utilisateur fonctionne comme attendu.
-
-**Impact.** Réimplémenter une deuxième logique de comparaison de texte dupliquerait un bug potentiel à deux endroits si jamais corrigé un jour à un seul. Proposition : extraire la normalisation dans un module partagé (`mobile/src/validation/textAnswer.ts`), l'étendre pour ignorer la ponctuation (dont ¿¡), et faire réexporter `conjugation/validate.ts` par-dessus sans changer sa signature ni casser ses tests existants.
-
-**Statut : extension propre proposée et documentée dans PLAN.md, pas implémentée.** Une réponse tronquée doit rester incorrecte (confirmé par l'exemple de la mission) — pas de correspondance floue/partielle au-delà accents+ponctuation+casse+espaces, pour ne pas promettre plus de tolérance que ce qui a été démontré nécessaire.
-
-### Persistance
-
-**Constat.** Contrairement au vocabulaire et à la conjugaison (contenu bundlé en JSON statique généré par script Node, seule la progression SM-2 vit en SQLite pour la conjugaison), les vidéos de compréhension orale sont ajoutées dynamiquement par l'utilisateur pendant qu'il utilise l'app — il n'y a pas de fichier JSON à bundler, SQLite doit donc être la seule source de vérité pour le contenu (titre, transcript, horodatages) ET pour la progression, plus proche du design historique `words`+`cards` (les deux en base) que de `conjugation_cards` (progression seule).
-
-**Impact.** 4 nouvelles tables proposées (`listening_videos`, `listening_segments`, `listening_cards`, `listening_reviews`), schéma détaillé dans PLAN.md, ajoutées de façon additive dans `migrateDbIfNeeded()` — même style que l'existant (`CREATE TABLE IF NOT EXISTS`, pas de système de migration versionné à introduire). Aucun changement nécessaire dans `App.tsx` (pas de contenu à importer au démarrage, contrairement à `importMissingWords`/`importMissingConjugationCards`).
-
-**Statut : schéma décidé et documenté dans PLAN.md, pas créé.** Comme pour le reste de `database.ts`, ce code ne sera pas testable unitairement (pas de SQLite en mémoire sous Jest/jest-expo, limite déjà documentée et acceptée pour tout le reste du projet) — à vérifier manuellement sur device à l'implémentation.
-
-### Résilience
-
-**Constat.** La mission demande explicitement une dégradation silencieuse : vidéo sans captions → non plantée, gardée en bibliothèque, marquée non exploitable, jamais sélectionnée — sans système de fallback complexe.
-
-**Décisions.**
-- Captions indisponibles à l'ajout → `captionStatus = 'unavailable'`, vidéo ajoutée quand même, filtrée hors de `getDueListeningCardsSplit`.
-- Vidéo supprimée/privée/indisponible après coup → pas de vérification proactive périodique en v1 ; un échec de chargement au moment de l'exercice reste local à cet essai, la carte reste due pour la prochaine tentative.
-- Échec réseau (fetch metadata/captions/lecteur) → try/catch à chaque étape, jamais de crash ; message d'erreur simple à l'utilisateur.
-- Erreur du player YouTube → l'IFrame Player API expose des codes d'erreur documentés, à afficher tels quels, pas de tentative de contournement.
-
-**Impact.** Cohérent avec le principe déjà établi ailleurs dans le projet (ex. limite de force-quit iOS documentée et acceptée plutôt que contournée à tout prix, voir plus bas dans ce fichier) : accepter une dégradation gracieuse plutôt que de complexifier le système pour éliminer un cas limite rare.
-
-**Statut : décidé, pas implémenté, pas testé.**
+Ces cinq thèmes ont été entièrement décidés dans cette section de planification (algorithme de cooldown vidéo-puis-segment, 1 cue = 1 segment sans fusion, extraction de la validation dans un module partagé, schéma SQLite à 4 tables, dégradation silencieuse à chaque étape réseau), **puis réellement codés et testés dans les sections plus bas de ce fichier** ("Compréhension orale — implémentation", "Sélection aléatoire — implémentée et testée", "Segmentation", "Validation — implémentée, testée, non régressive", "Persistance — schéma créé, CRUD complet", "Résilience — implémentée"). Le raisonnement détaillé d'origine (pourquoi vidéo-puis-segment élimine structurellement le biais par nombre de segments, pourquoi la ponctuation doit être ignorée pour l'exemple donné dans la mission, pourquoi SQLite est la seule source de vérité ici contrairement au vocabulaire/à la conjugaison) reste dans PLAN.md. Retiré d'ici le 20/08/2026 lors d'un nettoyage demandé explicitement, pour ne pas garder deux statuts contradictoires ("décidé, pas implémenté" ici vs "implémenté et testé" plus bas) sur les mêmes cinq thèmes.
 
 ### Ce qui N'A PAS été fait pendant cette session, conformément à la consigne explicite
 
@@ -249,13 +194,15 @@ Suite à un retour explicite ("la fonctionnalité est inutilisable en pratique, 
 
 **Statut : implémenté et vérifié en direct avant écriture du code (pas juste "supposé fonctionner").** Reste, comme pour les captions et les métadonnées : **méthode non officielle**, peut casser sans préavis si YouTube change la structure de cette page — pas de garantie de stabilité à long terme, à re-tester si la recherche cesse un jour de renvoyer des résultats.
 
-## Barre d'onglets remplacée par une icône ☰ (20/08/2026)
+## Barre d'onglets remplacée par un menu ☰ (20/08/2026, 3 itérations)
 
-**Constat.** Demande explicite, formulée de façon ambiguë ("trois traits horizontaux qui défilent un truc de la gauche vers la droite") — l'utilisateur avait lui-même anticipé l'ambiguïté ("si t'as pas compris demande moi"). Plutôt que deviner, question posée avec deux interprétations concrètes illustrées par des maquettes ASCII (icône ☰ qui ouvre un bandeau défilant, vs. bandeau toujours visible sans icône séparée) : l'utilisateur a choisi la première.
+**Constat d'origine, formulé de façon ambiguë** ("trois traits horizontaux qui défilent un truc de la gauche vers la droite") — l'utilisateur avait lui-même anticipé l'ambiguïté ("si t'as pas compris demande moi"). Plutôt que deviner, question posée avec des interprétations concrètes illustrées par des maquettes ASCII : l'utilisateur a choisi "icône ☰ qui ouvre un menu", pas une bande toujours visible.
 
-**Impact.** [TabBar.tsx](mobile/src/navigation/TabBar.tsx) réécrit : plus de barre de pilules fixe, remplacée par une icône ☰ en haut à gauche (miroir du bouton clair/sombre déjà présent en haut à droite) qui ouvre un bandeau d'onglets en `ScrollView` horizontale. `RootTabs.tsx` inchangé structurellement — `TabBar` reste monté seulement hors session, la logique de masquage pendant une révision continue de fonctionner sans modification.
+**Deux retours supplémentaires reçus le même jour, après avoir vu le premier résultat** : (1) l'icône ne devait pas se superposer au logo "LEXIS" de chaque écran, les deux devaient être "sur le même plan" ; (2) le menu ouvert ne devait pas être un bandeau qui défile horizontalement mais un rectangle plein hauteur, pas pleine largeur, avec des traits de séparation sobres et discrets (pas une bordure pleine largeur), design "moderne".
 
-**Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants documentés plus haut, sans rapport), bundle Metro iOS récupéré avec succès (`HTTP 200`). **Non vérifié sur device** : ergonomie réelle du geste ouvrir/glisser/toucher/refermer, jamais testée hors du bundle compilé.
+**Impact — état final de [TabBar.tsx](mobile/src/navigation/TabBar.tsx)** : icône ☰ déplacée en haut à **droite** (alignée exactement sur le `paddingTop` du bouton clair/sombre déjà là, avec un espacement fixe entre les deux) — la superposition avec "LEXIS" (toujours à gauche) devient structurellement impossible plutôt que corrigée au pixel près. Le menu est un **tiroir plein écran en hauteur, ~78% de la largeur, ancré au bord droit** (pas un bandeau horizontal ni un rectangle centré) : onglets empilés verticalement, séparés par un trait hairline à opacité réduite et en retrait des bords (`marginHorizontal`), onglet actif marqué par une fine barre de couleur à gauche plutôt qu'un bloc de fond plein. `RootTabs.tsx` inchangé structurellement — `TabBar` reste monté seulement hors session.
+
+**Statut : implémenté.** Vérifié à chaque itération : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants documentés plus haut, sans rapport), bundle Metro iOS récupéré avec succès (`HTTP 200`). **Non vérifié sur device** : ergonomie réelle du geste ouvrir/toucher une ligne/refermer, jamais testée hors du bundle compilé.
 
 ## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
 
@@ -473,7 +420,7 @@ Branché dans les 3 endroits qui pilotaient auparavant ce plafond différemment 
 
 **Vérifié** : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (HTTP 200, `node -c` sans erreur). **Non vérifié sur device** : la répartition effective en session réelle (est-ce qu'on voit bien un mélange nouvelles/révisions cohérent, est-ce que désactiver un thème dans Réglages a l'effet attendu) n'a pas pu être testée sans SQLite fonctionnel dans l'environnement Jest — même limite que le reste de `database.ts`, voir plus bas dans ce fichier.
 
-## Retrait de react-native-reanimated, boutons agrandis, historique de révisions, padding (20/08/2026)
+## Pivot espagnol→anglais + vocabulaire généré depuis doozan/spanish_data (20/08/2026)
 
 **Décision définitive, actée avec l'utilisateur** : le couple cible du projet passe d'espagnol→français à espagnol→anglais, pour toute la suite du projet — pas seulement ce lot de contenu. Déclenchée par le choix d'une source de vocabulaire fiable ([doozan/spanish_data](https://github.com/doozan/spanish_data), CC BY 4.0, agrégeant hermitdave/FrequencyWords CC BY-SA 3.0 + Wiktionary CC BY-SA + Tatoeba CC BY 2.0 FR) qui ne fournit que de l'anglais, pas de français.
 
