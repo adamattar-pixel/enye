@@ -161,13 +161,32 @@ Retour après un premier test réel de l'onglet Conjugaison : la partie Règles 
 
 Vérifié : `tsc --noEmit`, `npm test` (55/55, +4 pour `shuffle.ts`), bundle Metro compilé (7,7 → 9,4 Mo, `conjugations.json` nettement plus gros avec 1227 verbes). **Non vérifié sur device.**
 
+## Tags CECRL de words.json — vérifiés déjà complets, rien à faire (20/08/2026)
+
+Demandé explicitement : compléter les tags CECRL (A1/A2/B1) manquants dans `words.json`, en appliquant la même heuristique que `generate-vocabulary` (position dans `frequency.csv`, 40%/30%/30%), sans toucher aux tags déjà présents.
+
+**Vérifié avant de coder, comme demandé** : les 6002 mots de `words.json` ont **tous** déjà un `level` valide — 2400 "A1", 1802 "A2", 1800 "B1" (2400+1802+1800 = 6002, exactement le total). Les 36 mots écrits à la main ont un niveau posé manuellement (majoritairement A1, cohérent avec un vocabulaire de départ pour débutant) ; les 5966 mots générés ont déjà reçu leur niveau par l'heuristique de position au moment de la génération (voir [generate-vocabulary/generate.mjs](mobile/scripts/generate-vocabulary/generate.mjs), fonction `levelForIndex`, déjà en place avant cette demande). **Aucun mot ne manque de tag CECRL — la prémisse "sous-ensemble à compléter" ne tient pas, il n'y a rien à compléter.** Aucun fichier modifié pour ce chantier. Voir AUDIT.md pour le détail de la vérification.
+
+À noter, en marge (pas demandé, juste constaté en vérifiant) : aucun mot n'est actuellement classé "B2", alors que ce niveau existe comme filtre dans Decks & mots (`LEVELS = ['A1','A2','B1','B2']`) — l'heuristique de génération ne produit que A1/A2/B1 (voir `levelForIndex`), donc le filtre B2 est aujourd'hui toujours vide en pratique. Pas un défaut du chantier demandé, juste un constat à connaître.
+
+## Badge de série de jours (streak) sur Aujourd'hui (20/08/2026)
+
+Demandé explicitement : un indicateur visuel de série de jours consécutifs avec au moins une révision — pas de notification "mot du jour" ni de rappel poussé, uniquement l'indicateur.
+
+- **Placé sur Aujourd'hui**, pas Statistiques (qui a déjà le même nombre comme simple tuile, inchangée) — justification : Aujourd'hui est le premier écran ouvert, l'endroit où "ne pas casser la chaîne" pèse le plus sur la décision de réviser ou non, alors que Statistiques est consultée après coup.
+- **Réutilise `computeStreak`** (déjà utilisé par Statistiques, voir `stats/statsEngine.ts`) — pas de nouvelle logique de calcul de série dupliquée, comme demandé.
+- Deux points ambigus posés à l'utilisateur avant de coder plutôt que devinés : le badge est **toujours visible, y compris à 0** (pas de seuil minimum) ; et quand la série vient de se casser, le badge le **rappelle explicitement** avec la longueur de la série perdue ("Série interrompue — tu avais N jours") plutôt qu'un simple "0 jour" neutre — nouvelle fonction pure `computeLostStreakLength` ([statsEngine.ts](mobile/src/stats/statsEngine.ts), 5 tests) pour retrouver cette longueur.
+- Vérifié : `tsc --noEmit`, `npm test` (60/60, +5 pour `computeLostStreakLength`), bundle Metro compilé. **Non vérifié sur device.**
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
 - [ ] **Tester l'onglet Conjugaison sur device** : l'entraînement est-il perçu comme suffisamment aléatoire maintenant, temps de premier import à ce volume (~69 800 lignes en base au total, mots + conjugaisons), confort de la saisie clavier + tolérance sur les accents jugée bien calibrée ou pas, lisibilité de l'écran Règles et du nouvel historique, et si 5 onglets restent confortables au toucher dans la barre du bas.
+- [ ] **Vérifier le badge de série sur device** : lisibilité, et si le message "série interrompue" est jugé motivant ou culpabilisant à l'usage réel (choisi sur demande explicite, mais jamais vu tourner).
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
 - [ ] Gloses verbeuses sur les mots grammaticaux (pronoms/déterminants/prépositions) dans le vocabulaire généré — pas corrigées automatiquement (voir AUDIT.md), correctibles au cas par cas si un mot précis pose problème à l'usage (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression).
 - [ ] Intégration de la conjugaison aux notifications verrouillées — explicitement hors périmètre, confirmé une deuxième fois par l'utilisateur (vocabulaire uniquement) : à ne plus reproposer sauf demande explicite.
+- [ ] Filtre "B2" dans Decks & mots actuellement toujours vide (voir section CECRL ci-dessus) — pas un problème signalé, à corriger seulement si demandé (ajuster `levelForIndex` pour produire aussi du B2, ou retirer le filtre).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

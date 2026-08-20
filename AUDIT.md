@@ -2,6 +2,41 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
+
+**Constat.** Demande explicite : compléter les tags CECRL manquants dans `words.json`, en vérifiant d'abord combien de mots en ont déjà un et combien n'en ont pas, avant de coder quoi que ce soit. Vérification faite par script one-off (comptage par valeur exacte du champ `level`) plutôt que supposée :
+
+```
+2400 × "A1"
+1802 × "A2"
+1800 × "B1"
+2400 + 1802 + 1800 = 6002 = nombre total de mots dans words.json
+```
+
+**Tous les mots ont déjà un niveau valide, sans exception.** Vérifié aussi spécifiquement sur les 36 mots écrits à la main (posé manuellement au moment de leur rédaction, majoritairement A1) : eux aussi en ont tous un. Ce n'est pas une coïncidence de comptage — le schéma (`wordRepository.ts`, `parseWordEntry`) exige déjà `typeof e.level === 'string'` pour qu'une entrée soit acceptée à l'import, donc *aucune* entrée sans niveau n'aurait pu se retrouver dans `words.json` en premier lieu. La prémisse du chantier ("un sous-ensemble à compléter") ne correspond pas à l'état réel des données.
+
+**Impact.** Aucun code écrit pour ce chantier — appliquer l'heuristique de génération à un ensemble vide n'aurait rien changé, et forcer une "correction" sur des mots qui ont déjà un niveau aurait justement été l'inverse de la consigne explicite ("ne pas toucher aux tags déjà présents"). Le seul fichier concerné (`words.json`) n'a pas été modifié.
+
+**Constat en marge, pas demandé** : aucun mot n'est actuellement au niveau "B2", bien que ce niveau existe comme option de filtre dans Decks & mots (`LEVELS = ['A1', 'A2', 'B1', 'B2']`, [DecksScreen.tsx](mobile/src/screens/DecksScreen.tsx)). Cause : `levelForIndex()` dans [generate-vocabulary/generate.mjs](mobile/scripts/generate-vocabulary/generate.mjs) ne produit que A1 (40%), A2 (30%) ou B1 (30%) — B2 n'a jamais été une sortie possible de l'heuristique, indépendamment de ce chantier. Conséquence pratique : le filtre "B2" dans l'app est aujourd'hui toujours vide. Pas corrigé ici, faute de consigne — noté dans PLAN.md pour trancher si besoin (étendre l'heuristique à 4 paliers, ou retirer le filtre B2 tant qu'aucun contenu ne l'utilise).
+
+**Statut : vérifié, rien à faire.** Pas de code à tester pour ce point précis — la vérification elle-même (comptage exact, exécuté et son résultat collé ci-dessus) *est* la preuve, reproductible en relançant le même comptage sur `words.json`.
+
+## Badge de série de jours (streak) sur Aujourd'hui (20/08/2026)
+
+**Constat.** Demande explicite d'un indicateur visuel de série de jours consécutifs, avec deux contraintes : pas de notification "mot du jour" ni de rappel poussé (uniquement l'indicateur visuel), et réutiliser la logique existante si elle existe déjà — `computeStreak` était déjà en place dans [stats/statsEngine.ts](mobile/src/stats/statsEngine.ts) (testé, utilisé par l'écran Statistiques comme simple tuile numérique) avant ce chantier.
+
+**Deux points explicitement ambigus, posés à l'utilisateur avant de coder** (pas devinés, conformément à la façon dont ce projet est mené) :
+1. Faut-il un seuil minimum de série avant d'afficher le badge, ou toujours visible même à 0 ? → **Toujours visible, même à 0** (choix de l'utilisateur).
+2. Que montrer quand la série vient de se casser (0 après en avoir eu une) ? Deux options neutres proposées (message encourageant générique, ou simple "0 jour" factuel) — l'utilisateur a demandé autre chose que les deux : **un rappel explicite de la longueur de la série perdue** ("tu avais X jours").
+
+**Implémenté.**
+- Nouvelle fonction pure `computeLostStreakLength(reviewDates, today)` ([statsEngine.ts](mobile/src/stats/statsEngine.ts)) : ne doit être appelée que quand `computeStreak()` vient de renvoyer 0 (précondition documentée dans le code) — cherche le jour le plus récent avec une révision strictement avant hier, puis compte les jours consécutifs en remontant depuis là. Renvoie 0 s'il n'y a jamais eu de série du tout (cas distinct de "série cassée"). 5 tests unitaires, y compris un cas avec deux séries passées distinctes (vérifie que c'est bien la plus récente qui compte, pas la plus longue).
+- `TodayScreen.tsx` : nouveau composant `StreakBadge`, pilule avec emoji + texte, toujours affichée juste sous le titre. Trois états : 🔥 série active ("N jours de suite"), 💔 série cassée ("Série interrompue — tu avais N jours de suite"), ✨ jamais de série ("Commence une série aujourd'hui").
+- **Placé sur Aujourd'hui, pas Statistiques** — décision laissée à mon jugement, justifiée : Aujourd'hui est le premier écran ouvert et l'endroit où "ne pas casser la chaîne" influence directement la décision de réviser aujourd'hui ; Statistiques est consultée après coup, une fois la décision déjà prise. La tuile "jours de suite" déjà présente sur Statistiques n'a pas été retirée (reste utile dans le contexte des autres stats agrégées) — pas une duplication problématique, juste deux présentations différentes du même nombre à deux endroits qui répondent à des questions différentes ("où en suis-je" vs "est-ce que je dois réviser maintenant").
+- **Pas de notification ajoutée**, conformément à la consigne explicite — uniquement un indicateur visuel dans l'app, lu à l'ouverture d'Aujourd'hui comme le reste de l'écran (`getAllReviews` déjà appelé pour les besoins existants de l'écran, pas un nouvel appel réseau/IO ajouté à part la requête déjà nécessaire).
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (60/60, +5 pour `computeLostStreakLength`), bundle Metro compilé. **Non vérifié sur device** : lisibilité réelle du badge, et surtout si le message "série interrompue" est perçu comme motivant (l'intention derrière le choix explicite de l'utilisateur) ou culpabilisant à l'usage — impossible à juger depuis cette session, à observer en usage réel.
+
 ## Conjugaison : entraînement rendu aléatoire, historique ajouté, répertoire élargi à 1227 verbes (20/08/2026)
 
 **Constat.** Premier retour réel sur l'onglet Conjugaison (voir section précédente pour son implémentation initiale) : la partie Règles fonctionne bien, l'entraînement fonctionne mais **n'est pas aléatoire**. Cause identifiée en relisant `getDueConjugationCardsSplit` : les nouvelles cartes étaient triées `ORDER BY rowid ASC`, et `importMissingConjugationCards` les insère verbe par verbe, temps par temps, personne par personne — donc une session commençait systématiquement par "ser" à l'indicatif présent (yo, tú, él...), puis tout l'indicatif prétérit de "ser", etc., avant de jamais toucher à un deuxième verbe. Un bug de conception, pas une fonctionnalité manquante : rien dans le plan d'origine ne demandait un ordre fixe, c'est juste la conséquence non anticipée de trier par ordre d'insertion.

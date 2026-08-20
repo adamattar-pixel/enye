@@ -1,6 +1,6 @@
 // Suppose TZ=UTC, fixé avant le démarrage de Node via cross-env dans
 // package.json — voir reviewScheduler.test.ts pour le pourquoi.
-import { computeStreak, computeSuccessRate, computeForecast } from './statsEngine';
+import { computeStreak, computeLostStreakLength, computeSuccessRate, computeForecast } from './statsEngine';
 
 function d(y: number, m: number, day: number, h = 12): Date {
   return new Date(Date.UTC(y, m - 1, day, h));
@@ -33,6 +33,41 @@ describe('computeStreak', () => {
 
   test('empty history gives a streak of 0', () => {
     expect(computeStreak([], d(2026, 8, 20))).toBe(0);
+  });
+});
+
+describe('computeLostStreakLength', () => {
+  test('finds the length of a streak that ended a few days ago', () => {
+    const today = d(2026, 8, 20);
+    // Streak of 3 (Aug 10-12), then a gap, nothing on the 18th/19th.
+    const reviews = [d(2026, 8, 10), d(2026, 8, 11), d(2026, 8, 12)];
+    expect(computeLostStreakLength(reviews, today)).toBe(3);
+  });
+
+  test('returns 0 when there is no prior streak at all', () => {
+    expect(computeLostStreakLength([], d(2026, 8, 20))).toBe(0);
+  });
+
+  test('ignores today and yesterday, even if (unexpectedly) present', () => {
+    // Precondition is that computeStreak() already returned 0 for this
+    // history, meaning today/yesterday are empty — but the function
+    // should still behave sanely (not count them) if called anyway.
+    const today = d(2026, 8, 20);
+    const reviews = [d(2026, 8, 20), d(2026, 8, 19), d(2026, 8, 15), d(2026, 8, 16)];
+    expect(computeLostStreakLength(reviews, today)).toBe(2);
+  });
+
+  test('a single isolated day a while back counts as a streak of 1', () => {
+    const today = d(2026, 8, 20);
+    expect(computeLostStreakLength([d(2026, 8, 5)], today)).toBe(1);
+  });
+
+  test('only the most recent past streak counts, not an older longer one', () => {
+    const today = d(2026, 8, 20);
+    // Older streak of 5 (Aug 1-5), then a longer gap, then a more
+    // recent streak of 2 (Aug 14-15) — the more recent one wins.
+    const reviews = [d(2026, 8, 1), d(2026, 8, 2), d(2026, 8, 3), d(2026, 8, 4), d(2026, 8, 5), d(2026, 8, 14), d(2026, 8, 15)];
+    expect(computeLostStreakLength(reviews, today)).toBe(2);
   });
 });
 
