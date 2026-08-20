@@ -1,49 +1,59 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text } from 'react-native';
-import * as SQLite from 'expo-sqlite';
-import { DB_NAME, migrateDbIfNeeded, seedIfEmpty, getDueCards, updateCard, type DueCardRow } from '../data/database';
-import { parseWords } from '../data/wordRepository';
-import wordsJson from '../data/words.json';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { getDueCards, updateCard, logReview, type DueCardRow } from '../data/database';
+import { getSettings } from '../data/settings';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
+import { refillNotificationQueue } from '../notifications/queue';
 import { ReviewScreen } from './ReviewScreen';
-import { solYSombra } from '../theme/solYSombra';
+import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 // Plafond quotidien retenu (8 nouvelles + 22 révisions, voir PLAN.md).
 // La séparation nouvelles/révisions n'est pas encore faite ici — sert
 // pour l'instant de plafond global sur `getDueCards`.
 const DAILY_CARD_LIMIT = 30;
 
-/** Branche l'écran de révision à SQLite + SM-2 : importe words.json au
- * premier lancement, affiche la carte la plus ancienne due, et persiste
- * le résultat de `SM2Engine.review()` à chaque note. */
-export function ReviewScreenContainer() {
-  const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
+type Props = {
+  db: SQLiteDatabase;
+  onExit: () => void;
+};
+
+/** L'écran de session, branché à SQLite + SM-2 : affiche la carte la
+ * plus ancienne due, persiste le résultat de `SM2Engine.review()` à
+ * chaque note, journalise pour les statistiques, et recharge la file de
+ * notifications (même règle que côté notification : chaque note tient
+ * la file à jour). */
+export function ReviewScreenContainer({ db, onExit }: Props) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [current, setCurrent] = useState<DueCardRow | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadNext = useCallback(async (database: SQLite.SQLiteDatabase) => {
-    const due = await getDueCards(database, new Date(), DAILY_CARD_LIMIT);
+  const loadNext = useCallback(async () => {
+    const due = await getDueCards(db, new Date(), DAILY_CARD_LIMIT);
     setCurrent(due[0] ?? null);
-  }, []);
+  }, [db]);
 
   useEffect(() => {
     (async () => {
-      const database = await SQLite.openDatabaseAsync(DB_NAME);
-      await migrateDbIfNeeded(database);
-      await seedIfEmpty(database, parseWords(wordsJson));
-      setDb(database);
-      await loadNext(database);
+      await loadNext();
       setLoading(false);
     })();
   }, [loadNext]);
 
   const handleGrade = useCallback(
     async (grade: SM2Grade) => {
-      if (!db || !current) return;
-      const nextState = review(current.card, grade, new Date());
+      if (!current) return;
+      const now = new Date();
+      const nextState = review(current.card, grade, now);
       await updateCard(db, current.word.id, nextState);
-      await loadNext(db);
+      await logReview(db, current.word.id, grade, now);
+
+      const settings = await getSettings(db);
+      await refillNotificationQueue(db, settings, now);
+
+      await loadNext();
     },
     [db, current, loadNext]
   );
@@ -51,7 +61,7 @@ export function ReviewScreenContainer() {
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator color={solYSombra.buttonFilled} />
+        <ActivityIndicator color={theme.buttonFilled} />
       </SafeAreaView>
     );
   }
@@ -60,31 +70,45 @@ export function ReviewScreenContainer() {
     return (
       <SafeAreaView style={styles.center}>
         <Text style={styles.doneText}>Aucune carte due pour l'instant — bravo !</Text>
+        <TouchableOpacity style={styles.exitButton} onPress={onExit}>
+          <Text style={styles.exitButtonText}>‹ Retour</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   return (
-    <ReviewScreen
-      card={{
-        word: current.word.spanish,
-        translation: current.word.french,
-        partOfSpeech: current.word.partOfSpeech,
-        gender: current.word.gender,
-        level: current.word.level,
-      }}
-      onGrade={handleGrade}
-    />
+    <View style={{ flex: 1 }}>
+      <ReviewScreen
+        card={{
+          word: current.word.spanish,
+          translation: current.word.french,
+          partOfSpeech: current.word.partOfSpeech,
+          gender: current.word.gender,
+          level: current.word.level,
+        }}
+        onGrade={handleGrade}
+      />
+      <TouchableOpacity style={styles.exitLink} onPress={onExit}>
+        <Text style={styles.exitLinkText}>‹ Retour à Aujourd'hui</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    backgroundColor: solYSombra.cardBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  doneText: { color: solYSombra.wordText, fontSize: 16, textAlign: 'center' },
-});
+function createStyles(t: SolYSombraPalette) {
+  return StyleSheet.create({
+    center: {
+      flex: 1,
+      backgroundColor: t.cardBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    doneText: { color: t.wordText, fontSize: 16, textAlign: 'center', marginBottom: 16 },
+    exitButton: { paddingVertical: 10, paddingHorizontal: 16 },
+    exitButtonText: { color: t.buttonOutline, fontWeight: '600' },
+    exitLink: { alignItems: 'center', paddingVertical: 14, backgroundColor: t.cardBackground },
+    exitLinkText: { color: t.label, fontSize: 12, textDecorationLine: 'underline' },
+  });
+}

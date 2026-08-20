@@ -2,6 +2,21 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Reste de l'app construit d'un bloc (20/08/2026) — RIEN DE CE QUI SUIT N'A ENCORE TOURNÉ SUR DEVICE
+
+À la demande explicite de l'utilisateur ("continue tout le reste et je teste tout à la fin"), le reste du plan a été construit sans repasser par un test intermédiaire sur iPhone. Résumé de ce qui a changé, avec un niveau de confiance honnête pour chaque partie :
+
+- **Notifications réelles** ([mobile/src/notifications/](mobile/src/notifications/)) : `queue.ts` programme de vraies notifications à partir des cartes dues (mot réel, pas "gato"), `responseHandler.ts` traite reveal/notation avec le vrai mot via `data.wordId` dans le contenu de la notification, recharge la file après chaque note. **Mécanisme du tap en arrière-plan validé en tâche 0 ; le CONTENU dynamique (vrai mot au lieu du mot figé) n'a pas encore été testé en conditions réelles.**
+- **Prototype de la tâche 0 supprimé** (`mobile/src/db.ts`, `mobile/src/notifications.ts`) : son rôle (prouver le mécanisme) est rempli, remplacé par le vrai système ci-dessus. Le panneau de diagnostic n'existe plus dans l'app.
+- **4 écrans** : Aujourd'hui, Session, Statistiques, Decks/mots — voir PLAN.md pour le détail. Navigation par barre d'onglets custom (pas de librairie ajoutée). **Jamais ouverts sur device — mise en page, tailles, comportement du clavier (formulaire d'ajout de mot) tout ça est à vérifier.**
+- **Statistiques** ([mobile/src/stats/statsEngine.ts](mobile/src/stats/statsEngine.ts)) : logique pure testée (12 tests : série de jours, taux de réussite, prévision de charge). Les requêtes SQLite qui alimentent ces fonctions (`getAllReviews`, `getAllDueDates`, `getWordCounts`) suivent la même limite que le reste de `database.ts` : pas de test automatisé possible.
+- **Audio** : bouton "Écouter" sur l'écran de révision, `expo-speech` avec `language: 'es-ES'`. **Jamais entendu en vrai** — la doc dit que ça marche, mais aucune vérification faite ici.
+- **Mode sombre** : palette sombre construite (voir section dédiée plus bas), bascule automatique via `useColorScheme()`. **Couleurs choisies par moi, jamais validées visuellement, jamais vues en vrai.**
+- **Réglages** (Decks/mots → Réglages) : nouvelles cartes/jour, plafond révisions/jour, heures de la fenêtre, thèmes actifs — stockés dans une table `settings` (clé/valeur JSON), lus par `queue.ts` et `TodayScreen`. Pas de validation d'entrée au-delà de "c'est un nombre" (ex. rien n'empêche de mettre une heure de fin avant l'heure de début).
+- **Ajout de mot utilisateur** : formulaire simple (`Modal` + `TextInput`), pas de validation de format au-delà de "mot et traduction non vides".
+
+**Ce qui EST vérifié pour tout ce qui précède** : `tsc --noEmit` sans erreur, `npm test` (43 tests) vert, le bundle Metro compile sans erreur (`curl` sur `/index.bundle`, HTTP 200, pas de "Unable to resolve module"). Ça garantit que le code est syntaxiquement correct et se charge — **pas** qu'il se comporte correctement à l'usage. Seul un test réel sur iPhone le dira.
+
 ## Pivot vers Expo (20/08/2026)
 
 **Pourquoi.** La version iOS native était bloquée sur 6 phases/8 sans Mac disponible (voir « Archive » plus bas). Expo/React Native permet de développer sur Windows et tester directement sur iPhone via Expo Go, sans Mac, sans compte développeur Apple, sans expiration à 7 jours.
@@ -22,6 +37,10 @@ Implémenté : [mobile/src/scheduler/types.ts](mobile/src/scheduler/types.ts), [
 
 **Incident résolu — fuseau horaire des tests sous Windows/Node :** fixer `process.env.TZ = 'UTC'` en tête du fichier de test échouait silencieusement (décalage de 2h constaté sur tous les résultats) — sur cette machine, Node/V8 ne relit pas cette variable une fois le processus démarré ; le fuseau horaire local effectif reste celui figé au lancement. Fix : fixer `TZ=UTC` **avant** le démarrage de Node, via `cross-env` dans le script npm (`"test": "cross-env TZ=UTC jest --watchAll"`, `mobile/package.json`) plutôt que dans le code du test. `cross-env` ajouté en devDependency (nécessaire pour que la syntaxe `TZ=UTC commande` fonctionne aussi sur Windows, où `cmd.exe` ne la supporte pas nativement contrairement à bash).
 
+## Mode sombre — palette non validée (20/08/2026)
+
+Le cahier des charges d'origine demandait de proposer une déclinaison sombre et de la faire valider avant application. Avec la consigne "fais comme tu le souhaites" / "continue tout le reste", une palette a été choisie et appliquée directement plutôt que d'attendre une validation qui aurait bloqué le reste. Valeurs dans [solYSombra.ts](mobile/src/theme/solYSombra.ts) : fond très sombre chaud (`#241812`, pas noir pur), textes crème clair (`#F5E6D3`), accents ocre/bordeaux éclaircis pour rester lisibles sur fond sombre (`#D98A4D`, `#B25454`). Bascule automatique selon `useColorScheme()`, pas de réglage manuel dans l'app. **À valider visuellement au premier test réel** — c'est un choix de couleurs de ma part, pas une spec.
+
 ## Persistance SQLite + import words.json (20/08/2026)
 
 Implémenté : [mobile/src/data/](mobile/src/data/) — `types.ts` (type `Word`), `wordRepository.ts` (validation/parsing de `words.json`, testé : 8 tests), `database.ts` (schéma `words`/`cards`, import au premier lancement, requêtes cartes dues, écriture après notation), `words.json` (copie de `WordList/words.sample.json`, 36 mots). L'écran de révision est maintenant branché sur de vraies données via [ReviewScreenContainer.tsx](mobile/src/screens/ReviewScreenContainer.tsx) : ouverture de la base, import si vide, chargement de la carte due la plus ancienne, notation → `SM2Engine.review()` → écriture en base → carte suivante. Choix pragmatique : construit avec l'échantillon de 36 mots plutôt que d'attendre les 1000-2000 mots finaux — le mécanisme de chargement ne dépend pas du volume de contenu.
@@ -30,7 +49,7 @@ Implémenté : [mobile/src/data/](mobile/src/data/) — `types.ts` (type `Word`)
 
 ## Écran de révision — style Sol y sombra (20/08/2026)
 
-Implémenté : [mobile/src/screens/ReviewScreen.tsx](mobile/src/screens/ReviewScreen.tsx) + [mobile/src/theme/solYSombra.ts](mobile/src/theme/solYSombra.ts). Carte crème/bordure ocre, liseré pointillé façon ticket, bloc traduction fond rose pâle, 4 boutons de notation en pilules (2 lignes de 2 : Otra vez/Difícil en contour ocre, Bien/Fácil en plein bordeaux). Visible par défaut au lancement de l'app (mock data, pas encore branché à SM-2/à la vraie file — tâches 3-4).
+Implémenté : [mobile/src/screens/ReviewScreen.tsx](mobile/src/screens/ReviewScreen.tsx) + [mobile/src/theme/solYSombra.ts](mobile/src/theme/solYSombra.ts). Carte crème/bordure ocre, liseré pointillé façon ticket, bloc traduction fond rose pâle, 4 boutons de notation en pilules (2 lignes de 2 : Otra vez/Difícil en contour ocre, Bien/Fácil en plein bordeaux). Branché à SM-2 + SQLite depuis, voir la section « Persistance SQLite » plus haut et « Reste de l'app construit d'un bloc » en tête de fichier.
 
 **Limite notification vs in-app : confirmée appliquée, pas re-découverte.** Comme déjà acté plus haut, aucune UI custom n'est possible dans la notification système en Expo Go (pas de Content Extension) — le style « Sol y sombra » ne s'applique qu'à l'écran de révision dans l'app. Le contenu de la notification programmée par le prototype (titre = mot, corps = traduction + exemple) reste du texte brut lisible, géré par le style natif iOS ; aucun changement nécessaire de ce côté.
 

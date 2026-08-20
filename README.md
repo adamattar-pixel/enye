@@ -15,7 +15,9 @@ cd mobile
 npx expo start
 ```
 
-Puis scanner le QR code affiché avec l'app Appareil photo de l'iPhone (elle propose d'ouvrir dans Expo Go), ou avec le bouton « Scan QR Code » dans Expo Go directement. PC et iPhone doivent être sur le même réseau Wi-Fi. L'app affiche par défaut l'écran de révision (style « Sol y sombra », données mock) ; un lien en bas permet de revenir au panneau de diagnostic de la tâche 0.
+Puis scanner le QR code affiché avec l'app Appareil photo de l'iPhone (elle propose d'ouvrir dans Expo Go), ou avec le bouton « Scan QR Code » dans Expo Go directement. PC et iPhone doivent être sur le même réseau Wi-Fi.
+
+L'app a 4 écrans (Aujourd'hui, Session, Statistiques, Decks & mots) derrière une barre d'onglets, plus les notifications réelles programmées en arrière-plan. **Construite d'un bloc sans test intermédiaire sur device** (à la demande explicite du 20/08/2026) — voir [AUDIT.md](AUDIT.md), section « Reste de l'app construit d'un bloc », pour la liste précise de ce qui est vérifié (type-check, tests, bundle) vs ce qui ne l'est pas encore (comportement réel sur iPhone).
 
 ## Lancer les tests TypeScript (mobile/)
 

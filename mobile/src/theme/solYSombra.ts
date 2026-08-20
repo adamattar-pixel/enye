@@ -1,3 +1,5 @@
+import { useColorScheme } from 'react-native';
+
 /**
  * Palette « Sol y sombra » — révision du 20/08/2026.
  *
@@ -12,7 +14,22 @@
  * proposées (#D9534F ou #E8944A) ; on retient le rouge pour qu'il se
  * distingue de la bordure orange de la carte. Sujettes à correction.
  */
-export const solYSombra = {
+export interface SolYSombraPalette {
+  cardBackground: string;
+  cardBorder: string;
+  ticketDash: string;
+  label: string;
+  dot: string;
+  wordText: string;
+  metaText: string;
+  translationBackground: string;
+  translationText: string;
+  buttonOutline: string;
+  buttonFilled: string;
+  buttonFilledText: string;
+}
+
+export const solYSombraLight: SolYSombraPalette = {
   cardBackground: '#FBF3E3',
   cardBorder: '#E8944A',
   ticketDash: '#E8944A',
@@ -25,7 +42,41 @@ export const solYSombra = {
   buttonOutline: '#E8944A',
   buttonFilled: '#8B3A3A', // deuxième valeur proposée dans la spec : #9C4444
   buttonFilledText: '#FFFFFF',
-} as const;
+};
+
+/**
+ * Déclinaison sombre — pas fournie dans la spec d'origine, construite en
+ * gardant la même famille de teintes (terre cuite / ocre / bordeaux)
+ * inversée en luminosité plutôt qu'un simple noir-et-blanc. **Non
+ * validée visuellement** — à eyeballer sur device réel avant de la
+ * considérer définitive (voir AUDIT.md).
+ */
+export const solYSombraDark: SolYSombraPalette = {
+  cardBackground: '#241812',
+  cardBorder: '#C97A3D',
+  ticketDash: '#C97A3D',
+  label: '#B39781',
+  dot: '#E8694F',
+  wordText: '#F5E6D3',
+  metaText: '#A88F7D',
+  translationBackground: '#3A2A20',
+  translationText: '#F5E6D3',
+  buttonOutline: '#D98A4D',
+  buttonFilled: '#B25454',
+  buttonFilledText: '#FFFFFF',
+};
+
+/** Palette par défaut (claire) — gardée pour les usages qui n'ont pas
+ * encore besoin de bascule dynamique. Préférer `useTheme()` dans un
+ * composant pour respecter le réglage système clair/sombre. */
+export const solYSombra = solYSombraLight;
+
+/** Bascule automatique selon le réglage système (`Apparence` iOS), pas
+ * de réglage manuel dans l'app pour l'instant. */
+export function useTheme(): SolYSombraPalette {
+  const scheme = useColorScheme();
+  return scheme === 'dark' ? solYSombraDark : solYSombraLight;
+}
 
 export const partOfSpeechAbbreviation: Record<string, string> = {
   nom_masculin: 'n.m.',
