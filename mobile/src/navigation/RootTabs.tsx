@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
@@ -7,7 +7,8 @@ import { DecksScreen } from '../screens/DecksScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
 import { TabBar, type TabKey } from './TabBar';
 import { FadeInView } from '../components/FadeInView';
-import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
+import { AnimatedPressable } from '../components/AnimatedPressable';
+import { useTheme, useThemeToggle, type SolYSombraPalette } from '../theme/solYSombra';
 
 /** Les 4 écrans du cahier des charges : Aujourd'hui / Statistiques /
  * Decks & mots vivent derrière une barre d'onglets ; Session (la
@@ -19,25 +20,55 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
   const [tab, setTab] = useState<TabKey>('today');
   const [sessionActive, setSessionActive] = useState(false);
 
-  if (sessionActive) {
-    return (
-      <FadeInView duration={250} direction="none" style={styles.root}>
-        <ReviewScreenContainer db={db} onExit={() => setSessionActive(false)} />
-      </FadeInView>
-    );
-  }
+  return (
+    <View style={styles.root}>
+      {sessionActive ? (
+        <FadeInView duration={250} direction="none" style={styles.root}>
+          <ReviewScreenContainer db={db} onExit={() => setSessionActive(false)} />
+        </FadeInView>
+      ) : (
+        <FadeInView duration={0} direction="none" style={styles.root}>
+          {/* `key={tab}` force un remontage à chaque changement d'onglet
+           * pour rejouer l'entrée en fondu plutôt qu'un changement instantané. */}
+          <FadeInView key={tab} duration={200} direction="none" style={styles.content}>
+            {tab === 'today' && <TodayScreen db={db} onStartSession={() => setSessionActive(true)} />}
+            {tab === 'stats' && <StatsScreen db={db} />}
+            {tab === 'decks' && <DecksScreen db={db} />}
+          </FadeInView>
+          <TabBar current={tab} onChange={setTab} />
+        </FadeInView>
+      )}
+      <ThemeToggleButton />
+    </View>
+  );
+}
+
+/** Bouton en haut à droite qui inverse clair/sombre indépendamment du
+ * réglage système iOS — demandé explicitement le 20/08/2026. Posé en
+ * superposition au-dessus de tout (Aujourd'hui/Statistiques/Decks ET
+ * l'écran de session), pas par écran, pour rester visible partout sans
+ * dupliquer le bouton. `SafeAreaView` gère l'encoche/l'île dynamique ;
+ * `pointerEvents="box-none"` laisse passer les touches vers l'écran en
+ * dessous partout sauf sur le bouton lui-même. */
+function ThemeToggleButton() {
+  const theme = useTheme();
+  const { isDark, toggleTheme } = useThemeToggle();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
-    <FadeInView duration={0} direction="none" style={styles.root}>
-      {/* `key={tab}` force un remontage à chaque changement d'onglet
-       * pour rejouer l'entrée en fondu plutôt qu'un changement instantané. */}
-      <FadeInView key={tab} duration={200} direction="none" style={styles.content}>
-        {tab === 'today' && <TodayScreen db={db} onStartSession={() => setSessionActive(true)} />}
-        {tab === 'stats' && <StatsScreen db={db} />}
-        {tab === 'decks' && <DecksScreen db={db} />}
-      </FadeInView>
-      <TabBar current={tab} onChange={setTab} />
-    </FadeInView>
+    <SafeAreaView style={styles.toggleSafeArea} pointerEvents="box-none">
+      <View style={styles.toggleRow} pointerEvents="box-none">
+        <AnimatedPressable
+          style={styles.toggleButton}
+          haptic="selection"
+          scaleTo={0.9}
+          accessibilityLabel={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
+          onPress={toggleTheme}
+        >
+          <Text style={styles.toggleIcon}>{isDark ? '☀️' : '🌙'}</Text>
+        </AnimatedPressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -45,5 +76,21 @@ function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: t.cardBackground },
     content: { flex: 1 },
+    toggleSafeArea: { position: 'absolute', top: 0, left: 0, right: 0 },
+    toggleRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 6 },
+    toggleButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.translationBackground,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    toggleIcon: { fontSize: 16 },
   });
 }

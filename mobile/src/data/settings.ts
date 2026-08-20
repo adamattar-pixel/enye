@@ -12,6 +12,11 @@ export interface AppSettings {
    * apprentissage/révision — seulement quels mots deviennent "nouveaux"
    * à l'avenir, pour ne jamais faire disparaître une carte en cours. */
   disabledTags: string[];
+  /** Bascule manuelle clair/sombre (bouton en haut à droite), en plus du
+   * réglage système. `'system'` suit `useColorScheme()` comme avant ;
+   * `'light'`/`'dark'` force la palette correspondante quel que soit le
+   * réglage iOS. */
+  themeOverride: 'system' | 'light' | 'dark';
 }
 
 /** Réglages validés (voir PLAN.md, "Décisions validées avec l'utilisateur"). */
@@ -23,6 +28,7 @@ export const defaultSettings: AppSettings = {
   windowEndHour: 22,
   windowEndMinute: 0,
   disabledTags: [],
+  themeOverride: 'system',
 };
 
 const SETTINGS_KEY = 'app';

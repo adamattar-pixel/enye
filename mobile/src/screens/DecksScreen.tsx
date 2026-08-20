@@ -3,7 +3,6 @@ import {
   Alert,
   FlatList,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,15 +22,17 @@ import {
   type ReviewHistoryRow,
 } from '../data/database';
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
+import { getNextNotificationTime } from '../notifications/queue';
 import type { Word } from '../data/types';
 import type { SM2Grade } from '../sm2/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
+import { ScreenContainer } from '../components/ScreenContainer';
 import { CreditsScreen } from './CreditsScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
-type SubView = 'list' | 'history' | 'settings';
+type SubView = 'list' | 'history' | 'notifications' | 'settings';
 type Styles = ReturnType<typeof createStyles>;
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2'];
@@ -51,21 +52,25 @@ export function DecksScreen({ db }: Props) {
   const [subView, setSubView] = useState<SubView>('list');
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={22} paddingVertical={0}>
       <View style={styles.header}>
         <Text style={styles.label}>LEXIS</Text>
         <Text style={styles.title}>Decks & mots</Text>
-        <View style={styles.subTabs}>
-          <SubTabButton styles={styles} label="Mots" active={subView === 'list'} onPress={() => setSubView('list')} />
-          <SubTabButton styles={styles} label="Historique" active={subView === 'history'} onPress={() => setSubView('history')} />
-          <SubTabButton styles={styles} label="Réglages" active={subView === 'settings'} onPress={() => setSubView('settings')} />
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.subTabs}>
+            <SubTabButton styles={styles} label="Mots" active={subView === 'list'} onPress={() => setSubView('list')} />
+            <SubTabButton styles={styles} label="Historique" active={subView === 'history'} onPress={() => setSubView('history')} />
+            <SubTabButton styles={styles} label="Notifications" active={subView === 'notifications'} onPress={() => setSubView('notifications')} />
+            <SubTabButton styles={styles} label="Réglages" active={subView === 'settings'} onPress={() => setSubView('settings')} />
+          </View>
+        </ScrollView>
       </View>
 
       {subView === 'list' && <WordListView db={db} styles={styles} />}
       {subView === 'history' && <HistoryView db={db} styles={styles} />}
+      {subView === 'notifications' && <NotificationsView db={db} styles={styles} theme={theme} />}
       {subView === 'settings' && <SettingsView db={db} styles={styles} />}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
@@ -288,6 +293,82 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       </Modal>
     </View>
   );
+}
+
+// MARK: - Prochaine notification
+
+/** Estime quand la prochaine notification de révision devrait arriver —
+ * demandé explicitement ("un onglet où quand je clique, il me dit quand
+ * la prochaine notification aura lieu"). Rejoue simplement le calcul de
+ * planification (`getNextNotificationTime`) sans rien reprogrammer ; la
+ * mention "environ" dans le texte est volontaire, pas cosmétique : la
+ * carte due la plus proche est certaine, mais l'espacement exact avant
+ * elle est tiré aléatoirement à chaque calcul (voir queue.ts). */
+function NotificationsView({ db, styles, theme }: { db: SQLiteDatabase; styles: Styles; theme: SolYSombraPalette }) {
+  const [state, setState] = useState<'loading' | 'none' | 'found'>('loading');
+  const [nextTime, setNextTime] = useState<Date | null>(null);
+
+  const refresh = useCallback(async () => {
+    setState('loading');
+    const settings = await getSettings(db);
+    const next = await getNextNotificationTime(db, settings);
+    setNextTime(next);
+    setState(next ? 'found' : 'none');
+  }, [db]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return (
+    <ScrollView contentContainerStyle={styles.notificationsContent}>
+      <FadeInView duration={300} style={styles.notificationCard}>
+        {state === 'loading' && <Text style={styles.notificationBig}>…</Text>}
+
+        {state === 'none' && (
+          <>
+            <Text style={styles.notificationBig}>Aucune pour l'instant</Text>
+            <Text style={styles.notificationCaption}>Pas de carte due — rien à notifier tant que ça reste le cas.</Text>
+          </>
+        )}
+
+        {state === 'found' && nextTime && (
+          <>
+            <Text style={styles.notificationBig}>{formatRelative(nextTime)}</Text>
+            <Text style={styles.notificationCaption}>
+              Vers {nextTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} le{' '}
+              {nextTime.toLocaleDateString()}
+            </Text>
+          </>
+        )}
+      </FadeInView>
+
+      <Text style={styles.notificationHint}>
+        Estimation approximative, pas l'heure exacte programmée : l'espacement entre deux cartes dues en même temps
+        est tiré au hasard entre 15 et 30 minutes à chaque calcul (voir Réglages), donc l'heure réelle peut varier de
+        quelques minutes.
+      </Text>
+
+      <AnimatedPressable style={[styles.button, styles.buttonOutline]} haptic="selection" onPress={refresh}>
+        <Text style={styles.buttonOutlineText}>Actualiser</Text>
+      </AnimatedPressable>
+    </ScrollView>
+  );
+}
+
+function formatRelative(date: Date): string {
+  const diffMs = date.getTime() - Date.now();
+  if (diffMs <= 0) return "D'un instant à l'autre";
+
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return "D'un instant à l'autre";
+  if (minutes < 60) return `Dans environ ${minutes} min`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Dans environ ${hours} h`;
+
+  const days = Math.round(hours / 24);
+  return `Dans environ ${days} j`;
 }
 
 // MARK: - Ajout de mot
@@ -521,8 +602,7 @@ function NumberField({
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: t.cardBackground },
-    header: { padding: 24, paddingBottom: 8 },
+    header: { paddingTop: 20, paddingBottom: 8 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 16 },
     subTabs: { flexDirection: 'row', gap: 8 },
@@ -531,14 +611,14 @@ function createStyles(t: SolYSombraPalette) {
     subTabText: { color: t.wordText, fontWeight: '600', fontSize: 13 },
     subTabTextActive: { color: t.buttonFilledText },
 
-    filterRow: { flexGrow: 0, paddingHorizontal: 24, marginBottom: 8 },
-    filterRowContent: { gap: 8, paddingRight: 24 },
+    filterRow: { flexGrow: 0, marginBottom: 8 },
+    filterRowContent: { gap: 8 },
     chip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 16, backgroundColor: t.translationBackground },
     chipActive: { backgroundColor: t.buttonFilled },
     chipText: { fontSize: 12, color: t.wordText, fontWeight: '600' },
     chipTextActive: { color: t.buttonFilledText },
 
-    listContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 100 },
+    listContent: { paddingTop: 8, paddingBottom: 100 },
     wordRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -551,7 +631,7 @@ function createStyles(t: SolYSombraPalette) {
     deleteLink: { color: t.dot, fontSize: 12 },
     empty: { color: t.metaText, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
 
-    fabWrapper: { position: 'absolute', bottom: 20, left: 24, right: 24 },
+    fabWrapper: { position: 'absolute', bottom: 20, left: 0, right: 0 },
     fab: {
       backgroundColor: t.buttonFilled,
       borderRadius: 24,
@@ -560,7 +640,7 @@ function createStyles(t: SolYSombraPalette) {
     },
     fabText: { color: t.buttonFilledText, fontWeight: '600' },
 
-    historyHint: { fontSize: 12, color: t.metaText, paddingHorizontal: 24, paddingTop: 4, paddingBottom: 12, lineHeight: 17 },
+    historyHint: { fontSize: 12, color: t.metaText, paddingTop: 4, paddingBottom: 12, lineHeight: 17 },
     historyRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -598,7 +678,20 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: t.cardBackground,
     },
 
-    settingsContent: { padding: 24, paddingBottom: 60 },
+    settingsContent: { paddingTop: 8, paddingBottom: 60 },
+
+    notificationsContent: { paddingTop: 8, paddingBottom: 60 },
+    notificationCard: {
+      backgroundColor: t.translationBackground,
+      borderRadius: 16,
+      paddingVertical: 32,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    notificationBig: { fontFamily: 'Georgia', fontSize: 24, fontWeight: '600', color: t.wordText, textAlign: 'center' },
+    notificationCaption: { fontSize: 13, color: t.metaText, marginTop: 8, textAlign: 'center' },
+    notificationHint: { fontSize: 12, color: t.metaText, lineHeight: 17, marginBottom: 20 },
     creditsLink: { alignItems: 'center', paddingVertical: 16 },
     creditsLinkText: { color: t.label, fontSize: 12, textDecorationLine: 'underline' },
     hourRow: { flexDirection: 'row' },

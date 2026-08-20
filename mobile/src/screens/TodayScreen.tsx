@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDueCardsSplit, getReviewCountSince } from '../data/database';
 import { getSettings } from '../data/settings';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
+import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
@@ -53,7 +54,7 @@ export function TodayScreen({ db, onStartSession }: Props) {
   }, [refresh]);
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <ScreenContainer backgroundColor={theme.cardBackground}>
       <Text style={styles.label}>LEXIS</Text>
       <Text style={styles.title}>Aujourd'hui</Text>
 
@@ -89,13 +90,12 @@ export function TodayScreen({ db, onStartSession }: Props) {
           </FadeInView>
         </>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: t.cardBackground, padding: 24 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 24 },
     statCard: {

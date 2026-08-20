@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet } from 'react-native';
+import { ActivityIndicator, SafeAreaView, StyleSheet, useColorScheme } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as SQLite from 'expo-sqlite';
 import { setAudioModeAsync } from 'expo-audio';
@@ -11,10 +11,15 @@ import { ensurePermissions, registerCategories } from './src/notifications/categ
 import { handleNotificationResponse } from './src/notifications/responseHandler';
 import { refillNotificationQueue } from './src/notifications/queue';
 import { RootTabs } from './src/navigation/RootTabs';
-import { useTheme } from './src/theme/solYSombra';
+import { ThemeProvider, solYSombraDark, solYSombraLight } from './src/theme/solYSombra';
 
 export default function App() {
-  const theme = useTheme();
+  // `ThemeProvider` (bascule clair/sombre manuelle) a besoin de `db` pour
+  // lire/écrire le réglage persisté — pas encore disponible pendant le
+  // chargement initial, donc l'écran de chargement suit directement le
+  // réglage système plutôt que `useTheme()`.
+  const systemScheme = useColorScheme();
+  const loadingTheme = systemScheme === 'dark' ? solYSombraDark : solYSombraLight;
   const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
 
   useEffect(() => {
@@ -63,13 +68,17 @@ export default function App() {
 
   if (!db) {
     return (
-      <SafeAreaView style={[styles.loading, { backgroundColor: theme.cardBackground }]}>
-        <ActivityIndicator color={theme.buttonFilled} />
+      <SafeAreaView style={[styles.loading, { backgroundColor: loadingTheme.cardBackground }]}>
+        <ActivityIndicator color={loadingTheme.buttonFilled} />
       </SafeAreaView>
     );
   }
 
-  return <RootTabs db={db} />;
+  return (
+    <ThemeProvider db={db}>
+      <RootTabs db={db} />
+    </ThemeProvider>
+  );
 }
 
 const styles = StyleSheet.create({

@@ -73,7 +73,7 @@ export function AnimatedPressable({
     <Pressable
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onPress={(e) => {

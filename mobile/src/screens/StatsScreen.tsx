@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getAllReviews, getAllDueDates, getWordCounts } from '../data/database';
 import { computeStreak, computeSuccessRate, computeForecast } from '../stats/statsEngine';
 import { FadeInView } from '../components/FadeInView';
+import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = { db: SQLiteDatabase };
@@ -43,8 +44,8 @@ export function StatsScreen({ db }: Props) {
   const maxForecast = Math.max(1, ...forecast);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
+    <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={0} paddingVertical={0}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>LEXIS</Text>
         <Text style={styles.title}>Statistiques</Text>
 
@@ -72,7 +73,7 @@ export function StatsScreen({ db }: Props) {
           ))}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
@@ -131,7 +132,6 @@ function ForecastBar({
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: t.cardBackground },
     content: { padding: 24, paddingBottom: 40 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 24 },

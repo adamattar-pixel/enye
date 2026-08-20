@@ -1,4 +1,7 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { getSettings, saveSettings, type AppSettings } from '../data/settings';
 
 /**
  * Palette « Sol y sombra » — révision du 20/08/2026.
@@ -71,11 +74,69 @@ export const solYSombraDark: SolYSombraPalette = {
  * composant pour respecter le réglage système clair/sombre. */
 export const solYSombra = solYSombraLight;
 
-/** Bascule automatique selon le réglage système (`Apparence` iOS), pas
- * de réglage manuel dans l'app pour l'instant. */
+type ThemeContextValue = {
+  theme: SolYSombraPalette;
+  isDark: boolean;
+  toggleTheme: () => void;
+};
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+/**
+ * Fournit la palette à toute l'app + le bouton bascule clair/sombre en
+ * haut à droite (voir `useThemeToggle`). Ajouté à la demande explicite
+ * ("rajoute en haut à droite un mode sombre qui inverse les couleurs de
+ * l'appli") — avant ça, `useTheme()` suivait uniquement le réglage
+ * système (`useColorScheme()`), sans bascule manuelle possible depuis
+ * l'app. Le choix est persisté dans `settings.themeOverride` (même table
+ * que le reste des réglages) pour survivre à la fermeture de l'app.
+ *
+ * Doit englober tout arbre qui appelle `useTheme()` — posé une fois
+ * autour de `<RootTabs>` dans `App.tsx`, après l'ouverture de la base
+ * (a besoin de `db` pour lire/écrire le réglage persisté).
+ */
+export function ThemeProvider({ db, children }: { db: SQLiteDatabase; children: React.ReactNode }) {
+  const systemScheme = useColorScheme();
+  const [override, setOverride] = useState<AppSettings['themeOverride']>('system');
+
+  useEffect(() => {
+    (async () => {
+      const settings = await getSettings(db);
+      setOverride(settings.themeOverride);
+    })();
+  }, [db]);
+
+  const isDark = override === 'system' ? systemScheme === 'dark' : override === 'dark';
+  const theme = isDark ? solYSombraDark : solYSombraLight;
+
+  const toggleTheme = useCallback(() => {
+    const next: AppSettings['themeOverride'] = isDark ? 'light' : 'dark';
+    setOverride(next);
+    (async () => {
+      const settings = await getSettings(db);
+      await saveSettings(db, { ...settings, themeOverride: next });
+    })();
+  }, [db, isDark]);
+
+  const value = useMemo(() => ({ theme, isDark, toggleTheme }), [theme, isDark, toggleTheme]);
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+/** Palette courante (claire, sombre, ou système selon `themeOverride`).
+ * Doit être appelé sous un `<ThemeProvider>` (posé dans `App.tsx`). */
 export function useTheme(): SolYSombraPalette {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? solYSombraDark : solYSombraLight;
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme() doit être appelé sous <ThemeProvider>.');
+  return ctx.theme;
+}
+
+/** Bouton bascule clair/sombre (voir `ThemeProvider`) : `isDark` pour
+ * choisir l'icône, `toggleTheme` pour inverser. */
+export function useThemeToggle(): { isDark: boolean; toggleTheme: () => void } {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useThemeToggle() doit être appelé sous <ThemeProvider>.');
+  return { isDark: ctx.isDark, toggleTheme: ctx.toggleTheme };
 }
 
 export const partOfSpeechAbbreviation: Record<string, string> = {

@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
+import { ScreenContainer } from '../components/ScreenContainer';
 import { AzulejoFrieze } from '../components/AzulejoFrieze';
 import { formatMeta, useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 import type { SM2Grade } from '../sm2/types';
@@ -55,7 +56,7 @@ export function ReviewScreen({ card, onGrade }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
       <FadeInView duration={350} distance={20} style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.label}>LEXIS</Text>
@@ -104,7 +105,7 @@ export function ReviewScreen({ card, onGrade }: Props) {
 
         <AzulejoFrieze theme={theme} />
       </FadeInView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
@@ -134,11 +135,7 @@ function GradeButton({
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     screen: {
-      flex: 1,
-      backgroundColor: t.cardBackground,
       justifyContent: 'center',
-      paddingHorizontal: 28,
-      paddingVertical: 32,
     },
     card: {
       backgroundColor: t.cardBackground,
@@ -240,28 +237,30 @@ function createStyles(t: SolYSombraPalette) {
     },
     pill: {
       flex: 1,
-      // Boutons agrandis (48 → 56) suite au retour "trop petits" — voir
-      // AUDIT.md, 20/08/2026.
-      height: 56,
-      borderRadius: 28,
+      // Agrandis une 2e fois (48 → 56 → 68) suite à un nouveau retour
+      // "toujours pas assez grands" — voir AUDIT.md, 20/08/2026.
+      height: 68,
+      borderRadius: 24,
       alignItems: 'center',
       justifyContent: 'center',
     },
     pillOutline: {
-      borderWidth: 1.5,
+      borderWidth: 2,
       borderColor: t.buttonOutline,
       backgroundColor: 'transparent',
     },
     pillOutlineText: {
       color: t.buttonOutline,
-      fontWeight: '600',
+      fontWeight: '700',
+      fontSize: 16,
     },
     pillFilled: {
       backgroundColor: t.buttonFilled,
     },
     pillFilledText: {
       color: t.buttonFilledText,
-      fontWeight: '600',
+      fontWeight: '700',
+      fontSize: 16,
     },
   });
 }

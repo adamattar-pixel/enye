@@ -69,6 +69,16 @@ Nouveau retour après test réel : boutons de notation non réactifs et trop pet
 - **Validation de réglages** : heure de fin ne peut plus précéder l'heure de début (backlog résolu au passage).
 - Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (878 modules, HTTP 200). **Non vérifié sur device** — à confirmer au prochain test réel, en particulier si les boutons répondent maintenant au toucher.
 
+## Padding centralisé, boutons re-agrandis, mode sombre manuel, prochaine notification (20/08/2026)
+
+Nouveau retour : le padding restait invisible malgré le correctif précédent, les boutons de notation restaient trop petits, plus deux demandes — bascule manuelle clair/sombre en haut à droite, et un onglet affichant l'heure approximative de la prochaine notification.
+
+- **Padding centralisé** dans un seul composant ([ScreenContainer.tsx](mobile/src/components/ScreenContainer.tsx)) utilisé par tous les écrans, plutôt que des valeurs dispersées par écran — voir AUDIT.md pour le raisonnement (la quantité n'était probablement pas le problème).
+- **Boutons de notation** : 56 → 68px de hauteur, texte plus gros et en gras, `hitSlop` élargi.
+- **Mode sombre manuel** : bouton ☀️/🌙 flottant en haut à droite (visible sur tous les écrans), en plus du réglage système — choix persisté dans les réglages.
+- **Onglet Notifications** (dans Decks & mots) : estimation approximative de la prochaine notification, assumée comme approximative dans l'UI (l'algorithme de planification tire l'espacement au hasard, voir AUDIT.md).
+- Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vérifié sur device.**
+
 ## Fond de dossier terminé : split nouvelles/révisions + thèmes désactivés (20/08/2026)
 
 Deux éléments de dette technique notés depuis la construction "d'un bloc" ont été traités à la demande explicite de continuer le travail restant :
