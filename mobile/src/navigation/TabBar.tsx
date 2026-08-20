@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -17,18 +17,21 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 /**
- * Remplace l'ancienne barre de pilules fixe en bas d'écran (demandé
- * explicitement le 20/08/2026, en remplacement d'une première version à
- * onglets fixes) par une icône ☰ en haut de l'écran : appuyer dessus
- * ouvre un bandeau d'onglets qu'on fait défiler horizontalement du
- * doigt, toucher un onglet le sélectionne et referme le bandeau. Comme
- * l'ancienne barre, ce composant n'est monté que hors session de
+ * Remplace l'ancienne barre de pilules fixe en bas d'écran par une icône
+ * ☰ en haut de l'écran (demandé le 20/08/2026, puis ajusté le même jour
+ * après un premier essai jugé pas assez intégré : l'icône flottait
+ * au-dessus du reste avec une ombre/un fond distinct — remplacée par une
+ * icône à plat, "sur le même plan" que le reste de l'écran, sans carte ni
+ * ombre propre). Un appui ouvre un grand panneau rectangulaire plein
+ * (pas de coins très arrondis, pas transparent) listant les onglets les
+ * uns sous les autres, séparés par un trait — pas un bandeau horizontal
+ * défilant comme la toute première version. Toucher un onglet le
+ * sélectionne et referme le panneau ; toucher en dehors referme sans
+ * changer d'onglet.
+ *
+ * Comme l'ancienne barre, ce composant n'est monté que hors session de
  * révision (voir RootTabs.tsx) — pas besoin de le cacher explicitement
  * ici.
- *
- * Les libellés complets tiennent maintenant sans avoir besoin d'être
- * raccourcis pour la place ("Decks & mots" gardé en entier, contrairement
- * à l'ancienne barre à 6 pilules fixes).
  */
 export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab: TabKey) => void }) {
   const theme = useTheme();
@@ -62,19 +65,18 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
       {open && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Fermer le menu des onglets" />
-          <SafeAreaView style={styles.stripSafeArea} pointerEvents="box-none">
-            <FadeInView duration={200} direction="right" distance={20} style={styles.stripCard}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stripContent}>
-                {TABS.map((tab) => (
-                  <TabPill
-                    key={tab.key}
-                    styles={styles}
-                    label={tab.label}
-                    active={tab.key === current}
-                    onPress={() => handleSelect(tab.key)}
-                  />
-                ))}
-              </ScrollView>
+          <SafeAreaView style={styles.panelSafeArea} pointerEvents="box-none">
+            <FadeInView duration={220} direction="up" distance={16} style={styles.panel}>
+              {TABS.map((tab, index) => (
+                <TabRow
+                  key={tab.key}
+                  styles={styles}
+                  label={tab.label}
+                  active={tab.key === current}
+                  isLast={index === TABS.length - 1}
+                  onPress={() => handleSelect(tab.key)}
+                />
+              ))}
             </FadeInView>
           </SafeAreaView>
         </>
@@ -83,25 +85,27 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
   );
 }
 
-function TabPill({
+function TabRow({
   styles,
   label,
   active,
+  isLast,
   onPress,
 }: {
   styles: ReturnType<typeof createStyles>;
   label: string;
   active: boolean;
+  isLast: boolean;
   onPress: () => void;
 }) {
   return (
     <AnimatedPressable
-      style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
+      style={[styles.row, !isLast && styles.rowDivider, active && styles.rowActive]}
       haptic="none"
-      scaleTo={0.94}
+      scaleTo={0.98}
       onPress={onPress}
     >
-      <Text style={[styles.pillLabel, active ? styles.pillLabelActive : styles.pillLabelInactive]}>{label}</Text>
+      <Text style={[styles.rowLabel, active && styles.rowLabelActive]}>{label}</Text>
     </AnimatedPressable>
   );
 }
@@ -109,21 +113,12 @@ function TabPill({
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     hamburgerSafeArea: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 },
-    hamburgerRow: { flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 16, paddingTop: 6 },
-    hamburgerButton: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: t.translationBackground,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.15,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    hamburgerIcon: { fontSize: 18, color: t.buttonFilled, fontWeight: '700' },
+    hamburgerRow: { flexDirection: 'row', justifyContent: 'flex-start', paddingHorizontal: 22, paddingTop: 14 },
+    // Icône seule, sans fond/ombre/carte propre — reste "sur le même
+    // plan" visuel que le reste de l'écran plutôt que de flotter
+    // au-dessus comme un bouton d'action séparé.
+    hamburgerButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+    hamburgerIcon: { fontSize: 22, color: t.wordText, fontWeight: '700' },
 
     backdrop: {
       position: 'absolute',
@@ -131,29 +126,35 @@ function createStyles(t: SolYSombraPalette) {
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.25)',
+      backgroundColor: 'rgba(0,0,0,0.35)',
       zIndex: 20,
     },
-    stripSafeArea: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 25 },
-    stripCard: {
-      marginTop: 54,
-      marginHorizontal: 12,
+    panelSafeArea: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 25 },
+    // Grand rectangle plein, coins à peine arrondis (pas la même
+    // rondeur que les cartes/pilules ailleurs dans l'app) — demandé
+    // explicitement comme "rectangulaire plein et grand", par
+    // opposition au bandeau horizontal étroit de la première version.
+    panel: {
+      marginTop: 60,
+      marginHorizontal: 16,
       backgroundColor: t.cardBackground,
-      borderRadius: 20,
-      borderWidth: 1,
+      borderRadius: 6,
+      borderWidth: 1.5,
       borderColor: t.cardBorder,
+      overflow: 'hidden',
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.12,
-      shadowRadius: 16,
-      elevation: 4,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.18,
+      shadowRadius: 20,
+      elevation: 6,
     },
-    stripContent: { flexDirection: 'row', gap: 8, padding: 10 },
-    pill: { paddingVertical: 12, paddingHorizontal: 18, borderRadius: 16 },
-    pillActive: { backgroundColor: t.buttonFilled },
-    pillInactive: { backgroundColor: t.buttonFilledLight },
-    pillLabel: { fontSize: 13, fontWeight: '700' },
-    pillLabelActive: { color: t.buttonFilledText },
-    pillLabelInactive: { color: t.buttonFilled },
+    // Onglets empilés les uns sur les autres, séparés par un trait —
+    // demandé explicitement, par opposition aux pilules côte à côte de
+    // la version précédente.
+    row: { paddingVertical: 20, paddingHorizontal: 24 },
+    rowDivider: { borderBottomWidth: 1, borderBottomColor: t.cardBorder },
+    rowActive: { backgroundColor: t.translationBackground },
+    rowLabel: { fontSize: 16, fontWeight: '600', color: t.wordText },
+    rowLabelActive: { color: t.buttonFilled, fontWeight: '700' },
   });
 }

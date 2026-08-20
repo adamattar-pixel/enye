@@ -243,68 +243,81 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
 
   if (loading) return null;
 
+  // Un seul FlatList pour tout l'écran (formulaire de recherche +
+  // résultats + bibliothèque), plutôt que les résultats de recherche
+  // posés dans une `View` séparée au-dessus d'un `FlatList` distinct —
+  // signalé cassé (le scroll ne fonctionnait pas sur les résultats de
+  // recherche, hors de toute zone défilante) et "pas smooth" (deux
+  // gestionnaires de défilement qui se marchaient dessus). Le formulaire
+  // + les résultats vivent maintenant dans `ListHeaderComponent`, qui
+  // défile avec le reste dans le même `FlatList` natif.
   return (
     <View style={{ flex: 1 }}>
-      <View style={styles.addForm}>
-        <TextInput
-          style={styles.addInput}
-          value={query}
-          onChangeText={setQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="Rechercher une vidéo en espagnol…"
-          editable={!searching}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-        />
-        <AnimatedPressable
-          style={[styles.addButton, (searching || !query.trim()) && styles.buttonDisabled]}
-          haptic="none"
-          disabled={searching || !query.trim()}
-          onPress={handleSearch}
-        >
-          {searching ? <ActivityIndicator color="#fff" /> : <Text style={styles.addButtonText}>🔍</Text>}
-        </AnimatedPressable>
-      </View>
-      {searchError && <Text style={styles.addError}>{searchError}</Text>}
-      {addError && <Text style={styles.addError}>{addError}</Text>}
-
-      {searchResults.length > 0 && (
-        <View style={styles.searchResults}>
-          {searchResults.map((result) => (
-            <View key={result.videoId} style={styles.searchResultRow}>
-              {result.thumbnailUrl ? <Image source={{ uri: result.thumbnailUrl }} style={styles.searchResultThumb} /> : null}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.videoTitle} numberOfLines={2}>
-                  {result.title}
-                </Text>
-                <Text style={styles.videoMeta}>
-                  {result.channel}
-                  {result.lengthText ? ` · ${result.lengthText}` : ''}
-                </Text>
-              </View>
-              <AnimatedPressable
-                style={[styles.addResultButton, addingId === result.videoId && styles.buttonDisabled]}
-                haptic="none"
-                disabled={addingId === result.videoId}
-                onPress={() => handleAddResult(result)}
-              >
-                {addingId === result.videoId ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.addResultButtonText}>+</Text>
-                )}
-              </AnimatedPressable>
-            </View>
-          ))}
-        </View>
-      )}
-
-      <Text style={styles.librarySectionTitle}>Ta bibliothèque</Text>
       <FlatList
         data={videos}
         keyExtractor={(v) => v.id}
         contentContainerStyle={styles.libraryListContent}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <>
+            <View style={styles.addForm}>
+              <TextInput
+                style={styles.addInput}
+                value={query}
+                onChangeText={setQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Rechercher une vidéo en espagnol…"
+                editable={!searching}
+                onSubmitEditing={handleSearch}
+                returnKeyType="search"
+              />
+              <AnimatedPressable
+                style={[styles.addButton, (searching || !query.trim()) && styles.buttonDisabled]}
+                haptic="none"
+                disabled={searching || !query.trim()}
+                onPress={handleSearch}
+              >
+                {searching ? <ActivityIndicator color="#fff" /> : <Text style={styles.addButtonText}>🔍</Text>}
+              </AnimatedPressable>
+            </View>
+            {searchError && <Text style={styles.addError}>{searchError}</Text>}
+            {addError && <Text style={styles.addError}>{addError}</Text>}
+
+            {searchResults.length > 0 && (
+              <View style={styles.searchResults}>
+                {searchResults.map((result) => (
+                  <View key={result.videoId} style={styles.searchResultRow}>
+                    {result.thumbnailUrl ? <Image source={{ uri: result.thumbnailUrl }} style={styles.searchResultThumb} /> : null}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.videoTitle} numberOfLines={2}>
+                        {result.title}
+                      </Text>
+                      <Text style={styles.videoMeta}>
+                        {result.channel}
+                        {result.lengthText ? ` · ${result.lengthText}` : ''}
+                      </Text>
+                    </View>
+                    <AnimatedPressable
+                      style={[styles.addResultButton, addingId === result.videoId && styles.buttonDisabled]}
+                      haptic="none"
+                      disabled={addingId === result.videoId}
+                      onPress={() => handleAddResult(result)}
+                    >
+                      {addingId === result.videoId ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.addResultButtonText}>+</Text>
+                      )}
+                    </AnimatedPressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.librarySectionTitle}>Ta bibliothèque</Text>
+          </>
+        }
         renderItem={({ item, index }) => (
           <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.videoRow}>
             <View style={{ flex: 1 }}>
