@@ -1,0 +1,179 @@
+# Decisions
+
+Architecturally significant decisions only — not every bugfix. Full reasoning and evidence for each lives in the dated root `AUDIT.md`/`PLAN.md` entries; this file is the index of *what was decided and why*, so a future session doesn't reopen a settled question. Consult this before proposing an architecture change.
+
+---
+
+# Decision 001 — Expo/React Native instead of native iOS Swift
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: Development happens on Windows, no Mac available, no paid Apple developer account. Native iOS build (`Packages/SM2Engine`, `Packages/ReviewScheduler`, planned SwiftUI app) had 6 of 8 phases blocked for this reason.
+
+Decision: Move active development to Expo/React Native (`mobile/`), testable directly on iPhone via Expo Go, no Mac/Xcode/dev account required.
+
+Reasoning: Only path to actually running and testing the app given the hardware/account constraints.
+
+Alternatives: Wait for Mac access (indefinite blocker); use a CI-based macOS builder (still needs a paid account for on-device testing beyond 7-day free provisioning).
+
+Consequences: No Notification Content Extension possible → notifications can't have custom UI, only the two-stage native-button flow. `Packages/SM2Engine`/`Packages/ReviewScheduler` kept as the reference spec the TypeScript port was tested against, not deleted, not actively developed.
+
+---
+
+# Decision 002 — Spanish→English, not Spanish→French
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: Vocabulary source choice forced this — the best available frequency-ranked dataset ([doozan/spanish_data](https://github.com/doozan/spanish_data)) only provides English glosses.
+
+Decision: Pivot the whole app's target language pair to Spanish→English, including the 36 hand-written words (retranslated directly from Spanish, not routed through French).
+
+Consequences: `Word.french`/`example_fr` renamed to `english`/`example_en` throughout; `DB_NAME` changed (`lexis.db` → `lexis-en.db`) to force a fresh DB rather than migrate a schema that no longer matches.
+
+---
+
+# Decision 003 — One generic SM-2 engine shared by all three content domains
+
+Date: 2026-08-20 (conjugation), 2026-08-20 (listening)
+Status: Accepted
+
+Context: Vocabulary already had a pure `review(card, grade, now)` engine (`mobile/src/sm2/`, ported from Swift). Conjugation and later listening needed spaced repetition too.
+
+Decision: Reuse the engine unmodified for all three; only the card-id scheme differs (`word.id`, `` `${verbId}:${tense}:${person}` ``, `` `${videoId}:${index}` ``).
+
+Reasoning: The engine is content-agnostic by construction — no reason to fork it.
+
+Alternatives: A separate engine/config per domain — rejected, no actual behavioral need for one.
+
+---
+
+# Decision 004 — `@v4nn4/ablaut` instead of `spanish-verbs` for conjugation generation
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: `spanish-verbs` (npm) was the original plan for generating `conjugations.json`.
+
+Decision: Switched to `@v4nn4/ablaut` (WASM rule engine) after testing both.
+
+Reasoning: `spanish-verbs` measured at ~43% error rate on stem-changing verbs in present subjunctive during a live test (including cross-contamination between verbs — `hacer` returning `tener` forms), and is deprecated. `@v4nn4/ablaut` is independently verified at 100.00% on 339,200 Spanish forms and retested clean here.
+
+Alternatives: Hand-correct `spanish-verbs` output — rejected, error rate too high and not systematically fixable without re-deriving conjugation rules.
+
+---
+
+# Decision 005 — `react-native-reanimated` removed entirely
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: Grading buttons didn't respond to touch and animations weren't visible. Root cause eventually found to be a separate layout bug (`AnimatedPressable` applying `style` to an inner `Animated.View` instead of the outer `Pressable`), but Reanimated/New-Architecture interaction was a live suspect at the time.
+
+Decision: Remove `react-native-reanimated`/`react-native-worklets` entirely, rebuild all animation (`AnimatedPressable`, `FadeInView`, progress bars) on React Native's own built-in `Animated` API.
+
+Reasoning: `Animated` has no native-module dependency, so it can't suffer the same class of Expo-Go incompatibility, regardless of whether Reanimated was actually the cause of the original bug.
+
+Consequences: Every new animation in this app (including the tab drawer's slide-in) must use `Animated`, not Reanimated — there is no Reanimated dependency to reach for even if it seems convenient.
+
+---
+
+# Decision 006 — Conjugation and Listening are in-app only, never in notifications
+
+Date: 2026-08-20 (conjugation), confirmed again same day for listening
+Status: Accepted
+
+Context: Vocabulary review can be triggered from lock-screen notifications. Conjugation and listening could theoretically do the same.
+
+Decision: Explicitly out of scope, confirmed by the user more than once. Notifications remain vocabulary-only.
+
+Consequences: Don't re-propose this without an explicit new request — it's been declined twice.
+
+---
+
+# Decision 007 — Per-domain screen/container/review-screen files, not a shared abstraction
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: Vocabulary, conjugation, and listening each need a browse screen, a session container, and a flashcard UI — structurally identical shape three times.
+
+Decision: Copy the pattern per domain (`ConjugationScreen.tsx` etc. duplicate `TodayScreen`/`ReviewScreenContainer`'s structure rather than sharing a generic component) rather than building a shared generic review-flow abstraction.
+
+Reasoning: The three domains differ enough in their card data shape and prompt UI (typed answer vs. flashcard reveal vs. video player) that a shared abstraction would need significant configuration surface for three call sites — not judged worth it at this scale.
+
+Consequences: A UI fix to the review flow (e.g. the keyboard-dismiss-on-tap-outside fix) must be applied to each `*ReviewScreen.tsx` file individually — there is no shared base to fix once.
+
+---
+
+# Decision 008 — Listening feature is the one exception to "fully offline"
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: The listening feature's entire premise — real people talking in YouTube videos — requires network access to load the YouTube player and fetch captions.
+
+Decision: Accept network dependency for this one tab only; rest of the app stays fully offline.
+
+Consequences: No offline fallback for listening; captions/metadata fetches must degrade silently (mark unavailable, never crash) rather than block the feature.
+
+---
+
+# Decision 009 — Video-then-segment two-tier random selection for listening
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: Explicit requirement: never repeat the same video across the last `VIDEO_COOLDOWN` (3) exercises, and never let a video with more segments be more likely to be picked.
+
+Decision: Select uniformly among *eligible videos* first (`mobile/src/listening/selection.ts`), then uniformly among that video's due segments — not a single flat random pick across all due segments.
+
+Reasoning: A flat pick across segments would structurally bias toward videos with more segments; picking the video first, from the set of distinct eligible video ids, makes segment count irrelevant to selection probability.
+
+Consequences: Selection logic lives client-side in `ListeningReviewContainer.tsx` (not a single SQL query) because the cooldown must account for exercises graded *during* the current session, not just what's already persisted.
+
+---
+
+# Decision 010 — Listening captions: WebView-based fetch, not raw HTTP
+
+Date: 2026-08-20 (multiple iterations same day)
+Status: Accepted, mechanism still unverified end-to-end
+
+Context: Direct HTTP fetch to YouTube's `timedtext`/InnerTube endpoints fails 100% of the time from every network tested (datacenter and — per on-device logs — from the user's iPhone too), most likely YouTube's PoToken/BotGuard anti-bot requirement.
+
+Decision: Load the real `youtube.com/watch` page in a hidden `WebView`, intercept the request the page's *own* code makes when the user clicks "Show transcript" (patched `fetch`/`XMLHttpRequest` before page load), with a DOM-read fallback. See `docs/specs/listening-comprehension.md` for the full mechanism and its current unresolved state.
+
+Alternatives considered and rejected: issuing our own `fetch()` from inside the WebView's JS context (tried first, no better — a self-issued request doesn't inherit a valid PoToken just by running in a browser engine); a small local backend proxy (documented as a fallback, not built — no evidence yet that it's necessary).
+
+Status detail: as of the last on-device test, the transcript panel still doesn't open reliably; root-caused so far to `&app=desktop` accidentally serving YouTube's legacy pre-2017 page rather than modern desktop (fixed, unverified) — see root `AUDIT.md` "Débogage dédié de la récupération de captions" for the full iteration history.
+
+---
+
+# Decision 011 — SQLite schema is additive-only, no migration system
+
+Date: established 2026-08-20 (Spanish→English pivot), reaffirmed for every subsequent table added
+Status: Accepted
+
+Context: `migrateDbIfNeeded` uses `CREATE TABLE IF NOT EXISTS` for every table, no version tracking.
+
+Decision: Schema changes must be additive (new tables, or — accepted so far — silently-ignored new columns on existing `CREATE TABLE IF NOT EXISTS` statements don't actually alter existing installs). A genuinely breaking change (column rename/removal) requires a new `DB_NAME` to force a fresh database, losing existing local progress.
+
+Reasoning: No real migration system was built (assessed as disproportionate for a single-user local app); accepted the tradeoff explicitly once already (Spanish→English pivot) with "no real user data lost yet, nothing has run end-to-end on device" as the justification at the time — that justification will not hold once the app has real on-device usage history.
+
+Consequences: **Revisit this decision before shipping a breaking schema change once the app has real user progress worth preserving** — a silent data-loss migration is not acceptable at that point.
+
+---
+
+# Decision 012 — Word/conjugation tags: keyword heuristic + explicit catch-all, not real NLP
+
+Date: 2026-08-20
+Status: Accepted
+
+Context: Needed every one of ~6002 generated vocabulary words to carry at least one theme tag; no semantic-understanding tool available in this workflow.
+
+Decision: Keyword matching on the English gloss against curated per-theme word lists, plus direct part-of-speech tagging for pure grammar words (prepositions etc. → "grammaire"), plus a `"divers"` catch-all tag for anything that still matches nothing.
+
+Reasoning: Literal 100% coverage was requested; a keyword heuristic cannot achieve full *semantic* accuracy, so the catch-all is the honest way to guarantee coverage without pretending the tagging is more meaningful than it is.
+
+Consequences: ~3100 of 6002 words carry a tag only via the `"divers"` catch-all — not a real theme. Don't present tag coverage as semantically complete; it's a documented limitation, not a resolved gap.
