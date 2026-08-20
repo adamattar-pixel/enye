@@ -56,7 +56,7 @@ interface CaptionTrack {
   kind?: string; // "asr" = auto-généré ; absent = piste humaine
 }
 
-interface CaptionCue {
+export interface CaptionCue {
   startTime: number;
   endTime: number;
   transcript: string;
@@ -104,8 +104,11 @@ function pickSpanishTrack(tracks: CaptionTrack[]): CaptionTrack | null {
 
 /** Entités HTML les plus courantes dans les sous-titres YouTube —
  * décodage minimal, pas un décodeur HTML complet (pas de bibliothèque
- * XML/HTML disponible sans nouvelle dépendance pour ce seul besoin). */
-function decodeHtmlEntities(s: string): string {
+ * XML/HTML disponible sans nouvelle dépendance pour ce seul besoin).
+ * Exporté pour être réutilisé par `TranscriptFetcher.tsx` (même format
+ * `timedtext` XML, qu'il reçoive le corps par interception réseau plutôt
+ * que par fetch direct) — pas de raison de dupliquer ce parsing. */
+export function decodeHtmlEntities(s: string): string {
   return s
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -120,7 +123,7 @@ function decodeHtmlEntities(s: string): string {
  * regex plutôt qu'un vrai parseur XML (aucun disponible sans nouvelle
  * dépendance) — suffisant pour ce format simple et plat, pas robuste à
  * un XML imbriqué ou malformé. */
-function parseTimedTextXml(xml: string): CaptionCue[] {
+export function parseTimedTextXml(xml: string): CaptionCue[] {
   const cues: CaptionCue[] = [];
   const pattern = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
   let match: RegExpExecArray | null;

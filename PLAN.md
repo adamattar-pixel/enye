@@ -447,6 +447,22 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier la teinte réelle du clavier iOS et la lisibilité du nouvel emplacement de l'historique.
 
+## TranscriptFetcher réécrit : interception réseau + repli DOM (20/08/2026)
+
+**Demande explicite** : la première version de `TranscriptFetcher.tsx` (voir section précédente) émettait encore elle-même un `fetch()` vers `timedtext` depuis la WebView — pas garanti de porter un PoToken valide juste parce qu'il est émis depuis un vrai moteur de navigateur. Nouvelle approche demandée précisément : intercepter la requête que la VRAIE page émet quand on clique sur "Show transcript" (celle-ci, elle, porte un PoToken généré par le propre code de YouTube), avec un repli sur la lecture directe du DOM du panneau si l'interception ne capture rien.
+
+**Implémenté**, en remplacement du `fetch()` direct de la première version :
+1. `window.fetch`/`XMLHttpRequest` patchés via `injectedJavaScriptBeforeContentLoaded` (avant tout script de la page), interceptant toute URL contenant `get_transcript`/`timedtext`.
+2. Page chargée avec `Accept-Language: en-US,en;q=0.9` pour un libellé de bouton prévisible.
+3. Après chargement + 2,5s, script cherchant et cliquant `button[aria-label="Show transcript"]` (repli : recherche par texte `/show transcript/i`).
+4. Si rien d'intercepté 5s après le clic, repli sur la lecture du DOM (`ytd-transcript-segment-renderer`) — timestamps de départ uniquement, fin de segment déduite du timestamp suivant côté TypeScript.
+5. Délai global de 9s, sinon `unavailable`.
+6. Parsing du corps intercepté (XML `timedtext`, réutilise les fonctions déjà exportées de `captions.ts` ; ou JSON `get_transcript`, jamais observé réellement dans cette session — recherche récursive de `startMs`/`endMs` plutôt qu'un chemin fixe, par prudence).
+
+**`fetchVideoCaptions()` (requête HTTP nue) reste le premier essai, inchangé.** Aucun autre système touché (SM-2, sélection, validation, persistance).
+
+**Statut : implémenté et compilé, scripts injectés vérifiés syntaxiquement valides (`new Function()` en Node), non vérifié de bout en bout.** Même limite que la version précédente : aucun moteur de WebView disponible dans les outils de cette session. **Ne pas présenter comme réparé avant qu'un test réel sur device montre un nombre de segments > 0 pour une vraie vidéo.** Détail complet dans AUDIT.md, y compris l'architecture de repli (petit service local) toujours documentée mais non construite.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
