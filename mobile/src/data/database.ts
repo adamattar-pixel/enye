@@ -71,53 +71,65 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
-/** Importe `words` dans SQLite si la table est vide (premier lancement),
- * avec une carte SM-2 neuve pour chacun. N'écrase jamais des cartes déjà
- * en cours de révision — ne fait rien si la table `words` n'est pas
- * vide, même si `words.json` a changé depuis (pas de logique de
- * migration/diff pour l'instant, à ajouter si on enrichit le contenu
- * après coup).
+async function insertWordWithCard(db: SQLiteDatabase, word: Word, now: Date): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    word.id,
+    word.spanish,
+    word.english,
+    word.partOfSpeech,
+    word.gender,
+    word.exampleEs,
+    word.exampleEn,
+    word.level,
+    JSON.stringify(word.tags),
+    word.frequencyRank,
+    word.isUserAdded ? 1 : 0
+  );
+
+  const card = createCard({ dueDate: now });
+  await db.runAsync(
+    `INSERT INTO cards (word_id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+    word.id,
+    card.easeFactor,
+    card.intervalDays,
+    card.repetitions,
+    card.lapses,
+    card.learningStepIndex,
+    card.lifecycle,
+    card.dueDate.toISOString()
+  );
+}
+
+/** Importe dans SQLite tout mot du bundle (`words.json`) pas encore
+ * présent en base, avec une carte SM-2 neuve pour chacun — au premier
+ * lancement, ça importe tout ; sur une base déjà peuplée, ça complète
+ * seulement ce qui manque (utilisé pour faire grandir le vocabulaire
+ * d'une mise à jour à l'autre sans jamais toucher aux cartes déjà en
+ * cours de révision). Remplace l'ancien `seedIfEmpty`, qui ne faisait
+ * rien du tout si la table `words` n'était pas totalement vide — ça
+ * empêchait silencieusement tout enrichissement ultérieur du bundle
+ * (ex. le passage de 36 à 6000 mots, voir AUDIT.md, ne serait jamais
+ * arrivé jusqu'aux installations déjà seedées sans ce changement).
  *
  * Pas testé unitairement (pas de SQLite en mémoire disponible sous
  * Jest/jest-expo pour l'instant) — à vérifier sur device réel une fois
  * branché à un écran. Voir AUDIT.md. */
-export async function seedIfEmpty(db: SQLiteDatabase, words: Word[], now: Date = new Date()): Promise<void> {
-  const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM words;');
-  if ((row?.count ?? 0) > 0) return;
+export async function importMissingWords(db: SQLiteDatabase, words: Word[], now: Date = new Date()): Promise<number> {
+  const existingRows = await db.getAllAsync<{ id: string }>('SELECT id FROM words;');
+  const existingIds = new Set(existingRows.map((r) => r.id));
+  const missing = words.filter((w) => !existingIds.has(w.id));
+  if (missing.length === 0) return 0;
 
   await db.withTransactionAsync(async () => {
-    for (const word of words) {
-      await db.runAsync(
-        `INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        word.id,
-        word.spanish,
-        word.english,
-        word.partOfSpeech,
-        word.gender,
-        word.exampleEs,
-        word.exampleEn,
-        word.level,
-        JSON.stringify(word.tags),
-        word.frequencyRank,
-        word.isUserAdded ? 1 : 0
-      );
-
-      const card = createCard({ dueDate: now });
-      await db.runAsync(
-        `INSERT INTO cards (word_id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-        word.id,
-        card.easeFactor,
-        card.intervalDays,
-        card.repetitions,
-        card.lapses,
-        card.learningStepIndex,
-        card.lifecycle,
-        card.dueDate.toISOString()
-      );
+    for (const word of missing) {
+      await insertWordWithCard(db, word, now);
     }
   });
+
+  return missing.length;
 }
 
 export interface DueCardRow {

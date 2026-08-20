@@ -3,7 +3,7 @@ import { ActivityIndicator, SafeAreaView, StyleSheet, useColorScheme } from 'rea
 import * as Notifications from 'expo-notifications';
 import * as SQLite from 'expo-sqlite';
 import { setAudioModeAsync } from 'expo-audio';
-import { DB_NAME, migrateDbIfNeeded, seedIfEmpty } from './src/data/database';
+import { DB_NAME, migrateDbIfNeeded, importMissingWords } from './src/data/database';
 import { parseWords } from './src/data/wordRepository';
 import wordsJson from './src/data/words.json';
 import { getSettings } from './src/data/settings';
@@ -26,7 +26,10 @@ export default function App() {
     (async () => {
       const database = await SQLite.openDatabaseAsync(DB_NAME);
       await migrateDbIfNeeded(database);
-      await seedIfEmpty(database, parseWords(wordsJson));
+      // Importe tout mot du bundle pas encore en base — premier
+      // lancement (tout est importé) comme mises à jour ultérieures du
+      // bundle (complète juste ce qui manque, voir database.ts).
+      await importMissingWords(database, parseWords(wordsJson));
 
       // Bug documenté et de longue date d'expo-speech sur iOS : sans
       // activer explicitement le mode audio, la prononciation ne joue

@@ -29,7 +29,7 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 | Espacement entre cartes dues simultanément | aléatoire 15-30 min (moyenne 22,5 min → capacité ≈37/j), triées par échéance la plus ancienne, jamais tassé (règle défensive testée dans ReviewScheduler) |
 | Boucle de révision (sans Content Extension) | notification 1 = mot seul + bouton « Ver traducción » ; tap → notification 2 programmée en arrière-plan avec traduction + exemple + 4 boutons de notation. **Validée sur iPhone réel tant que l'app n'a pas été force-quittée** ; si force-quit, le tap ne fait rien jusqu'à la prochaine ouverture manuelle (limite iOS documentée, acceptée — voir AUDIT.md). Depuis le 20/08/2026, l'écran de révision **dans l'app** reprend le même montage en deux temps (demandé après le premier test réel) |
 | Couple de langues | **Espagnol → anglais** (pivot du 20/08/2026, définitif — plus français) |
-| Source de vocabulaire | [doozan/spanish_data](https://github.com/doozan/spanish_data) (CC BY 4.0, agrège hermitdave/FrequencyWords + Wiktionary + Tatoeba) — remplace la génération manuelle par lots. 2000 mots générés dans `words.generated.json`, **candidat à relire avant intégration dans `words.json`** (toujours 36 mots à ce jour) |
+| Source de vocabulaire | [doozan/spanish_data](https://github.com/doozan/spanish_data) (CC BY 4.0, agrège hermitdave/FrequencyWords + Wiktionary + Tatoeba) — remplace la génération manuelle par lots. **Fusionné dans `words.json` le 20/08/2026 : 6002 mots au total** (36 écrits à la main + 5966 générés), voir section dédiée plus bas |
 
 ### Le calcul des plafonds (pourquoi 8+22, pas 15+80)
 
@@ -55,9 +55,11 @@ Trois retours reçus après un vrai test sur iPhone, tous traités :
 
 ## Vocabulaire généré depuis doozan/spanish_data (20/08/2026)
 
-Remplace la génération manuelle par lots (trop lente pour atteindre 1000-2000 mots). [mobile/scripts/generate-vocabulary/](mobile/scripts/generate-vocabulary/) télécharge et parse `frequency.csv` + `es-en.data` + `sentences.tsv`, produit `mobile/src/data/words.generated.json` (2000 mots, jamais fusionné automatiquement dans `words.json`). Détail complet, format, limites connues (gloses verbeuses sur les mots grammaticaux, niveaux CECRL approximatifs, tags thématiques vides) : voir le [README du script](mobile/scripts/generate-vocabulary/README.md) et AUDIT.md.
+Remplace la génération manuelle par lots (trop lente pour atteindre 1000-2000 mots). [mobile/scripts/generate-vocabulary/](mobile/scripts/generate-vocabulary/) télécharge et parse `frequency.csv` + `es-en.data` + `sentences.tsv`, produit `mobile/src/data/words.generated.json`. Détail complet, format, limites connues (gloses verbeuses sur les mots grammaticaux, niveaux CECRL approximatifs, tags thématiques vides) : voir le [README du script](mobile/scripts/generate-vocabulary/README.md) et AUDIT.md.
 
 Écran **Crédits** ajouté (Decks & mots → Réglages → Crédits et sources du vocabulaire) citant hermitdave/FrequencyWords, Wiktionary, Tatoeba et doozan/spanish_data avec leurs licences respectives, comme l'exigent CC BY/CC BY-SA.
+
+**Fusionné dans `words.json` (20/08/2026), demandé explicitement ("met les 2000 voir plus de mots")** : régénéré à 6000 mots (`node generate.mjs 6000`, le script en supportait jusqu'à 17420) plutôt que 2000, fusionné directement sans relecture manuelle (cohérent avec la décision "gros volume direct" déjà actée) — les 36 mots à la main sont gardés tels quels, priorité sur la génération automatique en cas de coïncidence (34 trouvées). **`words.json` : 36 → 6002 mots.** `seedIfEmpty` (qui ne faisait rien sur une base déjà peuplée, donc n'aurait jamais propagé ce changement aux installations existantes) remplacé par `importMissingWords`, qui complète le delta à chaque démarrage au lieu de ne rien faire du tout. Voir AUDIT.md pour le détail et les points non vérifiés (temps du premier import à ce volume).
 
 ## Boutons qui ne répondaient pas, historique, padding (20/08/2026)
 
@@ -106,9 +108,9 @@ Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vé
 
 ## Prochaines actions
 
-- [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, et que le plafond nouvelles/révisions se ressent bien en session comme en notification.
-- [ ] Relire `words.generated.json` (2000 mots) par lots et fusionner les meilleurs dans `words.json` — en particulier vérifier/corriger les gloses des mots grammaticaux (pronoms, déterminants) signalées verbeuses.
+- [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
+- [ ] Gloses verbeuses sur les mots grammaticaux (pronoms/déterminants/prépositions) dans le vocabulaire généré — pas corrigées automatiquement (voir AUDIT.md), correctibles au cas par cas si un mot précis pose problème à l'usage (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native
