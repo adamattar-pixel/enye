@@ -8,6 +8,17 @@ Journal des constats techniques, risques et incidents résolus. Chaque entrée :
 
 **Ce que ça coûte.** Pas de Notification Content Extension possible en Expo Go sans development build → pas d'UI custom dans la notification déroulée, apparence standard iOS uniquement. Le design « Sol y sombra » ne vit plus que dans l'app elle-même.
 
+## Écran de révision — style Sol y sombra (20/08/2026)
+
+Implémenté : [mobile/src/screens/ReviewScreen.tsx](mobile/src/screens/ReviewScreen.tsx) + [mobile/src/theme/solYSombra.ts](mobile/src/theme/solYSombra.ts). Carte crème/bordure ocre, liseré pointillé façon ticket, bloc traduction fond rose pâle, 4 boutons de notation en pilules (2 lignes de 2 : Otra vez/Difícil en contour ocre, Bien/Fácil en plein bordeaux). Visible par défaut au lancement de l'app (mock data, pas encore branché à SM-2/à la vraie file — tâches 3-4).
+
+**Limite notification vs in-app : confirmée appliquée, pas re-découverte.** Comme déjà acté plus haut, aucune UI custom n'est possible dans la notification système en Expo Go (pas de Content Extension) — le style « Sol y sombra » ne s'applique qu'à l'écran de révision dans l'app. Le contenu de la notification programmée par le prototype (titre = mot, corps = traduction + exemple) reste du texte brut lisible, géré par le style natif iOS ; aucun changement nécessaire de ce côté.
+
+**Écarts avec la spec visuelle fournie, à valider** :
+- La spec ne montrait que 2 boutons (Difícil contour ocre / Fácil plein bordeaux) alors que SM-2 a besoin de 4 notes. Extrapolé à 4 en gardant le principe (négatif = contour, positif = plein) : Otra vez + Difícil en contour, Bien + Fácil en plein — à confirmer, pas dans la spec d'origine.
+- Couleurs non précisées dans la spec (label « LEXIS », texte méta) : choisies par cohérence avec le reste de la palette, voir commentaires dans `solYSombra.ts`.
+- Police : « Georgia » (serif système iOS, pas de nouvelle dépendance installée sans demander) plutôt qu'une police Google Fonts qui aurait nécessité `expo-font` + un package supplémentaire.
+
 **Recherche menée avant de coder quoi que ce soit** (voir aussi PLAN.md) — questions posées et réponses trouvées, avec sources :
 
 | Question | Réponse | Confiance |

@@ -11,6 +11,18 @@ import {
   scheduleGradeNotification,
   REVEAL_ACTION,
 } from './src/notifications';
+import { ReviewScreen, type ReviewCardData, type ReviewGrade } from './src/screens/ReviewScreen';
+
+// Mock — pas encore branché à SM-2 ni à la vraie file de cartes (tâches
+// 3-4). Repris tel quel de WordList/words.sample.json pour rester
+// cohérent avec le vrai contenu à venir plutôt que d'inventer un mot.
+const MOCK_CARD: ReviewCardData = {
+  word: 'trabajo',
+  translation: 'travail',
+  partOfSpeech: 'nom',
+  gender: 'masculin',
+  level: 'A1',
+};
 
 export default function App() {
   return (
@@ -24,6 +36,7 @@ function Content() {
   const db = useSQLiteContext();
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const [view, setView] = useState<'review' | 'diagnostic'>('review');
 
   const refreshLogs = useCallback(async () => {
     setLogs(await getAllLogs(db));
@@ -72,8 +85,25 @@ function Content() {
     Alert.alert('Programmée', `Notification "gato" dans 30 secondes (id ${id.slice(0, 8)}…).\n\nFerme complètement l'app maintenant (swipe vers le haut dans le multitâche), attends la notification, appuie sur "Ver traducción" SANS ouvrir l'app.`);
   };
 
+  if (view === 'review') {
+    return (
+      <View style={{ flex: 1 }}>
+        <ReviewScreen
+          card={MOCK_CARD}
+          onGrade={(grade: ReviewGrade) => Alert.alert('Note (mock)', `Grade sélectionné : ${grade}\n\nPas encore branché à SM-2 — voir tâche 3.`)}
+        />
+        <TouchableOpacity style={styles.diagnosticToggle} onPress={() => setView('diagnostic')}>
+          <Text style={styles.diagnosticToggleText}>Diagnostic notifications (tâche 0)</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
+      <TouchableOpacity onPress={() => setView('review')}>
+        <Text style={styles.backLink}>‹ Retour à l'écran de révision</Text>
+      </TouchableOpacity>
       <Text style={styles.title}>Lexis — prototype tâche 0</Text>
       <Text style={styles.subtitle}>
         Permission notifications : {permissionGranted === null ? '…' : permissionGranted ? 'accordée' : 'refusée'}
@@ -141,6 +171,9 @@ async function processResponse(
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAEEDA', paddingHorizontal: 20, paddingTop: 12 },
+  backLink: { color: '#993C1D', fontWeight: '600', marginBottom: 8 },
+  diagnosticToggle: { alignItems: 'center', paddingVertical: 14 },
+  diagnosticToggleText: { color: '#9C8778', fontSize: 12, textDecorationLine: 'underline' },
   title: { fontSize: 20, fontWeight: '700', color: '#4A1B0C' },
   subtitle: { fontSize: 13, color: '#993C1D', marginTop: 4, marginBottom: 16 },
   button: { backgroundColor: '#993C1D', paddingVertical: 14, borderRadius: 24, alignItems: 'center', marginBottom: 10 },
