@@ -1,5 +1,6 @@
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { solYSombra, formatMeta } from '../theme/solYSombra';
+import type { SM2Grade } from '../sm2/types';
 
 export type ReviewCardData = {
   word: string;
@@ -9,18 +10,15 @@ export type ReviewCardData = {
   level: string;
 };
 
-export type ReviewGrade = 'again' | 'hard' | 'good' | 'easy';
-
 type Props = {
   card: ReviewCardData;
-  onGrade: (grade: ReviewGrade) => void;
+  onGrade: (grade: SM2Grade) => void;
 };
 
 /**
- * L'écran de révision, style « Sol y sombra ». Pas encore branché au
- * moteur SM-2 ni à la vraie file de cartes (tâches 3-4) — données et
- * callback passés en props par l'appelant, mock pour l'instant côté
- * `App.tsx`.
+ * L'écran de révision, style « Sol y sombra ». Purement présentation :
+ * données et callback de notation passés par l'appelant — voir
+ * `ReviewScreenContainer.tsx` pour le branchement à SM-2/SQLite.
  */
 export function ReviewScreen({ card, onGrade }: Props) {
   return (

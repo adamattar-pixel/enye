@@ -37,16 +37,17 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 0. **Preuve de concept notifications** (tâche 0) — **validée et close**. Le montage en deux temps (mot → « Ver traducción » → 2ème notification traduction + 4 boutons de notation) fonctionne sur iPhone réel tant que l'app n'a pas été force-quittée. Limite acceptée : après un force-quit utilisateur, aucun code ne s'exécute en arrière-plan (politique iOS documentée par Apple, identique en natif — voir AUDIT.md) ; dégradation silencieuse et sans perte de données, résolue à la prochaine ouverture manuelle grâce au rechargement de la file. Bug de prototype trouvé et corrigé au passage : il fallait à la fois `getLastNotificationResponseAsync()` au démarrage ET `addNotificationResponseReceivedListener` en direct, pas l'un ou l'autre.
 1. **Réglages SM-2** — **fait** (8 nouvelles + 22 révisions = 30/j, voir ci-dessus).
 2. **Portage SM-2 en TypeScript** — **fait**. [mobile/src/sm2/](mobile/src/sm2/) (`types.ts`, `engine.ts`, `engine.test.ts`), 13/13 tests portés depuis `Packages/SM2Engine` et verts, aucune divergence de comportement trouvée.
-3. **Persistance + chargement de `words.json`** — pas commencé côté Expo. Contenu de `words.json` toujours incomplet (36/1000-2000 mots, non validés).
-4. **Planificateur de notifications** — **fait**. [mobile/src/scheduler/](mobile/src/scheduler/) (`types.ts`, `reviewScheduler.ts`, `reviewScheduler.test.ts`), 9/9 tests portés depuis `Packages/ReviewScheduler` et verts. Pas encore branché à `expo-notifications` (juste la logique pure de placement des créneaux pour l'instant).
-5. **Écrans** (Aujourd'hui, Session, Statistiques, Decks/mots) — **en cours**. Écran de révision fait (style Sol y sombra, données mock — voir AUDIT.md), les 3 autres pas commencés.
+3. **Persistance + chargement de `words.json`** — **fait**. [mobile/src/data/](mobile/src/data/) : schéma SQLite (`words` + `cards`), import au premier lancement, écran de révision branché sur de vraies cartes dues (plus plus de données mock). Contenu de `words.json` toujours incomplet (36/1000-2000 mots, non validés) — n'empêchait pas de construire le mécanisme.
+4. **Planificateur de notifications** — **fait, logique seulement**. [mobile/src/scheduler/](mobile/src/scheduler/) (`types.ts`, `reviewScheduler.ts`, `reviewScheduler.test.ts`), 9/9 tests portés depuis `Packages/ReviewScheduler` et verts. Pas encore branché à `expo-notifications` (juste le placement des créneaux pour l'instant, pas la programmation des vraies notifications).
+5. **Écrans** (Aujourd'hui, Session, Statistiques, Decks/mots) — **en cours**. Écran de révision fait et branché aux vraies données (style Sol y sombra, SM-2 + SQLite), les 3 autres pas commencés.
 6. **Audio, finitions, mode sombre** — pas commencé.
 
 ## Prochaines actions
 
-- [ ] Reprendre la validation de `words.json` (échantillon 36 mots, format proposé) avant l'étape 3 (persistance).
-- [ ] Persistance : charger `words.json` en SQLite (`expo-sqlite`) au premier lancement.
-- [ ] Brancher `mobile/src/sm2/` et `mobile/src/scheduler/` sur l'écran de révision et sur `expo-notifications` (actuellement données mock).
+- [ ] Reprendre la validation de `words.json` et continuer la génération par lots jusqu'à 1000-2000 mots (échantillon actuel : 36, déjà en base).
+- [ ] Brancher `mobile/src/scheduler/` sur `expo-notifications` pour programmer réellement les notifications (la logique de placement des créneaux existe, pas encore l'appel à l'API de notification).
+- [ ] Vérifier `mobile/src/data/database.ts` sur device réel — pas testable unitairement (pas de SQLite en mémoire sous Jest), donc pas encore vérifié que l'import + les requêtes fonctionnent vraiment sur iPhone (voir AUDIT.md).
+- [ ] Écrans restants : Aujourd'hui, Statistiques, Decks/mots.
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

@@ -11,18 +11,7 @@ import {
   scheduleGradeNotification,
   REVEAL_ACTION,
 } from './src/notifications';
-import { ReviewScreen, type ReviewCardData, type ReviewGrade } from './src/screens/ReviewScreen';
-
-// Mock — pas encore branché à SM-2 ni à la vraie file de cartes (tâches
-// 3-4). Repris tel quel de WordList/words.sample.json pour rester
-// cohérent avec le vrai contenu à venir plutôt que d'inventer un mot.
-const MOCK_CARD: ReviewCardData = {
-  word: 'trabajo',
-  translation: 'travail',
-  partOfSpeech: 'nom',
-  gender: 'masculin',
-  level: 'A1',
-};
+import { ReviewScreenContainer } from './src/screens/ReviewScreenContainer';
 
 export default function App() {
   return (
@@ -88,10 +77,7 @@ function Content() {
   if (view === 'review') {
     return (
       <View style={{ flex: 1 }}>
-        <ReviewScreen
-          card={MOCK_CARD}
-          onGrade={(grade: ReviewGrade) => Alert.alert('Note (mock)', `Grade sélectionné : ${grade}\n\nPas encore branché à SM-2 — voir tâche 3.`)}
-        />
+        <ReviewScreenContainer />
         <TouchableOpacity style={styles.diagnosticToggle} onPress={() => setView('diagnostic')}>
           <Text style={styles.diagnosticToggleText}>Diagnostic notifications (tâche 0)</Text>
         </TouchableOpacity>
