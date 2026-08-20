@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, SafeAreaView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Dimensions, Easing, Pressable, SafeAreaView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
@@ -14,6 +14,21 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'listening', label: 'Écoute' },
   { key: 'settings', label: 'Réglages' },
 ];
+
+// Largeur en pixels plutôt qu'en pourcentage — un `SafeAreaView` sans
+// `left` défini n'a pas de largeur propre à résoudre un `%` contre (voir
+// commentaire sur `drawerPositioner`), donc calculée une fois ici à
+// partir de la largeur d'écran réelle. Pas de gestion de rotation
+// d'écran (app téléphone en portrait uniquement, pas un besoin réel ici).
+const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.7);
+
+// Hauteur de l'icône ☰ (`hamburgerRow.paddingTop` + `hamburgerButton.height`,
+// voir plus bas) — le tiroir doit commencer exactement au bord bas de
+// l'icône, pas à une valeur devinée depuis le haut de l'écran (bug
+// signalé le 20/08/2026 : un décalage fixe en pixels depuis le tout haut
+// de l'écran ignore la hauteur réelle de l'encoche/l'île dynamique selon
+// l'appareil, donc le tiroir pouvait démarrer plus haut que l'icône).
+const DRAWER_TOP_OFFSET = 6 + 38;
 
 /**
  * Remplace l'ancienne barre de pilules fixe en bas d'écran par une icône
@@ -79,8 +94,8 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
       {open && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Fermer le menu des onglets" />
-          <SlideInFromRight style={styles.drawer}>
-            <SafeAreaView style={styles.drawerInner}>
+          <SlideInFromRight style={styles.drawerPositioner}>
+            <SafeAreaView style={[styles.drawer, { width: DRAWER_WIDTH }]}>
               {TABS.map((tab, index) => (
                 <View key={tab.key}>
                   <TabRow
@@ -101,12 +116,21 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
 }
 
 /** Glissement pur (translateX), aucune animation d'opacité — voir le
- * commentaire au-dessus de `TabBar`. */
+ * commentaire au-dessus de `TabBar`. Décélération `Easing.out(cubic)`
+ * plutôt que l'accélération/décélération par défaut d'`Animated.timing`
+ * — demandé explicitement ("smooth"), une courbe qui ralentit en douceur
+ * en approchant de sa position finale se sent plus fluide qu'une vitesse
+ * quasi constante sur toute la durée. */
 function SlideInFromRight({ style, children }: { style: StyleProp<ViewStyle>; children: React.ReactNode }) {
-  const translateX = useRef(new Animated.Value(36)).current;
+  const translateX = useRef(new Animated.Value(DRAWER_WIDTH)).current;
 
   useEffect(() => {
-    const animation = Animated.timing(translateX, { toValue: 0, duration: 220, useNativeDriver: true });
+    const animation = Animated.timing(translateX, {
+      toValue: 0,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
     animation.start();
     return () => animation.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,17 +180,24 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: 'rgba(0,0,0,0.35)',
       zIndex: 20,
     },
+    // Boîte de positionnement pure (pas de fond/bordure ici) — un
+    // `SafeAreaView` sans `left` défini n'a pas de largeur propre contre
+    // laquelle résoudre un `%`, donc toute l'apparence visuelle (fond,
+    // bordure, ombre) vit sur le `SafeAreaView` enfant (`drawer`
+    // ci-dessous), avec une largeur en pixels calculée une fois
+    // (`DRAWER_WIDTH`).
+    drawerPositioner: { position: 'absolute', top: 0, right: 0, bottom: 0, zIndex: 25 },
     // Tiroir ancré au bord droit, du bas de l'icône ☰ jusqu'en bas de
-    // l'écran — jugé trop petit en carte dimensionnée à son contenu
-    // (itération précédente), revenu à un tiroir plein en hauteur, avec
-    // juste une largeur légèrement réduite (70% au lieu de 78%).
+    // l'écran. `marginTop: DRAWER_TOP_OFFSET` s'ajoute au padding de
+    // sécurité automatique du `SafeAreaView` (encoche/île dynamique) —
+    // aligne le bord haut du tiroir exactement sur le bord bas de
+    // l'icône, quelle que soit la taille de l'encoche de l'appareil,
+    // plutôt qu'un décalage fixe en pixels depuis le tout haut de
+    // l'écran (bug signalé : le tiroir démarrait trop haut, "borné par
+    // le haut" de l'icône plutôt que par son bas).
     drawer: {
-      position: 'absolute',
-      top: 52,
-      right: 0,
-      bottom: 0,
-      width: '70%',
-      maxWidth: 300,
+      marginTop: DRAWER_TOP_OFFSET,
+      flex: 1,
       backgroundColor: t.cardBackground,
       borderLeftWidth: 1,
       borderLeftColor: t.cardBorder,
@@ -175,9 +206,7 @@ function createStyles(t: SolYSombraPalette) {
       shadowOpacity: 0.16,
       shadowRadius: 20,
       elevation: 10,
-      zIndex: 25,
     },
-    drawerInner: { flex: 1 },
 
     row: { paddingVertical: 18, paddingHorizontal: 24, borderLeftWidth: 3, borderLeftColor: 'transparent' },
     rowActive: { borderLeftColor: t.buttonFilled },

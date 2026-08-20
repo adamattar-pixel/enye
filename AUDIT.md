@@ -237,6 +237,18 @@ Suite à un retour explicite ("la fonctionnalité est inutilisable en pratique, 
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** : teinte réelle du clavier iOS, lisibilité du nouvel emplacement de l'historique.
 
+## Couverture thématique à 100% des 6002 mots (20/08/2026)
+
+**Constat.** Demande explicite de couvrir tous les mots, pas seulement les ~17% déjà tagués par le premier passage du script (voir plus haut). Échantillonnage du "divers" (nouveau filet de sécurité, voir ci-dessous) fait à chaque itération pour cibler les ajouts plutôt que deviner : `node -e` groupant les mots restants par `partOfSpeech` et affichant un échantillon réparti (pas les 100 premiers, un pas régulier sur toute la liste pour éviter un biais d'ordre alphabétique/de fréquence).
+
+**Impact.**
+- **Catégories grammaticales** (préposition, pronom, article, déterminant, conjonction, contraction, interjection, nombre) taguées directement par `partOfSpeech` — 130 mots, sans ambiguïté possible.
+- **Quatre thèmes larges ajoutés** (`cualidades`, `acciones_comunes`, `pensamiento_sociedad`, `cantidad_tiempo`), avec une deuxième passe de mots-clés après un premier échantillonnage qui a réduit le filet de sécurité de 3591 à 3123 mots (−468, ≈13% de réduction pour cette seule passe).
+- **Règle par suffixe pour les adverbes en "-ly"** (quickly, seriously, publicly...) → `cualidades` : repéré comme motif dominant dans l'échantillon des adverbes non tagués (>80% des adverbes du premier échantillon suivaient ce seul motif), plus efficace qu'énumérer chaque adverbe individuellement.
+- **Filet de sécurité `divers`** pour ce qui reste : 3123 mots (63% des 4939 mots initialement sans tag). **Ce n'est pas un vrai thème** — juste une garantie qu'aucun mot n'affiche "aucun thème" dans l'app. Composition dominante (vérifiée par échantillonnage) : noms très spécifiques (professions, objets, institutions — "commissioner", "shotgun", "orphanage"), verbes précis peu fréquents ("to whisper", "to bury", "to poison"), adjectifs de registre soutenu ("hypocritical", "elemental", "provisional"). Couvrir ça correctement demanderait une vraie compréhension sémantique (ou beaucoup plus de temps à énumérer des milliers de mots-clés supplémentaires), hors de portée raisonnable d'une heuristique par mot-clé dans le temps disponible.
+
+**Statut : implémenté, 6002/6002 mots ont un tag.** Vérifié : `words.json` reste un JSON valide (6002 entrées, aucune perte), `wordRepository.test.ts` (8/8), `tsc --noEmit` propre. **Non vérifié sur device** : si les nouveaux thèmes larges et surtout le filet "divers" (qui concentre plus de la moitié des mots nouvellement tagués) sont perçus comme utiles à l'usage ou plutôt comme du bruit — impossible à juger sans retour réel.
+
 ## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
 
 **Constat.** Demande explicite : compléter les tags CECRL manquants dans `words.json`, en vérifiant d'abord combien de mots en ont déjà un et combien n'en ont pas, avant de coder quoi que ce soit. Vérification faite par script one-off (comptage par valeur exacte du champ `level`) plutôt que supposée :

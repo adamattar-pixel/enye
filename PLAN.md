@@ -463,6 +463,19 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté et compilé, scripts injectés vérifiés syntaxiquement valides (`new Function()` en Node), non vérifié de bout en bout.** Même limite que la version précédente : aucun moteur de WebView disponible dans les outils de cette session. **Ne pas présenter comme réparé avant qu'un test réel sur device montre un nombre de segments > 0 pour une vraie vidéo.** Détail complet dans AUDIT.md, y compris l'architecture de repli (petit service local) toujours documentée mais non construite.
 
+## Les 6002 mots ont désormais tous un thème (20/08/2026)
+
+**Demande explicite** : après le premier passage (1027/5966 mots tagués, 17,2%), l'utilisateur a demandé que les 6002 mots aient tous un thème.
+
+**Implémenté** dans [mobile/scripts/tag-themes/generate.mjs](mobile/scripts/tag-themes/generate.mjs), trois ajouts en cascade :
+1. **Catégories grammaticales pures** (préposition/pronom/article/déterminant/conjonction/contraction/interjection → `grammaire` ; nombre → `nombres`) taguées directement par `partOfSpeech`, sans chercher de mot-clé — ces mots n'appartiennent à aucun domaine concret par nature.
+2. **Quatre nouveaux thèmes larges** (`cualidades`, `acciones_comunes`, `pensamiento_sociedad`, `cantidad_tiempo`) avec des listes de mots-clés étendues en deux passes, plus une règle par suffixe (adverbes en "-ly" → `cualidades`, la grande majorité des adverbes de manière suivait ce seul motif).
+3. **Filet de sécurité `divers`** pour ce qui ne matche toujours rien — garantit littéralement zéro mot sans tag, mais **honnêtement pas un vrai thème sémantique**.
+
+**Résultat chiffré** : 6002/6002 mots ont un tag. Sur les 4939 mots qui n'en avaient aucun : 1686 par mot-clé (dont les 4 nouveaux thèmes), 130 par catégorie grammaticale, **3123 par le filet `divers`**. Ce dernier nombre reste élevé — la majorité du vocabulaire restant est constituée de noms/verbes/adjectifs très spécifiques (professions, objets, verbes précis comme "to whisper"/"to bury") qui ne correspondent à aucun des thèmes proposés sans une compréhension sémantique réelle, hors de portée d'une heuristique par mot-clé. Détail complet, y compris la démarche d'échantillonnage utilisée pour cibler les ajouts de mots-clés, dans AUDIT.md.
+
+**Statut : implémenté.** Vérifié : `words.json` reste un JSON valide (6002 entrées), `wordRepository.test.ts` (8/8) et `tsc --noEmit` toujours verts. Pas de code applicatif touché (donnée statique). **Non vérifié sur device** : lisibilité/pertinence perçue des nouveaux thèmes larges en usage réel, notamment si "divers" (plus de la moitié des mots concernés) est jugé décevant à l'usage — à confirmer.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
