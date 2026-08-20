@@ -405,16 +405,17 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier la pertinence des résultats de recherche et la robustesse de l'extraction si YouTube modifie la structure de cette page (technique non officielle, comme documenté pour le reste de `listening/`).
 
-## Barre d'onglets remplacée par un menu ☰ (20/08/2026, 3 itérations le même jour)
+## Barre d'onglets remplacée par un menu ☰ (20/08/2026, 4 itérations le même jour)
 
 **Demande d'origine, ambiguë** : remplacer la barre de pilules fixe en bas d'écran par "trois traits horizontaux" (icône ☰) qui ouvre "un truc" pour choisir l'onglet — clarifiée via question à choix (maquettes ASCII) plutôt que devinée : icône qui ouvre un menu, pas une bande toujours visible.
 
-**État final, après 3 ajustements successifs demandés dans la même journée** — [TabBar.tsx](mobile/src/navigation/TabBar.tsx) :
+**État final, après 4 ajustements successifs demandés dans la même journée** — [TabBar.tsx](mobile/src/navigation/TabBar.tsx) :
 - Icône ☰ **en haut à droite**, alignée exactement sur la même ligne que le bouton clair/sombre déjà présent là (même `paddingTop`), à plat sans fond/ombre propre — "sur le même plan" que le reste de l'écran. Positionnée à droite (pas à gauche comme les deux premiers essais) précisément pour ne plus se superposer au libellé "LEXIS" de chaque écran, qui est toujours à gauche.
-- Un appui ouvre un **tiroir plein écran en hauteur mais pas en largeur** (~78% de l'écran, ancré au bord droit, sous l'icône), pas le grand rectangle centré ni le bandeau horizontal des deux versions précédentes.
-- Onglets empilés verticalement, séparés par un **trait fin et discret** (hairline, opacité réduite, avec une marge de chaque côté — ne touche pas les bords du tiroir), pas une bordure pleine largeur.
+- Un appui ouvre une **petite carte flottante dimensionnée à son contenu**, ancrée sous l'icône (~56% de la largeur, `maxWidth` 230) — pas le tiroir plein écran en hauteur de la 3e itération, jugé "trop grand en hauteur et largeur" après l'avoir vu tourner.
+- Onglets empilés verticalement, séparés par un **trait fin et discret** (hairline, opacité réduite, avec une marge de chaque côté — ne touche pas les bords de la carte), pas une bordure pleine largeur.
 - Onglet actif marqué par une **fine barre de couleur à gauche de la ligne** plutôt qu'un bloc de fond plein, pour rester sobre/moderne.
-- Toucher un onglet le sélectionne et referme le tiroir ; toucher en dehors (fond semi-transparent) referme sans changer d'onglet.
+- **Entrée en glissement pur droite→gauche, sans fondu** — `FadeInView` (utilisé pour la 3e itération) couple toujours opacité + translation, donc un petit composant animé dédié (`SlideInFromRight`, `Animated.Value` + `Animated.timing` sur `translateX` uniquement) a été écrit directement dans `TabBar.tsx` plutôt que d'ajouter un mode à `FadeInView` — pour ne pas changer le comportement des autres écrans qui l'utilisent avec fondu intentionnellement.
+- Toucher un onglet le sélectionne et referme le menu ; toucher en dehors (fond semi-transparent) referme sans changer d'onglet.
 - Aucun changement structurel dans `RootTabs.tsx` : `TabBar` reste monté uniquement hors session de révision, exactement comme avant.
 
 **Statut : implémenté.** Vérifié à chaque itération : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier le confort du geste (ouvrir/toucher une ligne/refermer), jamais vu tourner en dehors du bundle.
@@ -428,6 +429,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 **Solution implémentée** : au lieu de chercher une n-ième combinaison de paramètres HTTP, faire émettre la requête par un VRAI moteur de navigateur — la `WebView` déjà présente dans l'app (utilisée pour le lecteur). Nouveau fichier `mobile/src/listening/TranscriptFetcher.tsx` : charge la vraie page `youtube.com/watch` dans une `WebView` invisible, et exécute le `fetch()` du contenu des sous-titres DEPUIS le contexte JS de cette page (même origine, vrais cookies, vrai fingerprint navigateur) plutôt que depuis un client HTTP externe. `captions.ts` (requête HTTP nue, gratuite) reste le premier essai ; `TranscriptFetcher` prend le relais seulement si le premier essai revient sans segment. Logs de diagnostic ajoutés aux deux (statuts HTTP, tailles de corps, pistes détectées) — jamais de cookie/jeton loggué.
 
 **Statut : cause diagnostiquée avec preuves, solution architecturale codée et compilée, non vérifiée de bout en bout** — aucun moteur de WebView disponible dans les outils de cette session pour exécuter réellement le scénario "vraie vidéo → vrais segments". Détail complet et honnête dans AUDIT.md, y compris ce qui reste à prouver sur device et l'architecture de repli (petit service local) documentée mais pas construite tant qu'un test réel ne démontre pas que c'est nécessaire.
+
+## Fermer le clavier en touchant en dehors du champ de saisie (20/08/2026)
+
+**Demande explicite** : sur l'écran de révision de la conjugaison, ajouter un bouton pour sortir du champ de saisie, ou permettre de toucher en dehors pour fermer le clavier.
+
+**Implémenté** : `ConjugationReviewScreen.tsx` et `ListeningReviewScreen.tsx` (même souci, même composant `TextInput`, corrigé sur les deux par cohérence) enveloppés dans un `Pressable` plein écran qui appelle `Keyboard.dismiss()` au toucher, plutôt qu'un bouton supplémentaire — touche le champ ou les boutons à l'intérieur normalement, ferme le clavier partout ailleurs sur l'écran.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device.**
 
 ## Prochaines actions
 

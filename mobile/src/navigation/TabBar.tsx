@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, SafeAreaView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
-import { FadeInView } from '../components/FadeInView';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 export type TabKey = 'today' | 'stats' | 'decks' | 'conjugation' | 'listening' | 'settings';
@@ -27,13 +26,20 @@ const TABS: { key: TabKey; label: string }[] = [
  * (même ligne, "même plan"), avec un espacement fixe entre les deux pour
  * ne jamais les faire se chevaucher.
  *
- * Un appui ouvre un tiroir plein écran en hauteur mais pas en largeur
- * (~78% de l'écran, ancré à droite, sous l'icône) plutôt que le grand
- * rectangle centré de la version précédente — glisse légèrement depuis la
- * droite. Onglets empilés verticalement, séparés par un trait fin et
- * discret qui ne touche pas les bords du tiroir (pas une bordure pleine
- * largeur). L'onglet actif est marqué par une fine barre de couleur à
- * gauche de la ligne plutôt qu'un bloc de fond plein, pour rester sobre.
+ * Un appui ouvre une petite carte flottante (pas un tiroir plein écran —
+ * jugé trop grand en hauteur/largeur après un premier essai), ancrée sous
+ * l'icône, dimensionnée à son contenu. Onglets empilés verticalement,
+ * séparés par un trait fin et discret qui ne touche pas les bords de la
+ * carte (pas une bordure pleine largeur). L'onglet actif est marqué par
+ * une fine barre de couleur à gauche de la ligne plutôt qu'un bloc de
+ * fond plein, pour rester sobre.
+ *
+ * Entrée en glissement pur (droite → gauche), sans fondu — demandé
+ * explicitement en remplacement de `FadeInView` (qui couple toujours
+ * fondu + translation, pas d'option pour l'un sans l'autre). Implémenté
+ * ici avec `Animated` directement plutôt que d'ajouter un mode à
+ * `FadeInView`, pour ne pas changer le comportement des autres écrans qui
+ * l'utilisent avec fondu intentionnellement.
  *
  * Comme l'ancienne barre, ce composant n'est monté que hors session de
  * révision (voir RootTabs.tsx) — pas besoin de le cacher explicitement
@@ -71,26 +77,38 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
       {open && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Fermer le menu des onglets" />
-          <FadeInView duration={220} direction="right" distance={-24} style={styles.drawer}>
-            <SafeAreaView style={styles.drawerSafeArea}>
-              <View style={styles.drawerHeaderSpace} />
-              {TABS.map((tab, index) => (
-                <View key={tab.key}>
-                  <TabRow
-                    styles={styles}
-                    label={tab.label}
-                    active={tab.key === current}
-                    onPress={() => handleSelect(tab.key)}
-                  />
-                  {index < TABS.length - 1 && <View style={styles.divider} />}
-                </View>
-              ))}
-            </SafeAreaView>
-          </FadeInView>
+          <SlideInFromRight style={styles.drawer}>
+            {TABS.map((tab, index) => (
+              <View key={tab.key}>
+                <TabRow
+                  styles={styles}
+                  label={tab.label}
+                  active={tab.key === current}
+                  onPress={() => handleSelect(tab.key)}
+                />
+                {index < TABS.length - 1 && <View style={styles.divider} />}
+              </View>
+            ))}
+          </SlideInFromRight>
         </>
       )}
     </>
   );
+}
+
+/** Glissement pur (translateX), aucune animation d'opacité — voir le
+ * commentaire au-dessus de `TabBar`. */
+function SlideInFromRight({ style, children }: { style: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const translateX = useRef(new Animated.Value(36)).current;
+
+  useEffect(() => {
+    const animation = Animated.timing(translateX, { toValue: 0, duration: 220, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return <Animated.View style={[style, { transform: [{ translateX }] }]}>{children}</Animated.View>;
 }
 
 function TabRow({
@@ -134,39 +152,35 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: 'rgba(0,0,0,0.35)',
       zIndex: 20,
     },
-    // Tiroir plein en hauteur, pas en largeur — ancré au bord droit, sous
-    // l'icône qui l'ouvre. Ombre portée vers la gauche (le tiroir
-    // recouvre le contenu, pas l'inverse).
+    // Petite carte flottante dimensionnée à son contenu (pas un tiroir
+    // plein écran — jugé trop grand), ancrée sous l'icône ☰.
     drawer: {
       position: 'absolute',
-      top: 0,
-      right: 0,
-      bottom: 0,
-      width: '78%',
-      maxWidth: 340,
+      top: 52,
+      right: 12,
+      width: '56%',
+      maxWidth: 230,
       backgroundColor: t.cardBackground,
-      borderLeftWidth: 1,
-      borderLeftColor: t.cardBorder,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: t.cardBorder,
+      overflow: 'hidden',
       shadowColor: '#000',
-      shadowOffset: { width: -6, height: 0 },
+      shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.16,
-      shadowRadius: 20,
+      shadowRadius: 18,
       elevation: 10,
       zIndex: 25,
     },
-    drawerSafeArea: { flex: 1 },
-    drawerHeaderSpace: { height: 54 },
 
-    row: { paddingVertical: 18, paddingHorizontal: 24, borderLeftWidth: 3, borderLeftColor: 'transparent' },
+    row: { paddingVertical: 13, paddingHorizontal: 18, borderLeftWidth: 3, borderLeftColor: 'transparent' },
     rowActive: { borderLeftColor: t.buttonFilled },
-    rowLabel: { fontSize: 16, fontWeight: '600', color: t.wordText },
+    rowLabel: { fontSize: 14, fontWeight: '600', color: t.wordText },
     rowLabelActive: { color: t.buttonFilled, fontWeight: '700' },
 
     // Trait sobre et discret entre deux onglets — hairline (le plus fin
     // possible), opacité réduite, et surtout PAS pleine largeur (retiré
-    // des bords du tiroir via une marge horizontale) : demandé
-    // explicitement en remplacement de la bordure pleine largeur de la
-    // version précédente.
-    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.cardBorder, marginHorizontal: 24, opacity: 0.6 },
+    // des bords de la carte via une marge horizontale).
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: t.cardBorder, marginHorizontal: 18, opacity: 0.6 },
   });
 }

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -63,7 +63,10 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
   };
 
   return (
-    <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
+    // Toucher en dehors du champ de saisie ferme le clavier — même
+    // correctif que ConjugationReviewScreen.tsx, demandé explicitement.
+    <Pressable style={styles.screenPressable} onPress={Keyboard.dismiss}>
+      <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
       <FadeInView duration={350} distance={20} style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.label}>LEXIS · COMPRÉHENSION ORALE</Text>
@@ -149,12 +152,14 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
 
         <AzulejoFrieze theme={theme} />
       </FadeInView>
-    </ScreenContainer>
+      </ScreenContainer>
+    </Pressable>
   );
 }
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
+    screenPressable: { flex: 1 },
     screen: { justifyContent: 'center' },
     card: {
       backgroundColor: t.cardBackground,

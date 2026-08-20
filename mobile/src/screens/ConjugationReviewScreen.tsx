@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -70,7 +70,14 @@ export function ConjugationReviewScreen({ card, onGrade }: Props) {
   };
 
   return (
-    <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
+    // Toucher n'importe où en dehors du champ de saisie ferme le clavier
+    // — demandé explicitement ("cliquer dans le vide pour sortir du
+    // textbox"). `Pressable` imbriqué : toucher le champ ou les boutons
+    // à l'intérieur ne déclenche pas ce `onPress` (le système de
+    // réponse au toucher de React Native donne la priorité à l'élément
+    // le plus profond), donc ça ne gêne pas la saisie elle-même.
+    <Pressable style={styles.screenPressable} onPress={Keyboard.dismiss}>
+      <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
       <FadeInView duration={350} distance={20} style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.label}>LEXIS · CONJUGAISON</Text>
@@ -134,7 +141,8 @@ export function ConjugationReviewScreen({ card, onGrade }: Props) {
 
         <AzulejoFrieze theme={theme} />
       </FadeInView>
-    </ScreenContainer>
+      </ScreenContainer>
+    </Pressable>
   );
 }
 
@@ -163,6 +171,7 @@ function GradeButton({
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
+    screenPressable: { flex: 1 },
     screen: {
       justifyContent: 'center',
     },
