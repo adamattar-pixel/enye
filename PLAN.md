@@ -20,7 +20,7 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 | Sujet | Décision |
 |---|---|
-| Framework | Expo (React Native, TypeScript), SDK 57 |
+| Framework | Expo (React Native, TypeScript), **SDK 54** (aligné sur la version d'Expo Go installée sur l'iPhone — 54.0.2 — pas la dernière SDK ; Expo Go ne supporte qu'une seule version de SDK à la fois) |
 | Nouvelles cartes / jour | 8 |
 | Plafond de révisions / jour | 22 (total 30/j — cohérent avec la fenêtre 8h-22h, voir calcul ci-dessous) |
 | Plage horaire des notifications | 8h – 22h |
