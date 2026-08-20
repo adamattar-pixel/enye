@@ -4,16 +4,19 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { DecksScreen } from '../screens/DecksScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
 import { TabBar, type TabKey } from './TabBar';
 import { FadeInView } from '../components/FadeInView';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, useThemeToggle, type SolYSombraPalette } from '../theme/solYSombra';
 
-/** Les 4 écrans du cahier des charges : Aujourd'hui / Statistiques /
- * Decks & mots vivent derrière une barre d'onglets ; Session (la
- * révision plein écran) est un écran plein qui masque la barre, lancé
- * depuis Aujourd'hui et qui y ramène en sortant. */
+/** Aujourd'hui / Statistiques / Decks & mots / Réglages vivent derrière
+ * une barre d'onglets (Réglages séparé de Decks & mots le 20/08/2026,
+ * demandé explicitement — regroupe réglages, historique et prochaine
+ * notification à part de la liste de mots) ; Session (la révision plein
+ * écran) est un écran plein qui masque la barre, lancé depuis
+ * Aujourd'hui et qui y ramène en sortant. */
 export function RootTabs({ db }: { db: SQLiteDatabase }) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -34,6 +37,7 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
             {tab === 'today' && <TodayScreen db={db} onStartSession={() => setSessionActive(true)} />}
             {tab === 'stats' && <StatsScreen db={db} />}
             {tab === 'decks' && <DecksScreen db={db} />}
+            {tab === 'settings' && <SettingsScreen db={db} />}
           </FadeInView>
           <TabBar current={tab} onChange={setTab} />
         </FadeInView>

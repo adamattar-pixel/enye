@@ -71,6 +71,10 @@ Nouveau retour après test réel : boutons de notation non réactifs et trop pet
 - **Validation de réglages** : heure de fin ne peut plus précéder l'heure de début (backlog résolu au passage).
 - Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (878 modules, HTTP 200). **Non vérifié sur device** — à confirmer au prochain test réel, en particulier si les boutons répondent maintenant au toucher.
 
+## Réglages/Historique/Notifications en onglet à part (20/08/2026)
+
+Demandé explicitement : sortir Réglages et Historique des sous-onglets de Decks & mots. Nouvel onglet "Réglages" dans la barre du bas ([SettingsScreen.tsx](mobile/src/screens/SettingsScreen.tsx)), regroupant Réglages/Historique/Notifications en sous-onglets internes ; Decks & mots ne garde que la liste de mots. Voir AUDIT.md.
+
 ## Bouton "Réinitialiser ma progression" (20/08/2026)
 
 "Rien à réviser" après un vidage de cache n'était pas un bug : le cache Metro (JS) et les données SQLite de l'app sont deux choses séparées, la base persiste tant qu'on ne l'efface pas explicitement. Ajouté un bouton dans Réglages → Zone sensible pour repartir de zéro sans attendre les échéances naturelles (efface reviews + cards, remet chaque mot existant en "nouveau"). Voir AUDIT.md.

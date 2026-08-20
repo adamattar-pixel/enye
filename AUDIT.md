@@ -25,6 +25,18 @@ Retour utilisateur après un nouveau test réel : les boutons de notation (Otra 
 
 **Vérifié pour ce chantier** : `tsc --noEmit` sans erreur, `npm test` (43 tests) vert, bundle Metro compilé et servi (`curl` sur `/index.ts.bundle`, HTTP 200, `node -c` sans erreur de syntaxe, 878 modules). **Non vérifié** : comportement réel des boutons, de l'historique et des animations sur iPhone — seul un test réel le confirmera.
 
+## Réglages/Historique/Notifications séparés de Decks & mots en un 4e onglet (20/08/2026)
+
+Demandé explicitement : sortir Réglages et Historique des sous-onglets de Decks & mots pour en faire un onglet à part dans la barre du bas. Notifications (ajouté la veille aux côtés de Réglages/Historique dans Decks & mots) n'était pas nommé dans la demande, mais regroupé avec eux plutôt que laissé seul dans Decks & mots : thématiquement plus proche de Réglages/consultation que de la gestion de la liste de mots, et Decks & mots n'aurait gardé qu'un seul sous-onglet ("Mots") si Notifications était resté — pas une vraie décision binaire, un jugement pris pour rester cohérent avec l'esprit de la demande plutôt qu'une lecture littérale limitée aux deux mots cités.
+
+**Implémenté** :
+- [SettingsScreen.tsx](mobile/src/screens/SettingsScreen.tsx) (nouveau) : reprend telles quelles les vues `SettingsView`, `HistoryView`, `NotificationsView` déplacées depuis `DecksScreen.tsx`, avec leurs propres sous-onglets (Réglages / Historique / Notifications, "Réglages" par défaut à l'ouverture).
+- [DecksScreen.tsx](mobile/src/screens/DecksScreen.tsx) réduit à la liste de mots seule (`WordListView` + `AddWordModal`) — plus de sous-onglets, plus besoin puisqu'il ne reste qu'une seule vue.
+- [TabBar.tsx](mobile/src/navigation/TabBar.tsx) : 4e onglet "Réglages" ajouté à côté d'Aujourd'hui/Statistiques/Decks & mots. Barre resserrée (`gap` 10→6, `paddingHorizontal` 14→10, police des libellés 12→11) pour garder assez de place à 4 pilules au lieu de 3.
+- [RootTabs.tsx](mobile/src/navigation/RootTabs.tsx) : branche le nouvel onglet.
+
+**Vérifié** : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vérifié sur device** — en particulier si 4 pilules à cette taille restent confortables au toucher sur un écran d'iPhone standard (pas seulement en simulation de layout).
+
 ## Vocabulaire élargi à 6002 mots + import incrémental (20/08/2026)
 
 Demandé explicitement : intégrer les 2000 mots générés (`words.generated.json`, jamais fusionnés jusque-là), "voire plus". Deux volets : (1) produire et fusionner davantage de vocabulaire, (2) faire en sorte que l'installation déjà sur l'iPhone de l'utilisateur (base SQLite déjà peuplée avec les 36 mots d'origine, voir la section "Rien à réviser" ci-dessous) reçoive bien les nouveaux mots — pas juste les nouvelles installations.
