@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { decodeHtmlEntities, parseTimedTextXml, type CaptionCue } from './captions';
+import type { CaptionCue } from './captions';
+import { parseInterceptedBody, pairDomSegments } from './transcriptParsing';
 import type { CaptionStatus } from './types';
 
 export interface TranscriptFetchResult {
@@ -58,11 +59,18 @@ const DESKTOP_USER_AGENT =
  * de 9s, au-delà duquel on renvoie `unavailable` plutôt que d'attendre
  * indéfiniment.
  *
- * **Non vérifié de bout en bout dans cette session** — aucun moteur de
- * WebView disponible dans les outils utilisés ici pour exécuter
- * réellement ce scénario. Ne pas présenter comme fonctionnel avant un
- * test réel sur device montrant un nombre de segments > 0 pour une
- * vraie vidéo.
+ * **Test réel sur device (21/08/2026) : le mécanisme d'interception
+ * fonctionne.** `button_search` a trouvé et cliqué le bouton, `xhr_intercepted`
+ * a capturé un vrai corps de 858 225 caractères pour une requête
+ * `timedtext?...&pot=...&potc=1` (le "PoToken" généré par le propre code
+ * de la page, confirmant l'hypothèse ci-dessus) — mais le résultat final
+ * était quand même "0 segments" : le corps était au format `fmt=json3`
+ * (`events[].tStartMs`/`segs[].utf8`), une forme que le parseur JSON ne
+ * reconnaissait pas encore (il ne savait lire que la forme `get_transcript`
+ * spéculative). Corrigé — voir `parseJson3Captions` plus bas. **Ce
+ * correctif de parsing lui-même n'a pas encore été revérifié sur
+ * device** — ne pas présenter comme fonctionnel avant un nouveau test
+ * montrant un nombre de segments > 0.
  */
 
 type WebViewMessage =
@@ -256,73 +264,11 @@ const DOM_FALLBACK_SCRIPT = `
 })();
 `;
 
-/** Le corps intercepté peut être du XML `timedtext` ou du JSON
- * `get_transcript`, selon quel mécanisme la page a utilisé — détecté par
- * le premier caractère non-blanc plutôt que supposé. */
-function parseInterceptedBody(body: string): CaptionCue[] {
-  const trimmed = body.trim();
-  if (!trimmed) return [];
-  if (trimmed.startsWith('<')) return parseTimedTextXml(trimmed);
-  try {
-    return extractJsonTranscriptSegments(JSON.parse(trimmed));
-  } catch {
-    return [];
-  }
-}
-
-/** Parcourt récursivement le JSON de `get_transcript` à la recherche de
- * tout objet portant `startMs`/`endMs` — pas un chemin fixe dans
- * l'arborescence (structure interne non officielle, jamais observée
- * directement dans cette session puisque l'endpoint renvoyait
- * systématiquement une erreur depuis ce réseau, voir AUDIT.md) : une
- * recherche en profondeur est la seule approche raisonnable sans avoir
- * pu inspecter un vrai payload. */
-function extractJsonTranscriptSegments(root: unknown, depth = 0): CaptionCue[] {
-  const out: CaptionCue[] = [];
-  function walk(node: unknown, level: number) {
-    if (level > 60 || !node || typeof node !== 'object') return;
-    const obj = node as Record<string, unknown>;
-    const startMs = obj.startMs;
-    const endMs = obj.endMs;
-    if ((typeof startMs === 'string' || typeof startMs === 'number') && (typeof endMs === 'string' || typeof endMs === 'number')) {
-      const text = extractSnippetText(obj.snippet);
-      if (text) {
-        out.push({ startTime: Number(startMs) / 1000, endTime: Number(endMs) / 1000, transcript: text });
-      }
-    }
-    for (const key of Object.keys(obj)) walk(obj[key], level + 1);
-  }
-  walk(root, depth);
-  return out;
-}
-
-function extractSnippetText(snippet: unknown): string | null {
-  if (!snippet || typeof snippet !== 'object') return null;
-  const s = snippet as { simpleText?: unknown; runs?: unknown };
-  if (typeof s.simpleText === 'string') return decodeHtmlEntities(s.simpleText.trim());
-  if (Array.isArray(s.runs)) {
-    const text = s.runs
-      .map((r) => (r && typeof r === 'object' && typeof (r as { text?: unknown }).text === 'string' ? (r as { text: string }).text : ''))
-      .join('')
-      .trim();
-    return text.length > 0 ? decodeHtmlEntities(text) : null;
-  }
-  return null;
-}
-
-/** Le panneau de transcription n'affiche qu'un timestamp de DÉBUT par
- * ligne (pas de fin) — la fin de chaque segment est déduite du début du
- * suivant ; le dernier segment reçoit une durée par défaut de 4s (durée
- * plausible pour une ligne de dictée, cohérent avec ce qui est utilisé
- * ailleurs dans `listening/` comme hypothèse non mesurée). */
-function pairDomSegments(raw: { startTime: number; text: string }[]): CaptionCue[] {
-  const sorted = [...raw].sort((a, b) => a.startTime - b.startTime);
-  return sorted.map((seg, index) => ({
-    startTime: seg.startTime,
-    endTime: index < sorted.length - 1 ? sorted[index + 1].startTime : seg.startTime + 4,
-    transcript: seg.text,
-  }));
-}
+// Parsing du corps intercepté (`parseInterceptedBody`, `pairDomSegments`)
+// et de ses variantes de format (`fmt=json3`, `get_transcript`) déplacé
+// dans `transcriptParsing.ts` (module pur, sans import React Native) —
+// voir ce fichier pour le détail complet, y compris la découverte du
+// 21/08/2026 sur le format `fmt=json3` réellement observé.
 
 /**
  * Hook exposant `fetchTranscript(videoId)` (une promesse) et `node` (à

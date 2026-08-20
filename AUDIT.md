@@ -260,6 +260,26 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device.**
 
+## Cinquième itération — l'interception réseau fonctionne réellement, seul le parsing était cassé (21/08/2026)
+
+**Constat.** Retour réel avec logs complets, sur une vraie vidéo Ibai avec sous-titres espagnols auto-générés confirmés disponibles. Séquence observée :
+1. `network_patch_installed` — le patch `fetch`/`XMLHttpRequest` s'installe correctement.
+2. `page_context` — `href` sans `&app=desktop` (le correctif précédent a bien pris), mais le `bodySample` (500 premiers caractères) montre toujours des marqueurs `watch7-content`/`watch-main-col` — **résidu de contenu de repli côté serveur, pas représentatif de la page réellement chargée**, comme le montre la suite.
+3. `consent_check` — aucun bandeau de consentement trouvé (`found: false`), pas la cause ici.
+4. `button_search` — **`found: true, selector: "aria-label"`** : le bouton "Show transcript" a été trouvé et cliqué avec succès, contrairement au tout premier test. Confirme que la page réellement rendue EST la version moderne, malgré l'apparence du `bodySample`.
+5. `xhr_intercepted` — **un vrai corps de 858 225 caractères capturé**, pour une requête `.../api/timedtext?...&pot=Mlk6Hl_ysIq2...&potc=1&fmt=json3...` — la présence d'un paramètre `pot`/`potc` (le "PoToken") confirme directement l'hypothèse retenue depuis le début de ce chantier : la page émet une requête correctement authentifiée, que ni `fetchVideoCaptions()` ni la première version de `TranscriptFetcher.tsx` ne pouvaient reproduire elles-mêmes.
+
+**Malgré ça, l'app a affiché "0 segments".**
+
+**Diagnostic.** Le corps intercepté était au format `fmt=json3` (`{ events: [{ tStartMs, dDurationMs, segs: [{ utf8 }] }] }`), une structure que `parseInterceptedBody`/`extractJsonTranscriptSegments` ne reconnaissait pas — ce fichier ne savait lire que la forme spéculative `get_transcript` (`startMs`/`endMs`/`snippet`), jamais confirmée par un vrai payload jusqu'ici. Le contenu était donc récupéré avec succès, puis silencieusement perdu au parsing.
+
+**Impact / correctif appliqué.**
+- Nouveau parseur `parseJson3Captions`, écrit contre la structure réelle observée (pas une spéculation cette fois).
+- **Logique de parsing extraite dans un nouveau fichier pur, `mobile/src/listening/transcriptParsing.ts`**, sans aucun import React/React Native — `TranscriptFetcher.tsx` importe `react-native-webview`, qui lève `Invariant Violation: TurboModuleRegistry.getEnforcing(...): 'RNCWebViewModule' could not be found` au chargement du module sous Jest (aucun module natif enregistré dans l'environnement de test) : impossible de tester la moindre fonction, même 100% pure, tant qu'elle vivait dans ce fichier. Découvert en essayant d'ajouter un premier test pour `parseJson3Captions`.
+- **8 tests unitaires** (`transcriptParsing.test.ts`) contre un fixture reproduisant fidèlement la forme réelle (événements de positionnement sans `segs` mélangés aux événements de texte, comme observé dans le vrai payload), plus les cas limites (durée par défaut, entités HTML, texte vide, repli XML, corps vide/invalide).
+
+**Statut : cause du "0 segments" identifiée avec certitude (pas une hypothèse — le payload réel a été vu dans les logs), correctif de parsing implémenté et couvert par des tests unitaires basés sur la forme réelle. Le mécanisme d'interception réseau lui-même est maintenant CONFIRMÉ fonctionnel en conditions réelles — c'était le plus gros risque non résolu de toute cette fonctionnalité.** Ce qui reste non vérifié : que `parseJson3Captions`, une fois exécuté sur le vrai corps de 858 225 caractères (pas seulement sur un fixture construit à la main), produise bien un nombre de segments > 0 cohérent. Le prochain test réel sur device doit le confirmer avant de considérer cette fonctionnalité comme réparée.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

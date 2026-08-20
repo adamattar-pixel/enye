@@ -520,6 +520,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device.**
 
+## Percée sur les sous-titres : l'interception fonctionne, seul le parsing était cassé (21/08/2026)
+
+**Retour réel avec logs complets** : `button_search` a trouvé et cliqué le bouton "Show transcript" (le retrait de `&app=desktop` a fonctionné), et `xhr_intercepted` a capturé un VRAI corps de 858 225 caractères pour une requête `timedtext` — avec un paramètre `pot=...&potc=1` (le "PoToken" généré correctement par le propre code de la page, confirmant l'hypothèse retenue depuis le début). L'app affichait quand même "0 segments" : le corps était au format `fmt=json3` (`events[].tStartMs`/`segs[].utf8`), que le parseur JSON ne reconnaissait pas (il ne savait lire que la forme spéculative `get_transcript`).
+
+**Corrigé** : nouveau parseur `parseJson3Captions` pour ce format, confirmé par un vrai payload plutôt que deviné. Logique de parsing extraite dans `mobile/src/listening/transcriptParsing.ts` (module pur, sans import `react-native-webview`) pour la rendre testable — `TranscriptFetcher.tsx` importe `react-native-webview`, qui plante au chargement du module sous Jest, empêchant tout test de logique qui y vivrait. 8 nouveaux tests (`transcriptParsing.test.ts`), avec un fixture reproduisant la forme réelle observée.
+
+**Statut : correctif de parsing implémenté et testé unitairement (avec un fixture basé sur un vrai payload), mais PAS encore revérifié sur device.** Le mécanisme d'interception lui-même (patch réseau, clic sur le bouton) est maintenant confirmé fonctionnel en conditions réelles — c'était la plus grosse inconnue de toute cette fonctionnalité. Reste à confirmer que le nouveau parseur produit bien des segments > 0 une fois appliqué. Détail complet dans AUDIT.md.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.

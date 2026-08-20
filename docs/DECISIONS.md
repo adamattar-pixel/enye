@@ -137,16 +137,16 @@ Consequences: Selection logic lives client-side in `ListeningReviewContainer.tsx
 
 # Decision 010 — Listening captions: WebView-based fetch, not raw HTTP
 
-Date: 2026-08-20 (multiple iterations same day)
-Status: Accepted, mechanism still unverified end-to-end
+Date: 2026-08-20 (multiple iterations), mechanism confirmed working 2026-08-21
+Status: Accepted, confirmed correct — last remaining piece (parser fix) not yet reverified on device
 
 Context: Direct HTTP fetch to YouTube's `timedtext`/InnerTube endpoints fails 100% of the time from every network tested (datacenter and — per on-device logs — from the user's iPhone too), most likely YouTube's PoToken/BotGuard anti-bot requirement.
 
-Decision: Load the real `youtube.com/watch` page in a hidden `WebView`, intercept the request the page's *own* code makes when the user clicks "Show transcript" (patched `fetch`/`XMLHttpRequest` before page load), with a DOM-read fallback. See `docs/specs/listening-comprehension.md` for the full mechanism and its current unresolved state.
+Decision: Load the real `youtube.com/watch` page in a hidden `WebView`, intercept the request the page's *own* code makes when the user clicks "Show transcript" (patched `fetch`/`XMLHttpRequest` before page load), with a DOM-read fallback. See `docs/specs/listening-comprehension.md` for the full mechanism.
 
-Alternatives considered and rejected: issuing our own `fetch()` from inside the WebView's JS context (tried first, no better — a self-issued request doesn't inherit a valid PoToken just by running in a browser engine); a small local backend proxy (documented as a fallback, not built — no evidence yet that it's necessary).
+Alternatives considered and rejected: issuing our own `fetch()` from inside the WebView's JS context (tried first, no better — a self-issued request doesn't inherit a valid PoToken just by running in a browser engine); a small local backend proxy (documented as a fallback, not built — no evidence it's necessary, and now less likely to be needed).
 
-Status detail: as of the last on-device test, the transcript panel still doesn't open reliably; root-caused so far to `&app=desktop` accidentally serving YouTube's legacy pre-2017 page rather than modern desktop (fixed, unverified) — see root `AUDIT.md` "Débogage dédié de la récupération de captions" for the full iteration history.
+Status detail: confirmed working on device 2026-08-21 — the button is found and clicked, and a real ~858KB caption payload was intercepted, its URL carrying a `pot`/`potc` PoToken param (direct confirmation of the whole hypothesis). The "0 segments" result traced to a separate bug: the payload's `fmt=json3` shape wasn't recognized by the parser (fixed, unit-tested, not yet reverified on device — see `mobile/src/listening/transcriptParsing.ts`). The local-backend-proxy fallback is no longer expected to be necessary given this result, but keep it documented until a device test confirms segments > 0 end-to-end.
 
 ---
 

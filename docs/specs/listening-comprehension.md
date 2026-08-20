@@ -1,6 +1,6 @@
 # Spec: Listening comprehension (Compréhension orale / Écoute tab)
 
-Status: **implemented, not yet working end-to-end** — see `docs/AUDIT.md` Issues #1. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
+Status: **implemented, the hard problem (network interception) is confirmed working on device, last fix not yet reverified** — see `docs/AUDIT.md` Issues #1. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
 
 ## Problem
 
@@ -25,7 +25,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 - No backend/server of any kind (see `CLAUDE.md`) — everything runs from the Expo app itself, inside a `WebView` where a real browser engine is needed.
 - No official YouTube API covers caption *content* retrieval for arbitrary third-party videos (`captions.download` requires OAuth from the video's owner) — every mechanism here is unofficial and can break without notice if YouTube changes its page/API structure.
-- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly, **never confirmed to actually render/play on the user's device**.
+- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly. Its JS-execution and network-request capability is now confirmed working on device (captions interception proves it); actual **video playback** specifically has not been directly observed yet.
 
 ## Selection algorithm (implemented, `mobile/src/listening/selection.ts` + `ListeningReviewContainer.tsx`)
 
@@ -46,7 +46,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 Verified by unit test (`selection.test.ts`, 12/12): cooldown enforcement, the 1/2/3/4-eligible-videos relaxation edge cases, and a statistical no-bias-by-segment-count check.
 
-## Captions pipeline (the part that's currently broken)
+## Captions pipeline (network interception confirmed working; parsing was the last bug found)
 
 ```
 Add video (URL or search result)
@@ -54,8 +54,9 @@ Add video (URL or search result)
   -> fetchVideoCaptions()  [captions.ts: raw HTTP fetch to timedtext]
        -- confirmed 100% broken from every network tested, including
           the user's real iPhone: returns HTTP 200 with an EMPTY body.
-          Root cause hypothesis: YouTube's PoToken/BotGuard anti-bot
-          requirement, applied to any non-browser-issued request.
+          Root cause: YouTube's PoToken/BotGuard anti-bot requirement,
+          applied to any non-browser-issued request -- this path will
+          likely never work and exists only as a free first attempt.
   -> if that returns 0 segments, fall back to useTranscriptFetcher()
      (TranscriptFetcher.tsx):
        1. patch window.fetch/XMLHttpRequest BEFORE page load
@@ -63,20 +64,36 @@ Add video (URL or search result)
           request containing get_transcript or timedtext
        2. load the real watch page in a hidden WebView, desktop
           userAgent forced (NOT &app=desktop -- that serves YouTube's
-          legacy pre-2017 page instead, confirmed on-device, since fixed)
+          legacy pre-2017 page instead, confirmed on-device, fixed)
        3. after load + 2.5s, inject a script that dismisses a cookie-
           consent banner if present, then finds and clicks the real
           "Show transcript" button (so YouTube's own code issues the
           request, carrying a token it generates correctly)
+          -- CONFIRMED WORKING on device 2026-08-21: button found and
+             clicked (found: true, selector: "aria-label")
        4. if nothing is intercepted within 5s of the click, fall back
           to reading the rendered ytd-transcript-segment-renderer DOM
-          directly
+          directly (not yet exercised on device -- step 3 has been
+          succeeding, so this fallback path hasn't fired in testing)
        5. 9s global timeout -> unavailable if nothing worked
+  -> intercepted body parsed by mobile/src/listening/transcriptParsing.ts
+     (extracted from TranscriptFetcher.tsx specifically so it's testable
+     -- importing react-native-webview crashes under Jest):
+       - CONFIRMED on device 2026-08-21: the real request was
+         `timedtext?...&pot=...&potc=1&fmt=json3` and its 858,225-char
+         body uses the shape { events: [{ tStartMs, dDurationMs,
+         segs: [{ utf8 }] }] } -- parseJson3Captions() handles this,
+         added and unit-tested (8 tests) against a fixture matching
+         that shape. NOT yet reverified against the real captured bytes.
+       - a speculative get_transcript-shaped fallback parser
+         (extractJsonTranscriptSegments) is kept second-priority in
+         case some request path returns that shape instead -- still
+         unconfirmed, was never actually observed
   -> segments imported into SQLite (listening_videos/listening_segments/
      listening_cards), captionStatus = available | auto_generated | unavailable
 ```
 
-**Current status, from real device logs (2026-08-20):** the "Show transcript" button was not being found at all in the first test. Diagnosed to `&app=desktop` serving a legacy page structure with no modern `ytd-*` components; that parameter has been removed, desktop `userAgent` kept alone. **Not yet reverified on device.** If the button still isn't found once a modern page is confirmed, the next hypothesis (flagged by the user, not yet tried) is that the video description needs to be expanded ("...more") before the transcript button appears in the DOM on the real desktop site.
+**Current status, from real device logs (2026-08-21):** the network-interception mechanism itself works end-to-end — button found/clicked, real caption content intercepted (858KB, with a PoToken param proving the approach is sound). The "0 segments" result traced to a parser bug (wrong JSON shape assumed), now fixed and unit-tested. **What's not yet confirmed:** that the fix produces segments > 0 when run against a real device's actual captured payload, not just a hand-built test fixture. This is the single remaining thing standing between "implemented" and "confirmed working."
 
 ## Edge cases (decided, see root `PLAN.md`'s original planning section for full reasoning)
 
@@ -92,7 +109,8 @@ Add video (URL or search result)
 
 - `mobile/src/listening/types.ts` — `ListeningVideo`, `ListeningSegment`, `CaptionStatus`.
 - `mobile/src/listening/{youtubeUrl,search,metadata,captions,selection}.ts` — pure/network helpers, see file headers for what's tested vs. live-verified vs. speculative.
-- `mobile/src/listening/TranscriptFetcher.tsx` — the WebView-based fallback, see above.
+- `mobile/src/listening/TranscriptFetcher.tsx` — the WebView-based fallback (orchestration only), see above.
+- `mobile/src/listening/transcriptParsing.ts` — pure parsing of the intercepted caption body (json3/get_transcript/XML), unit-tested (`transcriptParsing.test.ts`). Kept separate from `TranscriptFetcher.tsx` because importing `react-native-webview` crashes at module load under Jest.
 - `mobile/src/data/database.ts` — `listening_videos`/`listening_segments`/`listening_cards`/`listening_reviews` tables and their CRUD (no test coverage, see `docs/CONVENTIONS.md`).
 - `mobile/src/data/settings.ts` — `listeningNewSegmentsPerDay`/`listeningReviewCapPerDay` (defaults 5/15, never tuned from real usage).
 
