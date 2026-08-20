@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import {
   getDueListeningCardsSplit,
@@ -13,6 +13,7 @@ import { getSettings } from '../data/settings';
 import { extractVideoId } from '../listening/youtubeUrl';
 import { fetchVideoMetadata } from '../listening/metadata';
 import { fetchVideoCaptions } from '../listening/captions';
+import { searchYoutubeVideos, type YoutubeSearchResult } from '../listening/search';
 import type { CaptionStatus, ListeningVideo } from '../listening/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -134,8 +135,11 @@ const CAPTION_STATUS_LABELS: Record<CaptionStatus, string> = {
 
 function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const [videos, setVideos] = useState<ListeningVideoWithStats[]>([]);
-  const [url, setUrl] = useState('');
-  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<YoutubeSearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -148,32 +152,54 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     refresh();
   }, [refresh]);
 
-  const handleAdd = async () => {
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      setAddError("URL YouTube non reconnue — colle un lien de la forme youtube.com/watch?v=... ou youtu.be/...");
+  const handleSearch = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    setSearching(true);
+    setSearchError(null);
+    setAddError(null);
+
+    // Coller un lien direct dans la barre de recherche va droit à cette
+    // vidéo (comme sur YouTube) plutôt que de la traiter comme des
+    // mots-clés — on connaît déjà précisément l'identifiant, pas besoin
+    // de passer par la recherche non officielle pour ce cas.
+    const directId = extractVideoId(trimmed);
+    if (directId) {
+      const metadata = await fetchVideoMetadata(directId);
+      setSearching(false);
+      if (!metadata) {
+        setSearchResults([]);
+        setSearchError('Impossible de récupérer les informations de cette vidéo.');
+        return;
+      }
+      setSearchResults([{ videoId: directId, title: metadata.title, channel: metadata.channel, thumbnailUrl: metadata.thumbnailUrl, lengthText: null }]);
       return;
     }
-    if (videos.some((v) => v.id === videoId)) {
+
+    const results = await searchYoutubeVideos(trimmed);
+    setSearching(false);
+    setSearchResults(results);
+    if (results.length === 0) {
+      setSearchError('Aucun résultat — réessaie avec d’autres mots-clés.');
+    }
+  };
+
+  const handleAddResult = async (result: YoutubeSearchResult) => {
+    if (videos.some((v) => v.id === result.videoId)) {
       setAddError('Cette vidéo est déjà dans ta bibliothèque.');
       return;
     }
 
-    setAdding(true);
+    setAddingId(result.videoId);
     setAddError(null);
     try {
-      const metadata = await fetchVideoMetadata(videoId);
-      if (!metadata) {
-        setAddError("Impossible de récupérer les informations de cette vidéo — vérifie le lien ou réessaie plus tard.");
-        return;
-      }
-
-      const captions = await fetchVideoCaptions(videoId);
+      const captions = await fetchVideoCaptions(result.videoId);
       const video: ListeningVideo = {
-        id: videoId,
-        title: metadata.title,
-        channel: metadata.channel,
-        thumbnailUrl: metadata.thumbnailUrl,
+        id: result.videoId,
+        title: result.title,
+        channel: result.channel,
+        thumbnailUrl: result.thumbnailUrl,
         durationSeconds: null,
         language: captions.language,
         captionStatus: captions.status,
@@ -185,7 +211,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
         captions.segments.map((s) => ({ startTime: s.startTime, endTime: s.endTime, transcript: s.transcript }))
       );
 
-      setUrl('');
+      setSearchResults((prev) => prev.filter((r) => r.videoId !== result.videoId));
       await refresh();
 
       if (captions.status === 'unavailable') {
@@ -197,7 +223,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     } catch {
       setAddError('Erreur réseau — réessaie dans un instant.');
     } finally {
-      setAdding(false);
+      setAddingId(null);
     }
   };
 
@@ -222,27 +248,59 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       <View style={styles.addForm}>
         <TextInput
           style={styles.addInput}
-          value={url}
-          onChangeText={(t) => {
-            setUrl(t);
-            setAddError(null);
-          }}
+          value={query}
+          onChangeText={setQuery}
           autoCapitalize="none"
           autoCorrect={false}
-          placeholder="Lien YouTube (en espagnol)…"
-          editable={!adding}
+          placeholder="Rechercher une vidéo en espagnol…"
+          editable={!searching}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
         />
         <AnimatedPressable
-          style={[styles.addButton, (adding || !url.trim()) && styles.buttonDisabled]}
+          style={[styles.addButton, (searching || !query.trim()) && styles.buttonDisabled]}
           haptic="none"
-          disabled={adding || !url.trim()}
-          onPress={handleAdd}
+          disabled={searching || !query.trim()}
+          onPress={handleSearch}
         >
-          {adding ? <ActivityIndicator color="#fff" /> : <Text style={styles.addButtonText}>Ajouter</Text>}
+          {searching ? <ActivityIndicator color="#fff" /> : <Text style={styles.addButtonText}>🔍</Text>}
         </AnimatedPressable>
       </View>
+      {searchError && <Text style={styles.addError}>{searchError}</Text>}
       {addError && <Text style={styles.addError}>{addError}</Text>}
 
+      {searchResults.length > 0 && (
+        <View style={styles.searchResults}>
+          {searchResults.map((result) => (
+            <View key={result.videoId} style={styles.searchResultRow}>
+              {result.thumbnailUrl ? <Image source={{ uri: result.thumbnailUrl }} style={styles.searchResultThumb} /> : null}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.videoTitle} numberOfLines={2}>
+                  {result.title}
+                </Text>
+                <Text style={styles.videoMeta}>
+                  {result.channel}
+                  {result.lengthText ? ` · ${result.lengthText}` : ''}
+                </Text>
+              </View>
+              <AnimatedPressable
+                style={[styles.addResultButton, addingId === result.videoId && styles.buttonDisabled]}
+                haptic="none"
+                disabled={addingId === result.videoId}
+                onPress={() => handleAddResult(result)}
+              >
+                {addingId === result.videoId ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.addResultButtonText}>+</Text>
+                )}
+              </AnimatedPressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.librarySectionTitle}>Ta bibliothèque</Text>
       <FlatList
         data={videos}
         keyExtractor={(v) => v.id}
@@ -266,7 +324,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
           </FadeInView>
         )}
         ListEmptyComponent={
-          <Text style={styles.trainingHint}>Aucune vidéo pour l'instant — colle un lien YouTube ci-dessus pour commencer.</Text>
+          <Text style={styles.trainingHint}>Aucune vidéo pour l'instant — recherche une vidéo ci-dessus pour commencer.</Text>
         }
       />
     </View>
@@ -313,10 +371,31 @@ function createStyles(t: SolYSombraPalette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    addButtonText: { color: t.buttonFilledText, fontWeight: '600', fontSize: 14 },
+    addButtonText: { color: t.buttonFilledText, fontWeight: '600', fontSize: 16 },
     addError: { fontSize: 12, color: t.dot, marginTop: 8, lineHeight: 16 },
 
-    libraryListContent: { paddingTop: 16, paddingBottom: 60 },
+    searchResults: { marginTop: 14, gap: 10 },
+    searchResultRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: t.translationBackground,
+      borderRadius: 14,
+      padding: 10,
+    },
+    searchResultThumb: { width: 64, height: 48, borderRadius: 8, backgroundColor: t.cardBorder },
+    addResultButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: t.buttonFilled,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addResultButtonText: { color: t.buttonFilledText, fontWeight: '700', fontSize: 18, lineHeight: 20 },
+
+    librarySectionTitle: { fontSize: 13, fontWeight: '600', color: t.metaText, marginTop: 22, marginBottom: 4 },
+    libraryListContent: { paddingTop: 8, paddingBottom: 60 },
     videoRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',

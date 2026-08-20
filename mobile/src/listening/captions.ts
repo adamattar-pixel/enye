@@ -52,7 +52,10 @@ export interface VideoCaptionsResult {
   segments: CaptionCue[];
 }
 
-const BROWSER_USER_AGENT =
+// Exporté pour être réutilisé par `listening/search.ts` — même technique de
+// base (page HTML publique de youtube.com avec un User-Agent de navigateur),
+// pas de raison d'avoir deux chaînes identiques à maintenir séparément.
+export const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
 async function fetchCaptionTrackList(videoId: string): Promise<CaptionTrack[]> {

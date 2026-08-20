@@ -198,6 +198,16 @@ En revanche, deux étapes ont été testées et fonctionnent : l'extraction de l
 
 **Non vérifié, à ne pas présenter comme fonctionnel** : compatibilité réelle de la WebView dans l'Expo Go de l'utilisateur ; récupération de sous-titres de bout en bout (bloquée par l'échec documenté ci-dessus) ; ajout réel d'une vidéo puis session d'entraînement complète sur device ; fiabilité du paramètre `end` de l'IFrame Player API pour arrêter la lecture au bon moment (filet de sécurité JS ajouté par précaution, mais jamais déclenché en conditions réelles).
 
+## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
+
+**Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.
+
+**Vérification en direct avant d'écrire le moindre code applicatif** (même discipline que pour les captions plus haut dans ce fichier) : fetch de `https://www.youtube.com/results?search_query=...` avec un User-Agent de navigateur, extraction du JSON `ytInitialData` embarqué dans la page (même famille de technique que l'extraction réussie de `captionTracks` sur la page `watch?v=...`, PAS la technique du fetch de contenu `timedtext` qui, elle, avait échoué). **Résultat : succès** — 14 objets `videoRenderer` trouvés et parsés pour une requête test, avec `videoId`/titre/chaîne/vignette/durée tous présents et correctement structurés.
+
+**Impact.** `mobile/src/listening/search.ts` (nouveau) implémente cette extraction via un parcours récursif du JSON (plus robuste qu'un chemin fixe dans l'arborescence, qui casserait à la moindre réorganisation de la page par YouTube) — dégradation silencieuse (`[]`) en cas d'échec réseau/parsing, cohérent avec le reste de `listening/`. `ListeningScreen.tsx` remplace le champ "coller un lien" par une barre de recherche ; une URL collée directement dans cette même barre est détectée (`extractVideoId`) et traitée comme un raccourci direct vers cette vidéo plutôt que comme des mots-clés, sans écran ni bouton séparé pour ça — reproduit le comportement réel de la barre de recherche YouTube elle-même.
+
+**Statut : implémenté et vérifié en direct avant écriture du code (pas juste "supposé fonctionner").** Reste, comme pour les captions et les métadonnées : **méthode non officielle**, peut casser sans préavis si YouTube change la structure de cette page — pas de garantie de stabilité à long terme, à re-tester si la recherche cesse un jour de renvoyer des résultats.
+
 ## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
 
 **Constat.** Demande explicite : compléter les tags CECRL manquants dans `words.json`, en vérifiant d'abord combien de mots en ont déjà un et combien n'en ont pas, avant de coder quoi que ce soit. Vérification faite par script one-off (comptage par valeur exacte du champ `level`) plutôt que supposée :

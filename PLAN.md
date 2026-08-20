@@ -498,6 +498,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Vérifié** : `tsc --noEmit` propre, `npm test` (91/95 — les 4 échecs sont dans `reviewScheduler.test.ts`, préexistants, sans lien avec ce chantier ni avec les fichiers modifiés cette session, liés à un décalage horaire de 2h dans l'environnement de test, non causés par ce changement), bundle Metro iOS récupéré avec succès (`HTTP 200`, dépendance WebView incluse sans erreur de résolution). **Non vérifié : compatibilité Expo Go réelle du lecteur WebView, et bout-en-bout ajout de vidéo → segments exploitables** (bloqué par l'échec de fetch des sous-titres documenté ci-dessus) — à ne pas présenter comme fonctionnel tant que ces deux points n'ont pas été testés sur device.
 
+## Recherche YouTube dans la Bibliothèque, au lieu de coller un lien (20/08/2026)
+
+**Demande explicite** : remplacer le champ "coller un lien YouTube" de l'onglet Écoute → Bibliothèque par une vraie recherche par mots-clés, "comme sur YouTube".
+
+**Implémenté** : `mobile/src/listening/search.ts` (nouveau) — même famille de technique que l'extraction de la liste des pistes de sous-titres dans `captions.ts` (JSON `ytInitialData` embarqué dans la page HTML publique `youtube.com/results`, pas un endpoint d'API séparé) plutôt que la technique qui avait échoué en direct pour le CONTENU des sous-titres (`timedtext`). **Testé fonctionnel en direct pendant cette session** avant d'écrire le code applicatif (14 résultats extraits avec succès pour une requête test). `ListeningScreen.tsx` → `LibraryView` : la barre "coller un lien" devient une barre de recherche (mots-clés → liste de résultats avec vignette/titre/chaîne/durée, bouton "+" par résultat) ; coller directement une URL dans la même barre continue de fonctionner (comportement identique à la barre de recherche YouTube elle-même) en sautant directement à cette vidéo via oEmbed plutôt que de la traiter comme des mots-clés.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants sans rapport), bundle Metro récupéré avec succès. **Non vérifié sur device** — en particulier la pertinence des résultats de recherche et la robustesse de l'extraction si YouTube modifie la structure de cette page (technique non officielle, comme documenté pour le reste de `listening/`).
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
