@@ -208,6 +208,14 @@ En revanche, deux étapes ont été testées et fonctionnent : l'extraction de l
 
 **Statut : implémenté et vérifié en direct avant écriture du code (pas juste "supposé fonctionner").** Reste, comme pour les captions et les métadonnées : **méthode non officielle**, peut casser sans préavis si YouTube change la structure de cette page — pas de garantie de stabilité à long terme, à re-tester si la recherche cesse un jour de renvoyer des résultats.
 
+## Barre d'onglets remplacée par une icône ☰ (20/08/2026)
+
+**Constat.** Demande explicite, formulée de façon ambiguë ("trois traits horizontaux qui défilent un truc de la gauche vers la droite") — l'utilisateur avait lui-même anticipé l'ambiguïté ("si t'as pas compris demande moi"). Plutôt que deviner, question posée avec deux interprétations concrètes illustrées par des maquettes ASCII (icône ☰ qui ouvre un bandeau défilant, vs. bandeau toujours visible sans icône séparée) : l'utilisateur a choisi la première.
+
+**Impact.** [TabBar.tsx](mobile/src/navigation/TabBar.tsx) réécrit : plus de barre de pilules fixe, remplacée par une icône ☰ en haut à gauche (miroir du bouton clair/sombre déjà présent en haut à droite) qui ouvre un bandeau d'onglets en `ScrollView` horizontale. `RootTabs.tsx` inchangé structurellement — `TabBar` reste monté seulement hors session, la logique de masquage pendant une révision continue de fonctionner sans modification.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants documentés plus haut, sans rapport), bundle Metro iOS récupéré avec succès (`HTTP 200`). **Non vérifié sur device** : ergonomie réelle du geste ouvrir/glisser/toucher/refermer, jamais testée hors du bundle compilé.
+
 ## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
 
 **Constat.** Demande explicite : compléter les tags CECRL manquants dans `words.json`, en vérifiant d'abord combien de mots en ont déjà un et combien n'en ont pas, avant de coder quoi que ce soit. Vérification faite par script one-off (comptage par valeur exacte du champ `level`) plutôt que supposée :
