@@ -22,16 +22,22 @@ const TABS: { key: TabKey; label: string }[] = [
 // d'écran (app téléphone en portrait uniquement, pas un besoin réel ici).
 const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.7);
 
-// Hauteur de l'icône ☰ (`hamburgerRow.paddingTop` + `hamburgerButton.height`,
-// voir plus bas) + un espace visible en dessous — le tiroir doit
-// commencer nettement sous l'icône, pas à une valeur devinée depuis le
-// haut de l'écran (bug signalé le 20/08/2026 : un décalage fixe en
-// pixels depuis le tout haut de l'écran ignore la hauteur réelle de
-// l'encoche/l'île dynamique selon l'appareil, donc le tiroir pouvait
-// démarrer plus haut que l'icône). L'espace sous l'icône est passé de
-// 16 à 40px après un deuxième retour ("encore plus bas, bien sous le
-// bouton") — 16px restait perçu comme trop proche/collé.
-const DRAWER_TOP_OFFSET = 6 + 38 + 40;
+// Hauteur de l'icône ☰/du bouton clair-sombre (`paddingTop: 6` +
+// `height: 38`, identique pour les deux, voir plus bas) + un espace
+// visible en dessous. Après deux retours ("encore trop proche", "encore
+// en dessous du bouton thème sombre/clair") malgré des tiroirs
+// grandissants, le vrai problème n'était probablement pas la valeur mais
+// la MÉCANIQUE : un `SafeAreaView` ancré seulement à droite (pas
+// pleine largeur) peut calculer une marge de sécurité différente de
+// celle d'un `SafeAreaView` pleine largeur comme celui de l'icône
+// (`hamburgerSafeArea` ci-dessous, jamais signalé mal placé) — l'encoche/
+// l'île dynamique est détectée sur toute la largeur de l'écran, pas
+// forcément sur une bande étroite ancrée à droite. Le tiroir utilise
+// maintenant EXACTEMENT le même `SafeAreaView` pleine largeur que
+// l'icône (`drawerSafeArea`), avec un espaceur explicite de la même
+// hauteur avant son contenu, plutôt qu'un deuxième `SafeAreaView`
+// imbriqué et étroit.
+const DRAWER_TOP_OFFSET = 6 + 38 + 48;
 
 /**
  * Remplace l'ancienne barre de pilules fixe en bas d'écran par une icône
@@ -97,8 +103,9 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
       {open && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Fermer le menu des onglets" />
-          <SlideInFromRight style={styles.drawerPositioner}>
-            <SafeAreaView style={[styles.drawer, { width: DRAWER_WIDTH }]}>
+          <SafeAreaView style={styles.drawerSafeArea} pointerEvents="box-none">
+            <View style={styles.drawerSpacer} pointerEvents="box-none" />
+            <SlideInFromRight style={[styles.drawer, { width: DRAWER_WIDTH }]}>
               {TABS.map((tab, index) => (
                 <View key={tab.key}>
                   <TabRow
@@ -110,8 +117,8 @@ export function TabBar({ current, onChange }: { current: TabKey; onChange: (tab:
                   {index < TABS.length - 1 && <View style={styles.divider} />}
                 </View>
               ))}
-            </SafeAreaView>
-          </SlideInFromRight>
+            </SlideInFromRight>
+          </SafeAreaView>
         </>
       )}
     </>
@@ -183,23 +190,26 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: 'rgba(0,0,0,0.35)',
       zIndex: 20,
     },
-    // Boîte de positionnement pure (pas de fond/bordure ici) — un
-    // `SafeAreaView` sans `left` défini n'a pas de largeur propre contre
-    // laquelle résoudre un `%`, donc toute l'apparence visuelle (fond,
-    // bordure, ombre) vit sur le `SafeAreaView` enfant (`drawer`
-    // ci-dessous), avec une largeur en pixels calculée une fois
-    // (`DRAWER_WIDTH`).
-    drawerPositioner: { position: 'absolute', top: 0, right: 0, bottom: 0, zIndex: 25 },
-    // Tiroir ancré au bord droit, du bas de l'icône ☰ jusqu'en bas de
-    // l'écran. `marginTop: DRAWER_TOP_OFFSET` s'ajoute au padding de
-    // sécurité automatique du `SafeAreaView` (encoche/île dynamique) —
-    // aligne le bord haut du tiroir exactement sur le bord bas de
-    // l'icône, quelle que soit la taille de l'encoche de l'appareil,
-    // plutôt qu'un décalage fixe en pixels depuis le tout haut de
-    // l'écran (bug signalé : le tiroir démarrait trop haut, "borné par
-    // le haut" de l'icône plutôt que par son bas).
+    // Pleine largeur (`left: 0, right: 0`), exactement comme
+    // `hamburgerSafeArea` ci-dessus — pas une bande étroite ancrée à
+    // droite (ancienne version). Une encoche/île dynamique est détectée
+    // par rapport à toute la largeur de l'écran ; un `SafeAreaView`
+    // étroit ancré à droite peut ne pas calculer la même marge de
+    // sécurité qu'un `SafeAreaView` pleine largeur, ce qui a
+    // probablement causé les retours répétés ("encore trop proche")
+    // malgré des valeurs d'espacement grandissantes. `alignItems:
+    // 'flex-end'` pousse le tiroir (largeur fixe `DRAWER_WIDTH`) contre
+    // le bord droit à l'intérieur de cette zone pleine largeur.
+    drawerSafeArea: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'flex-end', zIndex: 25 },
+    // Espaceur explicite (icône + espace visible) plutôt qu'une marge
+    // qui pourrait se combiner de façon imprévisible avec le padding de
+    // sécurité automatique — même hauteur que `hamburgerRow.paddingTop`
+    // + `hamburgerButton.height` + une marge généreuse.
+    drawerSpacer: { height: DRAWER_TOP_OFFSET },
+    // Tiroir ancré au bord droit, du bas de l'espaceur jusqu'en bas de
+    // l'écran (le `SafeAreaView` parent gère déjà l'espace de sécurité
+    // du bas, ex. l'indicateur d'accueil).
     drawer: {
-      marginTop: DRAWER_TOP_OFFSET,
       flex: 1,
       backgroundColor: t.cardBackground,
       borderLeftWidth: 1,

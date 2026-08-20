@@ -502,6 +502,16 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — à confirmer que 40px est perçu comme suffisant cette fois.
 
+## Tiroir : mécanique de positionnement revue, pas juste la valeur d'espace (21/08/2026)
+
+**Demande explicite** : troisième retour sur le même sujet ("encore en dessous du bouton thème sombre/clair") malgré deux augmentations successives de l'espace (16px puis 40px) — signe que le problème n'était probablement pas la valeur mais la mécanique de calcul.
+
+**Diagnostic.** Le tiroir utilisait un `SafeAreaView` étroit ancré uniquement au bord droit (70% de la largeur), différent du `SafeAreaView` pleine largeur qui positionne l'icône ☰ (jamais signalé mal placé). Une encoche/île dynamique est détectée par le système sur toute la largeur de l'écran — un `SafeAreaView` étroit, décalé vers la droite, peut calculer une marge de sécurité différente de celle d'un `SafeAreaView` pleine largeur, ce qui expliquerait des résultats incohérents malgré des valeurs d'espace grandissantes.
+
+**Implémenté** : le tiroir utilise maintenant EXACTEMENT le même `SafeAreaView` pleine largeur (`left: 0, right: 0`) que l'icône, avec `alignItems: 'flex-end'` pour pousser le tiroir (largeur fixe) contre le bord droit à l'intérieur. Un espaceur explicite (`View` de hauteur fixe) remplace l'ancienne marge, pour éviter toute combinaison imprévisible avec le padding de sécurité automatique. Espace sous l'icône aussi encore élargi (40px → 48px) par précaution.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — cette fois avec un changement de mécanique, pas seulement de valeur, donc plus de chances que ce soit la bonne correction, mais reste à confirmer.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.

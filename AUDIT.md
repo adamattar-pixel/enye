@@ -242,6 +242,16 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — à confirmer que 40px suffit cette fois, ou si un nouvel ajustement sera encore nécessaire.
 
+## Tiroir toujours trop proche des boutons : mécanique de positionnement revue (21/08/2026)
+
+**Constat.** Troisième retour sur le même sujet ("encore en dessous du bouton thème sombre/clair") malgré deux augmentations successives (16px puis 40px) — augmenter la valeur ne réglait pas durablement le problème, signe probable d'un souci de mécanique plutôt que de simple réglage fin.
+
+**Diagnostic.** Le tiroir utilisait un `SafeAreaView` étroit (`drawerPositioner`, ancré uniquement à `right: 0`, 70% de la largeur) — différent du `SafeAreaView` PLEINE LARGEUR (`hamburgerSafeArea`, `left: 0, right: 0`) qui positionne l'icône ☰ et qui, lui, n'a jamais été signalé mal placé. Hypothèse retenue : la détection de l'encoche/l'île dynamique se fait sur toute la largeur de l'écran, donc un `SafeAreaView` étroit décalé vers la droite peut calculer une marge de sécurité automatique différente (probablement plus petite, voire nulle si la zone concernée est en dehors de la zone d'encoche détectée) que le `SafeAreaView` pleine largeur de l'icône — expliquant que le tiroir reste "collé" malgré une marge manuelle grandissante ajoutée par-dessus une valeur de sécurité déjà incohérente.
+
+**Impact / correctif appliqué**, dans `TabBar.tsx` : le tiroir utilise maintenant le MÊME `SafeAreaView` pleine largeur que l'icône (`drawerSafeArea`, `left: 0, right: 0, bottom: 0`), avec `alignItems: 'flex-end'` pour pousser le tiroir (largeur fixe, `DRAWER_WIDTH`) contre le bord droit à l'intérieur de cette zone. Un espaceur explicite (`View` de hauteur fixe `DRAWER_TOP_OFFSET`) remplace l'ancienne marge (`marginTop`) sur un `SafeAreaView` imbriqué — élimine toute combinaison imprévisible entre marge manuelle et padding de sécurité automatique de deux `SafeAreaView` empilés. Espace sous l'icône aussi élargi une troisième fois par précaution (40px → 48px).
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — cette fois un changement de mécanique de positionnement, pas seulement de valeur numérique, donc une meilleure chance d'être la bonne correction, mais reste à confirmer avant de considérer ce sujet clos.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.
