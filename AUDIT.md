@@ -252,6 +252,14 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — cette fois un changement de mécanique de positionnement, pas seulement de valeur numérique, donc une meilleure chance d'être la bonne correction, mais reste à confirmer avant de considérer ce sujet clos.
 
+## Tiroir désormais trop bas : confirme l'hypothèse de la marge automatique plus grande (21/08/2026)
+
+**Constat.** Retour immédiat après le changement de mécanique ci-dessus : "met le tab plus haut" — le tiroir est maintenant trop bas, pas trop haut. Confirme indirectement l'hypothèse retenue plus haut : le nouveau `SafeAreaView` pleine largeur calcule bien une marge de sécurité automatique différente (plus grande) que l'ancien `SafeAreaView` étroit, donc l'espace manuel de 48px (pensé pour compenser une marge automatique jugée insuffisante) est devenu excessif une fois cumulé avec la nouvelle marge automatique, elle-même déjà suffisante.
+
+**Impact.** Espace manuel sous l'icône réduit de 48px à 12px dans `TabBar.tsx` — la marge de sécurité automatique fait maintenant l'essentiel du travail, l'espace manuel n'ajoute qu'un léger espace visuel résiduel.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit` propre, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device.**
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

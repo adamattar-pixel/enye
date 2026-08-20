@@ -23,21 +23,17 @@ const TABS: { key: TabKey; label: string }[] = [
 const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.7);
 
 // Hauteur de l'icône ☰/du bouton clair-sombre (`paddingTop: 6` +
-// `height: 38`, identique pour les deux, voir plus bas) + un espace
-// visible en dessous. Après deux retours ("encore trop proche", "encore
-// en dessous du bouton thème sombre/clair") malgré des tiroirs
-// grandissants, le vrai problème n'était probablement pas la valeur mais
-// la MÉCANIQUE : un `SafeAreaView` ancré seulement à droite (pas
-// pleine largeur) peut calculer une marge de sécurité différente de
-// celle d'un `SafeAreaView` pleine largeur comme celui de l'icône
-// (`hamburgerSafeArea` ci-dessous, jamais signalé mal placé) — l'encoche/
-// l'île dynamique est détectée sur toute la largeur de l'écran, pas
-// forcément sur une bande étroite ancrée à droite. Le tiroir utilise
-// maintenant EXACTEMENT le même `SafeAreaView` pleine largeur que
-// l'icône (`drawerSafeArea`), avec un espaceur explicite de la même
-// hauteur avant son contenu, plutôt qu'un deuxième `SafeAreaView`
-// imbriqué et étroit.
-const DRAWER_TOP_OFFSET = 6 + 38 + 48;
+// `height: 38`, identique pour les deux) + un espace visible en
+// dessous. La mécanique de positionnement a changé le 21/08/2026 (voir
+// AUDIT.md) : le tiroir utilise désormais le même `SafeAreaView` pleine
+// largeur que l'icône, qui calcule probablement une marge de sécurité
+// automatique plus grande que l'ancien `SafeAreaView` étroit — l'espace
+// manuel de 48px, pensé pour l'ancienne mécanique, s'est avéré excessif
+// une fois cumulé avec cette marge automatique plus grande ("plus haut"
+// demandé). Réduit à 12px : la marge de sécurité automatique fait
+// maintenant l'essentiel du travail, l'espace manuel n'a plus qu'à
+// ajouter un léger espace visuel par-dessus.
+const DRAWER_TOP_OFFSET = 6 + 38 + 12;
 
 /**
  * Remplace l'ancienne barre de pilules fixe en bas d'écran par une icône

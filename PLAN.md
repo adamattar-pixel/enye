@@ -512,6 +512,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device** — cette fois avec un changement de mécanique, pas seulement de valeur, donc plus de chances que ce soit la bonne correction, mais reste à confirmer.
 
+## Tiroir : espace réduit après le changement de mécanique (21/08/2026)
+
+**Demande explicite** : "met le tab plus haut" — après le passage au `SafeAreaView` pleine largeur (qui calcule probablement une marge de sécurité automatique plus grande que l'ancien `SafeAreaView` étroit), l'espace manuel de 48px, pensé pour l'ancienne mécanique, est devenu excessif une fois cumulé.
+
+**Implémenté** : espace manuel sous l'icône réduit de 48px à 12px — la marge de sécurité automatique du nouveau `SafeAreaView` fait maintenant l'essentiel du travail.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test` (91/95, mêmes 4 échecs préexistants), bundle Metro récupéré avec succès. **Non vérifié sur device.**
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
