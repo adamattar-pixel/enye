@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { createCard, type SM2CardLifecycle, type SM2CardState, type SM2Grade } from '../sm2/types';
 import type { Word } from './types';
+import { CONJUGATION_TENSES, personCountForTense, type ConjugationTense, type ConjugationVerb } from '../conjugation/types';
 
 const VALID_GRADES: readonly SM2Grade[] = ['again', 'hard', 'good', 'easy'];
 
@@ -67,6 +68,37 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
+    );
+
+    -- Onglet Conjugaison (20/08/2026, planifié puis implémenté le même
+    -- jour — voir PLAN.md/AUDIT.md). Contrairement à words, le contenu
+    -- des verbes (infinitif, glose, formes conjuguées) n'est PAS
+    -- dupliqué ici : conjugations.json est importé tel quel côté app et
+    -- consulté par id, cette table ne garde que la progression SM-2 de
+    -- chaque triplet (verbe, temps/mode, personne). Pas de
+    -- fonctionnalité "ajouter son propre verbe" en v1, contrairement au
+    -- vocabulaire — d'où l'absence d'une table verbs complète.
+    CREATE TABLE IF NOT EXISTS conjugation_cards (
+      id TEXT PRIMARY KEY NOT NULL,
+      verb_id TEXT NOT NULL,
+      tense TEXT NOT NULL,
+      person INTEGER NOT NULL,
+      ease_factor REAL NOT NULL,
+      interval_days REAL NOT NULL,
+      repetitions INTEGER NOT NULL,
+      lapses INTEGER NOT NULL,
+      learning_step_index INTEGER NOT NULL,
+      lifecycle TEXT NOT NULL,
+      due_date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_conjugation_cards_due_date ON conjugation_cards(due_date);
+
+    CREATE TABLE IF NOT EXISTS conjugation_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id TEXT NOT NULL,
+      grade TEXT NOT NULL,
+      reviewed_at TEXT NOT NULL
     );
   `);
 }
@@ -559,5 +591,188 @@ export async function resetProgress(db: SQLiteDatabase, now: Date = new Date()):
       card.lifecycle,
       card.dueDate.toISOString()
     );
+
+    // Réinitialise aussi la conjugaison dans la même transaction —
+    // "Réinitialiser ma progression" est un seul bouton pour toute la
+    // progression de l'utilisateur, pas un par onglet. Repart des
+    // triplets déjà en base (`conjugation_cards`) plutôt que de tout
+    // reconstruire depuis `conjugations.json` ici : la liste des
+    // triplets ne change pas, seul leur état SM-2 doit repartir à zéro.
+    await db.runAsync('DELETE FROM conjugation_reviews;');
+    await db.runAsync(
+      `UPDATE conjugation_cards
+       SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?;`,
+      card.easeFactor,
+      card.intervalDays,
+      card.repetitions,
+      card.lapses,
+      card.learningStepIndex,
+      card.lifecycle,
+      card.dueDate.toISOString()
+    );
   });
+}
+
+// MARK: - Conjugaison
+
+type ConjugationCardRow = {
+  id: string;
+  verb_id: string;
+  tense: string;
+  person: number;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  lapses: number;
+  learning_step_index: number;
+  lifecycle: string;
+  due_date: string;
+};
+
+export interface DueConjugationCardRow {
+  cardId: string;
+  verbId: string;
+  tense: ConjugationTense;
+  person: number;
+  card: SM2CardState;
+}
+
+const VALID_TENSES = new Set<string>(CONJUGATION_TENSES);
+
+function parseTense(value: string): ConjugationTense {
+  if (VALID_TENSES.has(value)) return value as ConjugationTense;
+  throw new Error(`Valeur de temps/mode de conjugaison invalide en base : "${value}"`);
+}
+
+function mapConjugationCardRow(r: ConjugationCardRow): DueConjugationCardRow {
+  return {
+    cardId: r.id,
+    verbId: r.verb_id,
+    tense: parseTense(r.tense),
+    person: r.person,
+    card: {
+      easeFactor: r.ease_factor,
+      intervalDays: r.interval_days,
+      repetitions: r.repetitions,
+      lapses: r.lapses,
+      learningStepIndex: r.learning_step_index,
+      lifecycle: parseLifecycle(r.lifecycle),
+      dueDate: new Date(r.due_date),
+    },
+  };
+}
+
+function conjugationCardId(verbId: string, tense: ConjugationTense, person: number): string {
+  return `${verbId}:${tense}:${person}`;
+}
+
+/** Importe dans SQLite tout triplet (verbe, temps/mode, personne) de
+ * `conjugations.json` pas encore présent en base, avec une carte SM-2
+ * neuve pour chacun — même principe que `importMissingWords` : tout au
+ * premier lancement, seulement le delta ensuite. 200 verbes × 52 formes
+ * (6 personnes × 7 temps/mode + 5 personnes × 2 impératifs) = 10 400
+ * cartes possibles au premier import — voir AUDIT.md pour le temps de
+ * premier lancement, pas mesuré sur device. */
+export async function importMissingConjugationCards(
+  db: SQLiteDatabase,
+  verbs: ConjugationVerb[],
+  now: Date = new Date()
+): Promise<number> {
+  const existingRows = await db.getAllAsync<{ id: string }>('SELECT id FROM conjugation_cards;');
+  const existingIds = new Set(existingRows.map((r) => r.id));
+
+  const missing: { id: string; verbId: string; tense: ConjugationTense; person: number }[] = [];
+  for (const verb of verbs) {
+    for (const tense of CONJUGATION_TENSES) {
+      const personCount = personCountForTense(tense);
+      for (let person = 0; person < personCount; person++) {
+        const id = conjugationCardId(verb.id, tense, person);
+        if (!existingIds.has(id)) missing.push({ id, verbId: verb.id, tense, person });
+      }
+    }
+  }
+  if (missing.length === 0) return 0;
+
+  await db.withTransactionAsync(async () => {
+    for (const item of missing) {
+      const card = createCard({ dueDate: now });
+      await db.runAsync(
+        `INSERT INTO conjugation_cards (id, verb_id, tense, person, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        item.id,
+        item.verbId,
+        item.tense,
+        item.person,
+        card.easeFactor,
+        card.intervalDays,
+        card.repetitions,
+        card.lapses,
+        card.learningStepIndex,
+        card.lifecycle,
+        card.dueDate.toISOString()
+      );
+    }
+  });
+
+  return missing.length;
+}
+
+/** Cartes de conjugaison dues, avec le même principe de plafond séparé
+ * nouvelles/révisions que `getDueCardsSplit` (vocabulaire) — voir
+ * PLAN.md. Pas de filtre par thème ici (la conjugaison n'a pas de
+ * réglage "thèmes actifs", contrairement au vocabulaire). Nouvelles
+ * cartes triées par `rowid` (ordre d'insertion) plutôt que par
+ * fréquence du verbe : le contenu des verbes n'est pas dupliqué en
+ * base (voir plus haut), donc pas de colonne à trier dessus — mais
+ * l'import se fait déjà verbe par verbe dans l'ordre de fréquence de
+ * `conjugations.json`, donc l'ordre d'insertion l'approxime
+ * correctement sans jointure supplémentaire. */
+export async function getDueConjugationCardsSplit(
+  db: SQLiteDatabase,
+  now: Date,
+  settings: { conjugationNewCardsPerDay: number; conjugationReviewCapPerDay: number }
+): Promise<DueConjugationCardRow[]> {
+  const reviewRows = await db.getAllAsync<ConjugationCardRow>(
+    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle != 'new' ORDER BY due_date ASC LIMIT ?;`,
+    now.toISOString(),
+    settings.conjugationReviewCapPerDay
+  );
+
+  const newRows = await db.getAllAsync<ConjugationCardRow>(
+    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle = 'new' ORDER BY rowid ASC LIMIT ?;`,
+    now.toISOString(),
+    settings.conjugationNewCardsPerDay
+  );
+
+  return [...reviewRows, ...newRows].map(mapConjugationCardRow);
+}
+
+export async function updateConjugationCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+  await db.runAsync(
+    `UPDATE conjugation_cards
+     SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
+     WHERE id = ?;`,
+    card.easeFactor,
+    card.intervalDays,
+    card.repetitions,
+    card.lapses,
+    card.learningStepIndex,
+    card.lifecycle,
+    card.dueDate.toISOString(),
+    cardId
+  );
+}
+
+export async function logConjugationReview(
+  db: SQLiteDatabase,
+  cardId: string,
+  grade: SM2Grade,
+  at: Date = new Date()
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO conjugation_reviews (card_id, grade, reviewed_at) VALUES (?, ?, ?);',
+    cardId,
+    grade,
+    at.toISOString()
+  );
 }

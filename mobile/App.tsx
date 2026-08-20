@@ -3,9 +3,10 @@ import { ActivityIndicator, SafeAreaView, StyleSheet, useColorScheme } from 'rea
 import * as Notifications from 'expo-notifications';
 import * as SQLite from 'expo-sqlite';
 import { setAudioModeAsync } from 'expo-audio';
-import { DB_NAME, migrateDbIfNeeded, importMissingWords } from './src/data/database';
+import { DB_NAME, migrateDbIfNeeded, importMissingWords, importMissingConjugationCards } from './src/data/database';
 import { parseWords } from './src/data/wordRepository';
 import wordsJson from './src/data/words.json';
+import { conjugationVerbs } from './src/conjugation/data';
 import { getSettings } from './src/data/settings';
 import { ensurePermissions, registerCategories } from './src/notifications/categories';
 import { handleNotificationResponse } from './src/notifications/responseHandler';
@@ -28,8 +29,12 @@ export default function App() {
       await migrateDbIfNeeded(database);
       // Importe tout mot du bundle pas encore en base — premier
       // lancement (tout est importé) comme mises à jour ultérieures du
-      // bundle (complète juste ce qui manque, voir database.ts).
+      // bundle (complète juste ce qui manque, voir database.ts). Même
+      // principe pour les 10 400 triplets de conjugaison (200 verbes ×
+      // 52 formes) — voir AUDIT.md pour le risque de premier lancement
+      // plus lent avec ce volume combiné, pas mesuré sur device.
       await importMissingWords(database, parseWords(wordsJson));
+      await importMissingConjugationCards(database, conjugationVerbs);
 
       // Bug documenté et de longue date d'expo-speech sur iOS : sans
       // activer explicitement le mode audio, la prononciation ne joue

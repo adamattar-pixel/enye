@@ -35,30 +35,32 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 8h–22h = 840 min. Avec un espacement moyen de 22,5 min → capacité ≈37 créneaux/jour (mini 28 si tout à 30 min, maxi 56 si tout à 15 min). Les anciens plafonds (15 nouvelles + 80 révisions = 95/jour) dépassaient largement cette capacité, même dans le meilleur cas — 39 cartes n'auraient jamais eu de créneau. Réglage retenu : 8 + 22 = 30/jour, avec une marge d'environ 19 % sous la capacité moyenne estimée.
 
-## Décisions validées — fonctionnalités futures (20/08/2026, planification uniquement)
+## Décisions validées — fonctionnalités futures (20/08/2026, planification puis implémentation le même jour)
 
-**Rien de ce qui suit n'est implémenté.** Cadrage validé avec l'utilisateur en amont du code, pour deux nouveaux onglets — voir AUDIT.md pour les points encore ouverts à trancher avant de coder.
+Cadrage initial validé avec l'utilisateur avant tout code ; **implémenté dans la foulée** suite à "code tout ça" — voir la section dédiée plus bas pour le détail de la construction, et AUDIT.md pour le raisonnement derrière chaque décision, notamment le changement de librairie de génération (`spanish-verbs` abandonné après test, remplacé par `@v4nn4/ablaut`).
 
 ### Onglet « Conjugaison » (entraînement, flashcards)
 
 | Sujet | Décision |
 |---|---|
-| Principe de la carte | Un verbe + une personne + un temps sont donnés ; l'utilisateur tape la conjugaison au clavier ; validation avec tolérance sur les accents (règle exacte non tranchée, voir AUDIT.md) |
-| Répétition espacée | SM-2, réutilise le moteur existant ([Packages/SM2Engine](Packages/SM2Engine) / [mobile/src/sm2/engine.ts](mobile/src/sm2/engine.ts)) — **pas de nouveau moteur**. Chaque triplet (verbe, personne, temps) est une carte indépendante avec son propre calendrier |
-| Personnes couvertes | yo / tú / él-ella-usted / nosotros / vosotros / ellos-ellas-ustedes — paradigme espagnol d'Espagne complet (avec *vosotros*) |
-| Temps couverts (v1, à confirmer) | Indicatif : présent, prétérit, imparfait, futur, conditionnel. Subjonctif : présent, imparfait. Impératif : affirmatif et négatif |
-| Source des données | Fichier statique `conjugations.json` (même logique que `words.generated.json`), produit par un script Node en dev (`mobile/scripts/generate-conjugations/`), calcul fait à la génération — **aucune dépendance runtime sur le téléphone**, cohérent avec la contrainte "tout doit tourner offline dans Expo Go" |
-| Librairie de génération envisagée | npm `spanish-verbs` (conjugaison algorithmique régulière + irrégulière, licence MIT) ; repli sur les tables Wiktionary (comme pour `words.json`) si des irréguliers ciblés sont mal couverts — choix définitif pas encore tranché, voir AUDIT.md |
-| Liste des verbes couverts | Les plus fréquents dans `frequency.csv` (doozan/spanish_data), filtrés sur la catégorie grammaticale "verbe" — nombre de départ à confirmer (proposé : 200-300), extensible ensuite |
-| Écran de révision | Même montage que l'écran de révision vocabulaire (carte → révélation → notation), pour rester cohérent visuellement avec le reste de l'app |
+| Principe de la carte | Un verbe + une personne + un temps sont donnés ; l'utilisateur tape la conjugaison au clavier ; comparaison tolérante sur les accents (ignorés des deux côtés), qui **informe** la note sans la choisir à la place de l'utilisateur — les 4 mêmes boutons qu'en vocabulaire (Otra vez/Difícil/Bien/Fácil) restent proposés après validation |
+| Répétition espacée | SM-2, réutilise le moteur existant ([Packages/SM2Engine](Packages/SM2Engine) / [mobile/src/sm2/engine.ts](mobile/src/sm2/engine.ts)) — **pas de nouveau moteur**. Chaque triplet (verbe, personne, temps) est une carte indépendante avec son propre calendrier, en base dans `conjugation_cards`/`conjugation_reviews` |
+| Personnes couvertes | yo / tú / él-ella-usted / nosotros / vosotros / ellos-ellas-ustedes — paradigme espagnol d'Espagne complet (avec *vosotros*) ; impératif à 5 personnes (pas de "yo") |
+| Temps couverts (v1) | Indicatif : présent, prétérit, imparfait, futur. Conditionnel présent. Subjonctif : présent, imparfait (forme -ra, la forme -se dérivée et acceptée comme réponse valide). Impératif : affirmatif (fourni par la librairie) et négatif (composé : "no" + subjonctif présent) |
+| Source des données | Fichier statique `conjugations.json`, produit par [mobile/scripts/generate-conjugations/generate.mjs](mobile/scripts/generate-conjugations/generate.mjs), calcul fait à la génération — **aucune dépendance runtime sur le téléphone** |
+| Librairie de génération | **`@v4nn4/ablaut`**, pas `spanish-verbs` comme envisagé initialement — testé avant d'écrire le script, `spanish-verbs` s'est révélé avoir ~43% d'erreurs sur un échantillon de verbes à changement de radical au subjonctif présent (déprécié en plus). `@v4nn4/ablaut` : vérifié à 100,00% sur 339 200 formes espagnoles par ses propres auteurs, retesté ici sans erreur. Voir AUDIT.md et le [README du script](mobile/scripts/generate-conjugations/README.md) |
+| Verbes couverts (v1) | **200**, les plus fréquents parmi les 1228 déjà catégorisés "verbe" dans `words.json` — pas une nouvelle source séparée. Extensible sans changement de code (`node generate.mjs 400`) |
+| Écran de révision | Carte « Sol y sombra » cohérente avec le vocabulaire, adaptée pour une saisie au clavier plutôt qu'une révélation en 2 temps — voir [ConjugationReviewScreen.tsx](mobile/src/screens/ConjugationReviewScreen.tsx) |
+| Rythme quotidien | Réglages séparés du vocabulaire (`conjugationNewCardsPerDay`/`conjugationReviewCapPerDay`, 8+22 par défaut) — les deux entraînements ne se disputent pas les mêmes créneaux |
+| Notifications verrouillées | **Pas intégré en v1** — entraînement dans l'app uniquement, décision de périmètre pour contenir la taille du chantier (voir AUDIT.md) |
 
 ### Onglet « Règles de conjugaison » (référence statique)
 
 | Sujet | Décision |
 |---|---|
 | Nature du contenu | Consultable uniquement, pas de logique dynamique (pas de SM-2, pas de notation) |
-| Organisation | Par groupe de verbes (-ar / -er / -ir), puis par temps : terminaisons régulières + irrégularités les plus fréquentes (ser, estar, tener, ir, hacer, poder, decir, querer... — même base que la liste de verbes fréquents de l'onglet Conjugaison) |
-| Format | JSON statique + composant de rendu, cohérent avec le reste de l'architecture du projet — structure exacte à proposer au moment de l'implémentation (pas encore choisie) |
+| Organisation | 3 modèles réguliers (hablar/comer/vivir) + 12 irréguliers les plus fréquents (ser, estar, tener, ir, hacer, poder, decir, querer, poner, saber, venir, salir), chacun dépliable pour voir ses 9 temps/modes |
+| Format | **Pas un second fichier JSON** — lit directement `conjugations.json` (déjà généré pour l'entraînement), un seul jeu de données pour les deux onglets. Sous-onglet de « Conjugaison » plutôt qu'un onglet séparé dans la barre du bas — voir AUDIT.md, ça ramène la barre à 5 onglets au lieu de 6 |
 
 ## Phases
 
@@ -135,13 +137,26 @@ Deux éléments de dette technique notés depuis la construction "d'un bloc" ont
 
 Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vérifié sur device** — comme le reste de ce chantier.
 
+## Onglets Conjugaison + Règles de conjugaison implémentés (20/08/2026)
+
+Suite directe de la planification ci-dessus, construits dans la foulée ("code tout ça"). Détail technique complet dans AUDIT.md ; résumé :
+
+- **Découverte qui a changé le plan** : la librairie de génération initialement envisagée (`spanish-verbs`) a été testée avant d'écrire le script plutôt que supposée fiable — ~43% d'erreurs trouvées sur un échantillon de verbes à changement de radical au subjonctif présent, dont une contamination croisée entre verbes (`hacer` renvoyait des formes de `tener`). Remplacée par `@v4nn4/ablaut` (vérifié à 100,00% par ses auteurs sur 339 200 formes espagnoles, retesté ici sans erreur) — voir AUDIT.md pour le détail complet du test.
+- **Génération** : [mobile/scripts/generate-conjugations/](mobile/scripts/generate-conjugations/), 200 verbes (les plus fréquents déjà catégorisés dans `words.json`) × 52 formes = 10 400 formes, écrit dans `mobile/src/data/conjugations.json`.
+- **Base de données** : nouvelles tables `conjugation_cards`/`conjugation_reviews` ([database.ts](mobile/src/data/database.ts)) — le contenu des verbes n'y est pas dupliqué (contrairement à `words`), seule la progression SM-2 de chaque triplet y est stockée. `importMissingConjugationCards` complète le delta à chaque démarrage, même principe que `importMissingWords`.
+- **Écrans** : [ConjugationScreen.tsx](mobile/src/screens/ConjugationScreen.tsx) (onglet, sous-onglets Entraînement/Règles), [ConjugationReviewContainer.tsx](mobile/src/screens/ConjugationReviewContainer.tsx) + [ConjugationReviewScreen.tsx](mobile/src/screens/ConjugationReviewScreen.tsx) (session — carte à saisie clavier plutôt que révélation).
+- **Validation des réponses** : [conjugation/validate.ts](mobile/src/conjugation/validate.ts), tolérante sur les accents (testé, 8 tests unitaires).
+- **Navigation** : 5e onglet dans la barre du bas (libellé "Decks & mots" raccourci en "Decks" pour laisser la place) ; "Règles de conjugaison" est un sous-onglet de "Conjugaison", pas un 6e onglet séparé.
+- **"Réinitialiser ma progression"** étendu pour couvrir aussi la conjugaison (un seul bouton pour toute la progression).
+- Vérifié : `tsc --noEmit`, `npm test` (51/51, +8 pour la validation de conjugaison), bundle Metro compilé (7,3 → 7,7 Mo). **Non vérifié sur device** — comme le reste construit cette session, y compris le temps de premier lancement avec ~16 400 lignes à importer en base (mots + conjugaisons combinés) et le confort réel de la saisie au clavier sur un clavier iOS.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
+- [ ] **Tester l'onglet Conjugaison sur device** : temps de premier import (~16 400 lignes en base au total avec le vocabulaire), confort de la saisie clavier + tolérance sur les accents jugée bien calibrée ou pas, lisibilité de l'écran Règles avec les accordéons dépliés, et si 5 onglets restent confortables au toucher dans la barre du bas.
 - [ ] Regarder le mode sombre en vrai et ajuster la palette si besoin (choix de couleurs non validés par toi).
 - [ ] Gloses verbeuses sur les mots grammaticaux (pronoms/déterminants/prépositions) dans le vocabulaire généré — pas corrigées automatiquement (voir AUDIT.md), correctibles au cas par cas si un mot précis pose problème à l'usage (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression).
-- [ ] **Onglet Conjugaison (entraînement)** — planifié, pas commencé. Trancher les points ouverts listés dans AUDIT.md avant de coder (tolérance sur les accents, nombre de verbes en v1, source de génération définitive).
-- [ ] **Onglet Règles de conjugaison (référence statique)** — planifié, pas commencé. Structure JSON à proposer au moment de l'implémentation.
+- [ ] Intégration de la conjugaison aux notifications verrouillées — explicitement hors périmètre en v1 (voir AUDIT.md), à envisager si l'entraînement en app est jugé utile.
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

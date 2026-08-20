@@ -4,39 +4,47 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { DecksScreen } from '../screens/DecksScreen';
+import { ConjugationScreen } from '../screens/ConjugationScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
+import { ConjugationReviewContainer } from '../screens/ConjugationReviewContainer';
 import { TabBar, type TabKey } from './TabBar';
 import { FadeInView } from '../components/FadeInView';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, useThemeToggle, type SolYSombraPalette } from '../theme/solYSombra';
 
-/** Aujourd'hui / Statistiques / Decks & mots / Réglages vivent derrière
- * une barre d'onglets (Réglages séparé de Decks & mots le 20/08/2026,
- * demandé explicitement — regroupe réglages, historique et prochaine
- * notification à part de la liste de mots) ; Session (la révision plein
- * écran) est un écran plein qui masque la barre, lancé depuis
- * Aujourd'hui et qui y ramène en sortant. */
+type ActiveSession = 'none' | 'vocab' | 'conjugation';
+
+/** Aujourd'hui / Statistiques / Decks & mots / Conjugaison / Réglages
+ * vivent derrière une barre d'onglets (Conjugaison ajouté le
+ * 20/08/2026 — entraînement SM-2 + référence statique en sous-onglets,
+ * voir ConjugationScreen.tsx ; Réglages séparé de Decks & mots le même
+ * jour, regroupe réglages/historique/prochaine notification à part de
+ * la liste de mots) ; Session (révision vocabulaire OU conjugaison,
+ * plein écran) masque la barre, lancée depuis Aujourd'hui/Conjugaison
+ * et y ramène en sortant. */
 export function RootTabs({ db }: { db: SQLiteDatabase }) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [tab, setTab] = useState<TabKey>('today');
-  const [sessionActive, setSessionActive] = useState(false);
+  const [activeSession, setActiveSession] = useState<ActiveSession>('none');
 
   return (
     <View style={styles.root}>
-      {sessionActive ? (
+      {activeSession !== 'none' ? (
         <FadeInView duration={250} direction="none" style={styles.root}>
-          <ReviewScreenContainer db={db} onExit={() => setSessionActive(false)} />
+          {activeSession === 'vocab' && <ReviewScreenContainer db={db} onExit={() => setActiveSession('none')} />}
+          {activeSession === 'conjugation' && <ConjugationReviewContainer db={db} onExit={() => setActiveSession('none')} />}
         </FadeInView>
       ) : (
         <FadeInView duration={0} direction="none" style={styles.root}>
           {/* `key={tab}` force un remontage à chaque changement d'onglet
            * pour rejouer l'entrée en fondu plutôt qu'un changement instantané. */}
           <FadeInView key={tab} duration={200} direction="none" style={styles.content}>
-            {tab === 'today' && <TodayScreen db={db} onStartSession={() => setSessionActive(true)} />}
+            {tab === 'today' && <TodayScreen db={db} onStartSession={() => setActiveSession('vocab')} />}
             {tab === 'stats' && <StatsScreen db={db} />}
             {tab === 'decks' && <DecksScreen db={db} />}
+            {tab === 'conjugation' && <ConjugationScreen db={db} onStartSession={() => setActiveSession('conjugation')} />}
             {tab === 'settings' && <SettingsScreen db={db} />}
           </FadeInView>
           <TabBar current={tab} onChange={setTab} />

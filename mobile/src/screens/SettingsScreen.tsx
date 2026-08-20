@@ -115,7 +115,7 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const handleResetProgress = () => {
     Alert.alert(
       'Réinitialiser ma progression ?',
-      "Toutes les notes et l'historique seront effacés, et chaque mot repartira de zéro comme au premier lancement. Les mots eux-mêmes (bundle + ceux ajoutés à la main) ne sont pas supprimés. Cette action est irréversible.",
+      "Toutes les notes et l'historique seront effacés, et chaque mot ET chaque conjugaison repartiront de zéro comme au premier lancement. Le contenu lui-même (mots, verbes) n'est pas supprimé. Cette action est irréversible.",
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -148,6 +148,20 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
         <NumberField styles={styles} label="Début (heure)" value={settings.windowStartHour} onChange={(v) => update({ windowStartHour: v })} compact />
         <NumberField styles={styles} label="Fin (heure)" value={settings.windowEndHour} onChange={(v) => update({ windowEndHour: v })} compact />
       </View>
+
+      <Text style={styles.fieldLabel}>Conjugaison</Text>
+      <NumberField
+        styles={styles}
+        label="Nouvelles conjugaisons / jour"
+        value={settings.conjugationNewCardsPerDay}
+        onChange={(v) => update({ conjugationNewCardsPerDay: v })}
+      />
+      <NumberField
+        styles={styles}
+        label="Plafond de révisions de conjugaison / jour"
+        value={settings.conjugationReviewCapPerDay}
+        onChange={(v) => update({ conjugationReviewCapPerDay: v })}
+      />
 
       {allTags.length > 0 && (
         <>

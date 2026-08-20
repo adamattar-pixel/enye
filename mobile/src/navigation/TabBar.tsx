@@ -4,12 +4,17 @@ import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-export type TabKey = 'today' | 'stats' | 'decks' | 'settings';
+export type TabKey = 'today' | 'stats' | 'decks' | 'conjugation' | 'settings';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'today', label: 'Aujourd’hui' },
   { key: 'stats', label: 'Statistiques' },
-  { key: 'decks', label: 'Decks & mots' },
+  // Libellé raccourci ("Decks & mots" → "Decks") pour laisser assez de
+  // place aux 5 pilules depuis l'ajout de Conjugaison — le titre complet
+  // reste affiché en haut de l'écran lui-même, seul le libellé de la
+  // barre change.
+  { key: 'decks', label: 'Decks' },
+  { key: 'conjugation', label: 'Conjugaison' },
   { key: 'settings', label: 'Réglages' },
 ];
 
@@ -64,10 +69,10 @@ function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     bar: {
       flexDirection: 'row',
-      // Resserré (10 → 6) en passant à 4 onglets (ajout de Réglages,
-      // séparé de Decks & mots — demandé explicitement le 20/08/2026)
-      // pour garder assez de place à chaque libellé.
-      gap: 6,
+      // Resserré à nouveau (6 → 4) en passant à 5 onglets (ajout de
+      // Conjugaison, 20/08/2026) pour garder assez de place à chaque
+      // libellé.
+      gap: 4,
       borderTopWidth: 1,
       borderTopColor: t.translationBackground,
       backgroundColor: t.cardBackground,
@@ -76,22 +81,22 @@ function createStyles(t: SolYSombraPalette) {
       // chaque pilule ci-dessous).
       paddingTop: 20,
       paddingBottom: 34,
-      paddingHorizontal: 10,
+      paddingHorizontal: 8,
     },
     tab: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 14,
-      paddingHorizontal: 4,
-      borderRadius: 18,
+      paddingHorizontal: 2,
+      borderRadius: 16,
     },
     // Même couleur que l'état sélectionné, en plus clair — demandé
     // explicitement, remplace l'ancien indicateur (petit point qui
     // grandissait) par une pilule pleine dont seule l'intensité change.
     tabActive: { backgroundColor: t.buttonFilled },
     tabInactive: { backgroundColor: t.buttonFilledLight },
-    label: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+    label: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
     labelActive: { color: t.buttonFilledText },
     labelInactive: { color: t.buttonFilled },
   });

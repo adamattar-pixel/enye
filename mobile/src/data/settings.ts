@@ -17,6 +17,14 @@ export interface AppSettings {
    * `'light'`/`'dark'` force la palette correspondante quel que soit le
    * réglage iOS. */
   themeOverride: 'system' | 'light' | 'dark';
+  /** Rythme de l'onglet Conjugaison — séparé de `newCardsPerDay`/
+   * `reviewCapPerDay` (vocabulaire) plutôt que partagé, pour que les
+   * deux entraînements aient chacun leur propre budget quotidien sans
+   * se disputer les mêmes créneaux. Valeurs par défaut identiques au
+   * vocabulaire (8 + 22) faute de retour utilisateur spécifique — à
+   * ajuster séparément si besoin, voir AUDIT.md. */
+  conjugationNewCardsPerDay: number;
+  conjugationReviewCapPerDay: number;
 }
 
 /** Réglages validés (voir PLAN.md, "Décisions validées avec l'utilisateur"). */
@@ -29,6 +37,8 @@ export const defaultSettings: AppSettings = {
   windowEndMinute: 0,
   disabledTags: [],
   themeOverride: 'system',
+  conjugationNewCardsPerDay: 8,
+  conjugationReviewCapPerDay: 22,
 };
 
 const SETTINGS_KEY = 'app';
