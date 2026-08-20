@@ -2,6 +2,17 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Lenteur au démarrage — cause identifiée et corrigée (20/08/2026)
+
+Repéré sur relecture du code suite à une question de l'utilisateur ("l'app est lente au démarrage non ?"), avant même un test réel — donc une hypothèse forte, pas encore confirmée sur device. Deux points bloquaient l'affichage :
+
+1. **`App.tsx`** attendait `refillNotificationQueue()` avant d'appeler `setDb()` — l'écran de chargement restait affiché tant que la file entière n'était pas reprogrammée.
+2. **`refillNotificationQueue()`** ([queue.ts](mobile/src/notifications/queue.ts)) programmait les notifications **une par une, en séquence** (`for` + `await` dans la boucle) — jusqu'à 50 appels au pont natif attendus les uns après les autres.
+
+Fix : `setDb()` est maintenant appelé **avant** le rechargement de la file, qui se termine en arrière-plan sans bloquer l'affichage ; la boucle de programmation est passée en `Promise.all` (parallèle, pas séquentiel). Même correctif appliqué dans `ReviewScreenContainer.handleGrade` — noter une carte affichait la suivante seulement après le rechargement complet de la file, ce qui aurait rendu **chaque note** dans une session aussi lente que l'était le démarrage.
+
+**Non confirmé sur device** : c'est un diagnostic à partir du code, pas d'une mesure réelle. Si le démarrage est encore lent après ce correctif, il faudra profiler pour de vrai plutôt que deviner à nouveau.
+
 ## Animations et retour haptique (20/08/2026)
 
 À la demande explicite ("rends l'app plus moderne avec plein d'animation et aesthetics"). Ajouté `react-native-reanimated` + `react-native-worklets` (dépendance requise séparément par les versions récentes de Reanimated) et `expo-haptics`, tous compatibles SDK 54 (`expo-doctor` : 18/18 après ajout). Pas de `babel.config.js` dans le projet — le plugin Reanimated est censé être auto-configuré par `babel-preset-expo` sans fichier explicite ; le bundle compile et passe `node -c` sans erreur, donc apparemment fonctionnel, **mais le vrai test est l'exécution sur device, pas juste la compilation**.

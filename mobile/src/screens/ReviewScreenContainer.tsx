@@ -50,10 +50,17 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
       await updateCard(db, current.word.id, nextState);
       await logReview(db, current.word.id, grade, now);
 
-      const settings = await getSettings(db);
-      await refillNotificationQueue(db, settings, now);
-
+      // La carte suivante s'affiche tout de suite, sans attendre le
+      // rechargement de la file de notifications (jusqu'à 50 appels
+      // natifs) — sinon chaque note dans une session se sentirait aussi
+      // lente que le démarrage l'était avant correction. Le rechargement
+      // se fait quand même, juste pas sur le chemin critique de l'UI.
       await loadNext();
+
+      const settings = await getSettings(db);
+      refillNotificationQueue(db, settings, now).catch((error) => {
+        console.warn('Échec du rechargement de la file de notifications :', error);
+      });
     },
     [db, current, loadNext]
   );

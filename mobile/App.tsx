@@ -22,8 +22,9 @@ export default function App() {
       await migrateDbIfNeeded(database);
       await seedIfEmpty(database, parseWords(wordsJson));
 
-      await ensurePermissions();
-      await registerCategories();
+      // Permission + catégories en parallèle, pas en séquence — aucune
+      // des deux ne dépend du résultat de l'autre.
+      await Promise.all([ensurePermissions(), registerCategories()]);
 
       // Deux chemins pour traiter les réponses aux notifications — pas
       // un seul (voir AUDIT.md, tâche 0) :
@@ -35,10 +36,15 @@ export default function App() {
       const lastResponse = await Notifications.getLastNotificationResponseAsync();
       if (lastResponse) await handleNotificationResponse(database, lastResponse);
 
+      // L'app est affichable dès ici — le rechargement de la file de
+      // notifications ne doit pas retarder l'écran (c'était la cause
+      // principale de lenteur au démarrage : jusqu'à 50 notifications
+      // programmées une par une, en attente les unes des autres, avant
+      // même que l'utilisateur voie quoi que ce soit).
+      setDb(database);
+
       const settings = await getSettings(database);
       await refillNotificationQueue(database, settings);
-
-      setDb(database);
     })();
   }, []);
 

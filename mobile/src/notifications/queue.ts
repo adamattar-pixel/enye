@@ -42,23 +42,31 @@ export async function refillNotificationQueue(
 
   const byId = new Map(due.map((row) => [row.word.id, row.word]));
 
-  for (const slot of slots) {
-    const word = byId.get(slot.id);
-    if (!word) continue;
+  // En parallèle, pas en séquence : programmer jusqu'à 50 notifications
+  // une par une (chacune un appel au pont natif) ajoutait plusieurs
+  // secondes au démarrage. Aucune de ces requêtes ne dépend du résultat
+  // d'une autre, `Promise.all` est donc sûr ici.
+  await Promise.all(
+    slots.flatMap((slot) => {
+      const word = byId.get(slot.id);
+      if (!word) return [];
 
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: word.spanish,
-        body: 'Toca «Ver traducción» para revelar.',
-        categoryIdentifier: REVIEW_CATEGORY,
-        data: { wordId: word.id },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: slot.fireDate,
-      },
-    });
-  }
+      return [
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: word.spanish,
+            body: 'Toca «Ver traducción» para revelar.',
+            categoryIdentifier: REVIEW_CATEGORY,
+            data: { wordId: word.id },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: slot.fireDate,
+          },
+        }),
+      ];
+    })
+  );
 
   return slots.length;
 }
