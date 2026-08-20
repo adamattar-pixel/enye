@@ -25,6 +25,16 @@ Retour utilisateur après un nouveau test réel : les boutons de notation (Otra 
 
 **Vérifié pour ce chantier** : `tsc --noEmit` sans erreur, `npm test` (43 tests) vert, bundle Metro compilé et servi (`curl` sur `/index.ts.bundle`, HTTP 200, `node -c` sans erreur de syntaxe, 878 modules). **Non vérifié** : comportement réel des boutons, de l'historique et des animations sur iPhone — seul un test réel le confirmera.
 
+## "Rien à réviser" après vidage du cache — pas un bug, précision utile pour la suite (20/08/2026)
+
+Retour utilisateur après le vidage du cache Metro (`expo start --clear`) : l'écran Aujourd'hui affiche "Rien à réviser". Vérifié avec l'utilisateur via l'onglet Historique (déjà des révisions listées) : **la base SQLite de l'app n'a pas été remise à zéro**, contrairement à ce qui était supposé lors du "redémarrage". Confirme une distinction déjà présente dans le code mais pas assez explicite pour l'utilisateur jusqu'ici : vider le cache Metro (`expo start --clear`) n'efface que le bundle JavaScript, pas les données de l'app (SQLite, via `expo-sqlite`) — Expo Go conserve le stockage local du projet même après avoir complètement fermé/rouvert l'app ou vidé ce cache. Les 36 mots du vocabulaire de départ avaient déjà tous été notés pendant les tests (dont via le bouton "Encore des cartes"), donc SM-2 avait repoussé leurs échéances dans le futur : "Rien à réviser" était le comportement correct, pas un bug.
+
+**Action retenue** (choisie par l'utilisateur parmi plusieurs options proposées) : ajouter un bouton "Réinitialiser ma progression" plutôt que d'attendre les échéances naturelles ou d'élargir le vocabulaire pour l'instant. Implémenté :
+- `resetProgress(db, now)` ([database.ts](mobile/src/data/database.ts)) : vide `reviews` et `cards`, réinsère une carte SM-2 neuve (`lifecycle: 'new'`, `due_date: now`) pour chaque mot déjà présent dans `words` via un seul `INSERT ... SELECT` — ne touche pas à la table `words` elle-même (mots du bundle et mots ajoutés à la main restent tous là), donc fonctionne quel que soit le contenu réellement présent, pas câblé sur les 36 mots d'origine.
+- Bouton dans Decks & mots → Réglages → "Zone sensible", avec confirmation (`Alert.alert`, style destructif) avant d'agir — irréversible, donc pas d'exécution en un seul tap.
+
+**Vérifié** : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé. **Non vérifié sur device.**
+
 ## Bouton "Encore des cartes" en fin de session (20/08/2026)
 
 Demandé explicitement : pouvoir demander de nouvelles cartes si la session du jour est terminée. Constat en écrivant ce correctif : le plafond `newCardsPerDay` (8 par défaut) n'a **jamais été un verrou en base** — `getDueCardsSplit` ne fait que limiter le nombre de nouvelles cartes sélectionnées *par appel*, sans mémoriser combien ont déjà été servies aujourd'hui. Rien n'empêchait donc techniquement d'en redemander, seulement l'UI ne le permettait pas encore.

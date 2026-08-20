@@ -69,6 +69,10 @@ Nouveau retour après test réel : boutons de notation non réactifs et trop pet
 - **Validation de réglages** : heure de fin ne peut plus précéder l'heure de début (backlog résolu au passage).
 - Vérifié : `tsc --noEmit`, `npm test` (43/43), bundle Metro compilé (878 modules, HTTP 200). **Non vérifié sur device** — à confirmer au prochain test réel, en particulier si les boutons répondent maintenant au toucher.
 
+## Bouton "Réinitialiser ma progression" (20/08/2026)
+
+"Rien à réviser" après un vidage de cache n'était pas un bug : le cache Metro (JS) et les données SQLite de l'app sont deux choses séparées, la base persiste tant qu'on ne l'efface pas explicitement. Ajouté un bouton dans Réglages → Zone sensible pour repartir de zéro sans attendre les échéances naturelles (efface reviews + cards, remet chaque mot existant en "nouveau"). Voir AUDIT.md.
+
 ## Bouton "Encore des cartes" en fin de session (20/08/2026)
 
 Demandé explicitement : pouvoir demander de nouvelles cartes une fois celles du jour terminées. Le plafond `newCardsPerDay` n'était déjà qu'une limite par requête, pas un verrou persisté — `getMoreNewCards` (database.ts) redemande simplement un nouveau lot, affiché via un bouton sur l'écran "Aucune carte due" de la session. Voir AUDIT.md pour le détail. Vérifié : `tsc`, tests, bundle. Non testé sur device.

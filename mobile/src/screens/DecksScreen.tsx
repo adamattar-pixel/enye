@@ -18,6 +18,7 @@ import {
   getAllTags,
   getAllWords,
   getReviewHistory,
+  resetProgress,
   updateReviewGrade,
   type ReviewHistoryRow,
 } from '../data/database';
@@ -517,6 +518,24 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     Alert.alert('Enregistré', 'Les réglages ont été mis à jour.');
   };
 
+  const handleResetProgress = () => {
+    Alert.alert(
+      'Réinitialiser ma progression ?',
+      "Toutes les notes et l'historique seront effacés, et chaque mot repartira de zéro comme au premier lancement. Les mots eux-mêmes (bundle + ceux ajoutés à la main) ne sont pas supprimés. Cette action est irréversible.",
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Réinitialiser',
+          style: 'destructive',
+          onPress: async () => {
+            await resetProgress(db);
+            Alert.alert('Progression réinitialisée', 'Tous les mots sont de nouveau à réviser.');
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.settingsContent}>
       <NumberField
@@ -565,6 +584,17 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       <TouchableOpacity style={styles.creditsLink} onPress={() => setCreditsVisible(true)}>
         <Text style={styles.creditsLinkText}>Crédits et sources du vocabulaire</Text>
       </TouchableOpacity>
+
+      <View style={styles.dangerZone}>
+        <Text style={styles.dangerZoneTitle}>Zone sensible</Text>
+        <AnimatedPressable
+          style={styles.dangerButton}
+          haptic={Haptics.NotificationFeedbackType.Warning}
+          onPress={handleResetProgress}
+        >
+          <Text style={styles.dangerButtonText}>Réinitialiser ma progression</Text>
+        </AnimatedPressable>
+      </View>
 
       <CreditsScreen visible={creditsVisible} onClose={() => setCreditsVisible(false)} />
     </ScrollView>
@@ -694,6 +724,23 @@ function createStyles(t: SolYSombraPalette) {
     notificationHint: { fontSize: 12, color: t.metaText, lineHeight: 17, marginBottom: 20 },
     creditsLink: { alignItems: 'center', paddingVertical: 16 },
     creditsLinkText: { color: t.label, fontSize: 12, textDecorationLine: 'underline' },
+
+    dangerZone: {
+      marginTop: 28,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: t.translationBackground,
+    },
+    dangerZoneTitle: { fontSize: 12, fontWeight: '600', color: t.metaText, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 },
+    dangerButton: {
+      borderWidth: 1.5,
+      borderColor: t.dot,
+      borderRadius: 24,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    dangerButtonText: { color: t.dot, fontWeight: '700' },
+
     hourRow: { flexDirection: 'row' },
     tagToggleWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
 

@@ -523,3 +523,29 @@ export async function deleteWord(db: SQLiteDatabase, wordId: string): Promise<vo
     await db.runAsync('DELETE FROM words WHERE id = ?;', wordId);
   });
 }
+
+/** Efface tout l'historique de révisions et remet une carte SM-2 neuve
+ * pour chaque mot déjà présent en base (`words` n'est pas touché — mots
+ * du bundle et mots ajoutés à la main restent tous là) — bouton
+ * "Réinitialiser ma progression" dans Réglages, ajouté pour pouvoir
+ * retester le flux complet sans attendre que les échéances SM-2
+ * reviennent naturellement. Irréversible : l'appelant doit confirmer
+ * avant d'appeler cette fonction. */
+export async function resetProgress(db: SQLiteDatabase, now: Date = new Date()): Promise<void> {
+  const card = createCard({ dueDate: now });
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM reviews;');
+    await db.runAsync('DELETE FROM cards;');
+    await db.runAsync(
+      `INSERT INTO cards (word_id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)
+       SELECT id, ?, ?, ?, ?, ?, ?, ? FROM words;`,
+      card.easeFactor,
+      card.intervalDays,
+      card.repetitions,
+      card.lapses,
+      card.learningStepIndex,
+      card.lifecycle,
+      card.dueDate.toISOString()
+    );
+  });
+}
