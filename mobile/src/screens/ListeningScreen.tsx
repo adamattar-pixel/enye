@@ -234,8 +234,15 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
           "Cette vidéo est dans ta bibliothèque mais aucun sous-titre espagnol n'a pu être récupéré — elle ne sera pas proposée en entraînement tant que ça reste le cas."
         );
       }
-    } catch {
-      setAddError('Erreur réseau — réessaie dans un instant.');
+    } catch (err) {
+      // Le message affiché disait "Erreur réseau" pour N'IMPORTE QUELLE
+      // exception (réseau, SQLite, bug JS...) — signalé comme trompeur le
+      // 21/08/2026 ("erreur réseau quand je rajoute une vidéo") sans
+      // qu'on puisse savoir laquelle depuis un `catch {}` muet. Log de
+      // diagnostic temporaire ajouté pour voir la vraie cause au
+      // prochain test, plutôt que deviner une nouvelle fois à l'aveugle.
+      console.log('[ListeningScreen] échec ajout vidéo:', err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+      setAddError('Impossible d’ajouter cette vidéo — réessaie dans un instant.');
     } finally {
       setAddingId(null);
     }

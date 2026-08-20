@@ -280,6 +280,14 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Statut : cause du "0 segments" identifiée avec certitude (pas une hypothèse — le payload réel a été vu dans les logs), correctif de parsing implémenté et couvert par des tests unitaires basés sur la forme réelle. Le mécanisme d'interception réseau lui-même est maintenant CONFIRMÉ fonctionnel en conditions réelles — c'était le plus gros risque non résolu de toute cette fonctionnalité.** Ce qui reste non vérifié : que `parseJson3Captions`, une fois exécuté sur le vrai corps de 858 225 caractères (pas seulement sur un fixture construit à la main), produise bien un nombre de segments > 0 cohérent. Le prochain test réel sur device doit le confirmer avant de considérer cette fonctionnalité comme réparée.
 
+### Sixième itération — "Erreur réseau" à l'ajout, cause réelle inconnue faute de log (21/08/2026)
+
+**Constat.** Retour utilisateur après le correctif de parsing ci-dessus : "erreur réseau quand je rajoute une vidéo maintenant". En relisant `handleAddResult` ([ListeningScreen.tsx](mobile/src/screens/ListeningScreen.tsx)), le `catch` était muet (`catch { setAddError('Erreur réseau...') }`) — affiche le même message pour absolument N'IMPORTE QUELLE exception, réseau ou non. Ni `fetchVideoCaptions()` ni `fetchTranscript()` (le hook de `TranscriptFetcher.tsx`) ne sont censés lever d'exception dans leur conception actuelle (les deux se dégradent silencieusement vers un statut `unavailable` plutôt que de rejeter/lancer) — donc soit l'un des deux a un chemin d'exception non couvert qui n'a pas été repéré à la relecture, soit l'exception vient d'ailleurs dans le bloc `try` (le plus probable candidat restant : `addListeningVideo`, l'écriture SQLite).
+
+**Impact.** Plutôt que de deviner une nouvelle cause sans preuve (déjà fait deux fois dans ce chantier avec des résultats mitigés), un log de diagnostic temporaire a été ajouté (`console.log('[ListeningScreen] échec ajout vidéo:', ...)`, avec le nom et le message de l'exception) pour voir la vraie cause au prochain test. Le message affiché à l'utilisateur a aussi été rendu moins spécifiquement faux ("Impossible d'ajouter cette vidéo" plutôt que "Erreur réseau", qui présupposait une cause non confirmée).
+
+**Statut : cause réelle non identifiée, logging de diagnostic ajouté pour la découvrir au prochain test — ne pas supposer qu'il s'agit véritablement d'un problème réseau tant que le log `[ListeningScreen] échec ajout vidéo:` n'a pas été lu.**
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

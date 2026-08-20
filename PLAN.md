@@ -528,6 +528,16 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : correctif de parsing implémenté et testé unitairement (avec un fixture basé sur un vrai payload), mais PAS encore revérifié sur device.** Le mécanisme d'interception lui-même (patch réseau, clic sur le bouton) est maintenant confirmé fonctionnel en conditions réelles — c'était la plus grosse inconnue de toute cette fonctionnalité. Reste à confirmer que le nouveau parseur produit bien des segments > 0 une fois appliqué. Détail complet dans AUDIT.md.
 
+## "Erreur réseau" à l'ajout — message trompeur, cause réelle inconnue (21/08/2026)
+
+**Demande explicite** : retour "erreur réseau quand je rajoute une vidéo maintenant", après le correctif de parsing ci-dessus.
+
+**Diagnostic.** `handleAddResult` ([ListeningScreen.tsx](mobile/src/screens/ListeningScreen.tsx)) avait un `catch {}` muet qui affichait "Erreur réseau" pour N'IMPORTE QUELLE exception (réseau, SQLite, bug JS...) — impossible de savoir laquelle sans log. Ni `fetchVideoCaptions()` ni `fetchTranscript()` ne devraient normalement lever d'exception (les deux ont leur propre dégradation silencieuse vers un statut `unavailable`), donc la cause réelle est encore inconnue à ce stade — pourrait venir d'`addListeningVideo` (SQLite) ou d'ailleurs.
+
+**Impact.** Log de diagnostic temporaire ajouté (`console.log('[ListeningScreen] échec ajout vidéo:', ...)`) pour voir la vraie cause au prochain test, plutôt que deviner à l'aveugle une nouvelle fois. Message utilisateur aussi rendu moins spécifiquement faux ("Impossible d'ajouter cette vidéo" plutôt que "Erreur réseau").
+
+**Statut : logging de diagnostic ajouté, cause réelle PAS encore identifiée.** Prochaine étape : retester et lire le log `[ListeningScreen] échec ajout vidéo:` dans Metro.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
