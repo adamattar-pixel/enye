@@ -8,6 +8,12 @@ Journal des constats techniques, risques et incidents résolus. Chaque entrée :
 
 **Ce que ça coûte.** Pas de Notification Content Extension possible en Expo Go sans development build → pas d'UI custom dans la notification déroulée, apparence standard iOS uniquement. Le design « Sol y sombra » ne vit plus que dans l'app elle-même.
 
+## Portage SM-2 en TypeScript (20/08/2026)
+
+Implémenté : [mobile/src/sm2/types.ts](mobile/src/sm2/types.ts), [engine.ts](mobile/src/sm2/engine.ts), [engine.test.ts](mobile/src/sm2/engine.test.ts) — port direct de `Packages/SM2Engine` (Swift). Les 13 tests Swift ont été traduits 1:1 (mêmes cas, mêmes valeurs attendues) puis passés : **13/13 verts, aucune divergence de comportement trouvée** entre les deux implémentations.
+
+Setup de test ajouté au projet Expo : `jest-expo` + `jest` + `@types/jest` en devDependencies (commande officielle SDK 54 : `npx expo install jest-expo jest @types/jest -- --dev` sous Windows), `"jest": { "preset": "jest-expo" }` dans `package.json`, `"types": ["jest"]` dans `tsconfig.json`. Lancer les tests : `npx jest --watchAll=false` (ou `npm test` pour le mode watch).
+
 ## Écran de révision — style Sol y sombra (20/08/2026)
 
 Implémenté : [mobile/src/screens/ReviewScreen.tsx](mobile/src/screens/ReviewScreen.tsx) + [mobile/src/theme/solYSombra.ts](mobile/src/theme/solYSombra.ts). Carte crème/bordure ocre, liseré pointillé façon ticket, bloc traduction fond rose pâle, 4 boutons de notation en pilules (2 lignes de 2 : Otra vez/Difícil en contour ocre, Bien/Fácil en plein bordeaux). Visible par défaut au lancement de l'app (mock data, pas encore branché à SM-2/à la vraie file — tâches 3-4).

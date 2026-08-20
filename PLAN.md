@@ -36,7 +36,7 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 0. **Preuve de concept notifications** (tâche 0) — **validée et close**. Le montage en deux temps (mot → « Ver traducción » → 2ème notification traduction + 4 boutons de notation) fonctionne sur iPhone réel tant que l'app n'a pas été force-quittée. Limite acceptée : après un force-quit utilisateur, aucun code ne s'exécute en arrière-plan (politique iOS documentée par Apple, identique en natif — voir AUDIT.md) ; dégradation silencieuse et sans perte de données, résolue à la prochaine ouverture manuelle grâce au rechargement de la file. Bug de prototype trouvé et corrigé au passage : il fallait à la fois `getLastNotificationResponseAsync()` au démarrage ET `addNotificationResponseReceivedListener` en direct, pas l'un ou l'autre.
 1. **Réglages SM-2** — **fait** (8 nouvelles + 22 révisions = 30/j, voir ci-dessus).
-2. **Portage SM-2 en TypeScript** — pas commencé. Les 13 tests de `Packages/SM2Engine` (Swift) servent de spécification ; à porter d'abord, faire passer ensuite.
+2. **Portage SM-2 en TypeScript** — **fait**. [mobile/src/sm2/](mobile/src/sm2/) (`types.ts`, `engine.ts`, `engine.test.ts`), 13/13 tests portés depuis `Packages/SM2Engine` et verts, aucune divergence de comportement trouvée.
 3. **Persistance + chargement de `words.json`** — pas commencé côté Expo. Contenu de `words.json` toujours incomplet (36/1000-2000 mots, non validés).
 4. **Planificateur de notifications** — la logique pure (`Packages/ReviewScheduler`, 9 tests) existe en Swift, à porter en TypeScript sur le même principe que SM-2.
 5. **Écrans** (Aujourd'hui, Session, Statistiques, Decks/mots) — pas commencé.
@@ -44,9 +44,9 @@ Le travail natif n'est pas perdu : [Packages/SM2Engine](Packages/SM2Engine) (13 
 
 ## Prochaines actions
 
-- [ ] Porter SM-2 (`Packages/SM2Engine`) en TypeScript — tests d'abord, à partir des 13 tests Swift existants.
-- [ ] Porter ReviewScheduler (`Packages/ReviewScheduler`) en TypeScript — même principe, à partir des 9 tests Swift existants.
+- [ ] Porter ReviewScheduler (`Packages/ReviewScheduler`) en TypeScript — même principe que SM-2, à partir des 9 tests Swift existants.
 - [ ] Reprendre la validation de `words.json` (échantillon 36 mots, format proposé) avant l'étape 3 (persistance).
+- [ ] Brancher `mobile/src/sm2/` sur l'écran de révision (actuellement données mock, voir le style Sol y sombra déjà en place).
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

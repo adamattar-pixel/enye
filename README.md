@@ -8,18 +8,27 @@ Le projet a démarré en iOS natif (Swift/SwiftUI/SwiftData), mais sans Mac disp
 
 Le travail natif Swift n'est pas supprimé, seulement mis en pause : [Packages/SM2Engine](Packages/SM2Engine) et [Packages/ReviewScheduler](Packages/ReviewScheduler) servent de spécification de référence pour le portage TypeScript (mêmes comportements, mêmes tests). Voir [PLAN.md](PLAN.md) pour l'avancement détaillé et [AUDIT.md](AUDIT.md) pour les risques techniques et incidents.
 
-## Prototype Expo — tâche 0 (preuve de concept notifications)
-
-[mobile/](mobile/) contient un prototype jetable qui teste le risque le plus important du pivot : est-ce qu'un bouton d'action sur une notification peut réveiller l'app en arrière-plan (app totalement fermée) pour écrire en base ET programmer une seconde notification, sans jamais ouvrir l'app ? Voir le protocole de test donné en conversation — ce README sera mis à jour avec le résultat une fois validé.
-
-Pour lancer le prototype :
+## Lancer l'app (mobile/)
 
 ```
 cd mobile
 npx expo start
 ```
 
-Puis scanner le QR code affiché avec l'app Appareil photo de l'iPhone (elle propose d'ouvrir dans Expo Go), ou avec le bouton « Scan QR Code » dans Expo Go directement. PC et iPhone doivent être sur le même réseau Wi-Fi.
+Puis scanner le QR code affiché avec l'app Appareil photo de l'iPhone (elle propose d'ouvrir dans Expo Go), ou avec le bouton « Scan QR Code » dans Expo Go directement. PC et iPhone doivent être sur le même réseau Wi-Fi. L'app affiche par défaut l'écran de révision (style « Sol y sombra », données mock) ; un lien en bas permet de revenir au panneau de diagnostic de la tâche 0.
+
+## Lancer les tests TypeScript (mobile/)
+
+```
+cd mobile
+npx jest --watchAll=false
+```
+
+`npm test` lance le mode watch (relance automatique à chaque modification).
+
+## Tâche 0 — preuve de concept notifications (validée)
+
+Testait le risque le plus important du pivot : est-ce qu'un bouton d'action sur une notification peut réveiller l'app en arrière-plan pour écrire en base ET programmer une seconde notification, sans jamais ouvrir l'app ? **Résultat : oui, tant que l'app n'a pas été force-quittée par l'utilisateur** — limite documentée par Apple elle-même (voir [AUDIT.md](AUDIT.md)), identique en natif, acceptée comme dégradation silencieuse sans perte de données.
 
 ## Archive — version iOS native (Swift/SwiftUI/SwiftData)
 
