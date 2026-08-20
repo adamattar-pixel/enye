@@ -2,6 +2,127 @@
 
 Journal des constats techniques, risques et incidents résolus. Chaque entrée : constat → impact → statut. Sert à ne pas re-découvrir deux fois le même problème.
 
+## Vocabulaire aléatoire, notification exacte, stat conjugaison, thèmes (20/08/2026)
+
+Quatre retours groupés dans un même message après un test réel.
+
+### Vocabulaire pas aléatoire — même bug que la conjugaison, jamais corrigé côté vocabulaire
+
+**Constat.** `fetchNewCardRows` (utilisée par `getDueCardsSplit`) triait les nouveaux mots par `ORDER BY w.frequency_rank ASC` — un tri par fréquence, pas aléatoire, donc les nouveaux mots apparaissaient toujours dans le même ordre (ser, estar, tener, hacer...) à chaque session. Exactement le même défaut que celui trouvé et corrigé plus tôt pour `getDueConjugationCardsSplit`, mais jamais appliqué au vocabulaire — à l'époque, seule la conjugaison avait été signalée cassée, donc le vocabulaire n'avait pas été touché ("ne pas complexifier là où rien n'a été signalé cassé"). Maintenant signalé cassé aussi.
+
+**Impact.** Corrigé de la même façon : `ORDER BY RANDOM()` sur la sélection des nouvelles cartes, puis `shuffle()` (Fisher-Yates, déjà utilisé et testé pour la conjugaison) sur l'ensemble révisions+nouvelles avant renvoi par `getDueCardsSplit`.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test`, bundle Metro compilé. **Non vérifié sur device.**
+
+### Heure de notification enfin exacte — persistée, pas recalculée
+
+**Constat.** `getNextNotificationTime` recalculait le planning de notification à chaque consultation (rejouait `ReviewScheduler` avec un nouvel espacement aléatoire 15-30 min à chaque appel), donc l'heure affichée pouvait diverger de celle réellement programmée par le dernier `refillNotificationQueue` — déjà noté comme "approximatif, assumé comme tel" dans une entrée précédente de ce fichier, mais l'utilisateur signale maintenant que ce n'est pas assez précis.
+
+**Impact / décision.** Plutôt que d'essayer de lire le format de retour non documenté de `Notifications.getAllScheduledNotificationsAsync()` (option déjà écartée précédemment, toujours pas tentée), la vraie source de vérité a été rapprochée du calcul : `refillNotificationQueue` calcule déjà les créneaux réels (`slots`) avant de les programmer côté OS — ils sont maintenant AUSSI persistés dans une nouvelle table miroir `scheduled_notifications` (word_id, fire_date), au moment exact où ils sont programmés pour de vrai. `getNextNotificationTime` n'a plus qu'à lire `MIN(fire_date) WHERE fire_date > now` — une lecture, plus une estimation. Signature simplifiée en conséquence (`settings` n'est plus un paramètre nécessaire, l'appelant dans `SettingsScreen.tsx` mis à jour).
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test`, bundle Metro compilé. **Non vérifié sur device** — en particulier que l'heure affichée corresponde bien, au dixième de seconde d'arrondi près, à la notification réellement reçue.
+
+### Onglet Conjugaison → total acquis plutôt que nombre dû
+
+**Constat/décision.** Demandé explicitement : remplacer l'affichage "N conjugaisons dues" par le total de conjugaisons acquises. Nouvelle fonction `getConjugationCounts(db)` ([database.ts](mobile/src/data/database.ts)), même principe que `getWordCounts` déjà existant côté vocabulaire (`learned` = `lifecycle != 'new'`, `total` = toutes les cartes). Le nombre dû (`dueCount`) reste calculé et utilisé en interne pour activer/désactiver le bouton "Commencer la session"/"Rien à réviser" — seul l'affichage du gros chiffre a changé, pas la logique de session.
+
+**Statut : implémenté.** Vérifié : `tsc --noEmit`, `npm test`, bundle Metro compilé. **Non vérifié sur device.**
+
+### Tags thématiques pour les 6000 mots de vocabulaire — fait, avec des limites honnêtes
+
+**Constat.** Demandé explicitement, avec la permission explicite de décliner si impossible ("si tu peux pas dis le moi"). Aucune source de catégorisation thématique dans les données utilisées pour générer le vocabulaire (déjà noté comme limite connue plus bas dans ce fichier) — pas de raccourci propre disponible, il fallait soit une vraie compréhension sémantique (hors de portée sans faire appel à un modèle externe), soit une heuristique.
+
+**Décision : heuristique par mots-clés anglais sur la glose de chaque mot** ([mobile/scripts/tag-themes/](mobile/scripts/tag-themes/)), 20 thèmes couvrant les catégories les plus utiles pour un apprenant (nourriture, maison, famille, corps, santé, vêtements, nature, animaux, météo/temps, voyage, travail, école, technologie, argent, émotions, sport, ville, couleurs, communication, art/musique).
+
+**Faux positifs trouvés et corrigés pendant le développement du script, pas découverts après coup** : plusieurs verbes à sens phrasal étaient mal classés à cause d'un mot anglais partagé avec un sens différent — *"to hand"* (donner) classé "cuerpo" à cause de "hand" (main), *"to fall"* (tomber) confondu avec la saison "fall", *"to head out"* (partir) à cause de "head" (tête). Corrigé en excluant ces mots-clés spécifiquement pour les verbes (`verbAmbiguous`, appliqué à cuerpo/tiempo_clima/deportes). D'autres collisions (mois "March"/"May" avec des mots espagnols sans rapport comme "marcha") ont été retirées entièrement plutôt que patchées.
+
+**Limite résiduelle assumée, pas corrigée davantage** : des faux positifs subsistent sur des ambiguïtés nom-contre-nom (pas verbe-contre-nom, donc pas couvertes par le mécanisme ci-dessus) — ex. *"arma"* (arme) tagué "cuerpo" à cause de "arm" (bras). Estimé à l'œil, pas mesuré systématiquement, autour de 10% de faux positifs résiduels sur le thème le plus touché ("cuerpo") — **chiffre approximatif, pas un audit exhaustif des 1027 mots tagués.** Détail complet dans le README du script.
+
+**Résultat chiffré** : 1027 des 5966 mots générés (17,2%) sans tag ont reçu au moins un thème ; 4939 restent sans tag (mots grammaticaux/abstraits sans thème concret, attendu). Les 36 mots écrits à la main, déjà tagués, n'ont jamais été touchés.
+
+**Statut : fait, avec limites documentées honnêtement plutôt que promis parfait.** Pas de code applicatif à tester (`words.json` est une donnée statique) — vérifié : le fichier reste un JSON valide de 6002 entrées, `tsc --noEmit`/`npm test`/bundle Metro (qui embarquent `words.json`) toujours verts après la mise à jour du contenu.
+
+## Planification — Onglet « Compréhension orale » (20/08/2026) — AUCUN CODE ÉCRIT
+
+Mission de cadrage explicite : inspecter l'architecture, concevoir la fonctionnalité, documenter, **sans coder**. Détail complet des décisions et du pipeline proposé dans PLAN.md, section « Planification — Onglet Compréhension orale ». Cette entrée reprend la structure demandée explicitement (constat → impact → statut par thème), avec des statuts honnêtes : rien n'est "résolu" tant que rien n'a tourné.
+
+### YouTube — lecteur vs récupération de captions
+
+**Constat.** Deux besoins de nature très différente ont été confondus dans beaucoup de tutoriels/bibliothèques communautaires trouvés en cherchant, et il fallait les séparer clairement : lire une vidéo YouTube (officiellement supporté) et en extraire le texte des sous-titres (pas officiellement supporté pour des vidéos tierces).
+
+- Lecture vidéo via IFrame Player API (WebView), avec `start`/`end` en secondes : **officiel et documenté** publiquement par YouTube. **Statut : décidé**, sous réserve du point bloquant ci-dessous (compatibilité Expo Go).
+- Métadonnées (titre/chaîne/miniature) via oEmbed : **officiel et documenté**, sans clé API. **Statut : décidé.**
+- Durée de la vidéo : pas de source officielle sans clé API payante/à créer. **Statut : décidé** — champ `durationSeconds` nullable, non bloquant pour le fonctionnement (les segments ont leurs propres horodatages, indépendants de la durée totale).
+- Liste des pistes de sous-titres + contenu horodaté : dépend d'un JSON embarqué dans la page HTML de la vidéo et/ou d'un endpoint `timedtext` non documenté. **Aucune API publique YouTube ne couvre ce besoin pour une vidéo tierce quelconque** (`captions.download` de l'API officielle exige l'autorisation OAuth du propriétaire de la vidéo — inapplicable ici par construction, pas par choix). **Statut : risque connu, non vérifié.** Aucun appel réseau n'a été fait pendant cette session de planification — ne pas présenter cette méthode comme fiable avant de l'avoir testée en tout début d'implémentation.
+
+**Impact.** Si la récupération de captions cesse de fonctionner un jour (changement côté YouTube), l'app doit continuer à tourner : les vidéos concernées passent simplement à `captionStatus: 'unavailable'` au prochain ajout tenté, rien ne casse rétroactivement pour les vidéos déjà en bibliothèque (le transcript déjà récupéré et stocké en base reste utilisable indéfiniment, seul l'AJOUT de nouvelles vidéos serait affecté).
+
+**Statut global de ce thème : décidé pour la partie officielle (lecteur, métadonnées), risque connu et explicitement non vérifié pour la partie captions.**
+
+### Compatibilité Expo Go — point le plus bloquant de tout le chantier
+
+**Constat.** L'app tourne exclusivement en Expo Go (contrainte non négociable établie depuis le pivot vers Expo, voir plus bas dans ce fichier) — aucune dépendance native custom, aucun development build. `react-native-webview` n'est pas dans les dépendances actuelles de `mobile/package.json` (vérifié : `grep` sur `package.json`, aucune trace). C'est un paquet généralement inclus dans le binaire précompilé d'Expo Go pour les versions de SDK supportées (il fait partie de l'écosystème de bibliothèques qu'Expo Go embarque nativement), mais **ça n'a pas été vérifié concrètement sur l'installation réelle (SDK 54, Expo Go 54.0.2) de l'utilisateur** — aucune installation de paquet ni test n'a été fait pendant cette session, conformément à la consigne de ne pas coder.
+
+**Impact.** Si `react-native-webview` ne fonctionne pas dans cet Expo Go précis, toute l'approche de lecture vidéo (IFrame Player API via WebView) doit être reconsidérée — et comme le lecteur "officiel/intégré" est une exigence explicite de la mission (pas une préférence d'implémentation), il n'y a pas d'alternative évidente sans development build, ce qui casserait la contrainte "pas de development build" établie pour tout le reste du projet. C'est la seule hypothèse de tout ce chantier dont l'échec remettrait en cause l'approche entière, pas juste un détail d'implémentation.
+
+**Statut : à vérifier en tout premier, avant tout le reste du code de cette fonctionnalité.** `npx expo install react-native-webview` suivi d'un test minimal (une WebView vide qui s'affiche) sur l'iPhone réel de l'utilisateur, avant d'investir du temps dans le pipeline captions/segments/SM-2.
+
+### Sélection aléatoire — cooldown vidéo, biais par segment, cas limite
+
+**Constat.** La mission demande explicitement (1) qu'une vidéo ne puisse pas réapparaître dans les `VIDEO_COOLDOWN` (3) derniers exercices, (2) que la sélection se fasse vidéo d'abord puis segment (pas segment global) pour ne jamais avantager une vidéo à cause de son nombre de segments, et (3) un comportement défini quand trop peu de vidéos sont disponibles pour respecter le cooldown.
+
+**Décisions prises (détail algorithmique complet dans PLAN.md)** :
+- Le cooldown est dérivé de `listening_reviews` (pas de nouvelle table d'historique dédiée) — limite assumée : ne compte que les exercices terminés/notés, pas les sessions commencées puis abandonnées.
+- La sélection vidéo se fait sur l'ensemble des `video_id` distincts parmi les segments **dus** (au sens SM-2), pas sur tous les segments de toutes les vidéos — élimine structurellement le biais par nombre de segments (une vidéo compte une fois dans l'ensemble éligible, quel que soit son nombre de segments dus).
+- Cas limite (trop peu de vidéos) : relâchement progressif de la fenêtre de cooldown (3 → 2 → 1 → 0) jusqu'à ce qu'au moins une vidéo devienne éligible, jamais de blocage.
+- Sélection du segment dans la vidéo choisie : parmi les segments **dus** de cette vidéo (pas tous ses segments) — la notation SM-2 repousse déjà `due_date` dans le futur après une note, donc pas besoin d'un tracker "derniers segments vus" séparé.
+
+**Impact.** Cette conception intègre le cooldown au système SM-2 existant (`getDueListeningCardsSplit`, même patron que `getDueCardsSplit`/`getDueConjugationCardsSplit`) plutôt que de construire un sélecteur aléatoire parallèle déconnecté de la progression de l'utilisateur — évite d'avoir deux notions différentes de "quoi montrer maintenant" qui pourraient diverger.
+
+**Statut : décidé (algorithme précis documenté dans PLAN.md), non implémenté, non testé.** Tests unitaires prévus (cooldown, absence de biais, cas 1/2/3/4 vidéos) — voir PLAN.md section Tests.
+
+### Segmentation
+
+**Constat.** Les segments viennent directement des "cues" (unités individuelles horodatées) du fichier de sous-titres récupéré — 1 cue = 1 segment en v1, sans fusion de phrases. Les sous-titres auto-générés (ASR) sont parfois fragmentés en plein milieu d'une phrase et contiennent plus d'erreurs de transcription que des sous-titres humains.
+
+**Impact.** Un exercice de dictée basé sur un segment mal transcrit ou coupé en plein milieu d'une phrase pénaliserait injustement l'utilisateur (sa réponse correcte serait comparée à un transcript source déjà fautif). `captionStatus` distingue `available` (humain) de `auto_generated` (ASR) pour que l'utilisateur puisse juger si une vidéo à captions auto-générées vaut la peine d'être gardée dans sa bibliothèque — pas de filtrage automatique des vidéos ASR en v1, juste de la transparence dans l'UI de la bibliothèque.
+
+**Statut : décidé pour la v1 (pas de fusion de phrases), risque connu et documenté (qualité variable des sous-titres auto-générés), pas de mitigation automatique proposée au-delà de l'affichage du statut.**
+
+### Validation
+
+**Constat.** `conjugation/validate.ts` existe déjà et gère la tolérance aux accents (normalisation NFD + suppression des diacritiques), mais sa fonction exportée a une signature propre à la conjugaison (paramètres `tense`/`personIndex` pour la règle -ra/-se), et elle ne supprime pas la ponctuation. **Testé contre l'exemple donné dans la mission** ("No sé lo que quieres decir." vs "No se lo que quieres decir" sans point) : avec la logique actuelle telle quelle, cet exemple précis échouerait à cause du point final — la ponctuation doit être ignorée des deux côtés pour que l'exemple donné par l'utilisateur fonctionne comme attendu.
+
+**Impact.** Réimplémenter une deuxième logique de comparaison de texte dupliquerait un bug potentiel à deux endroits si jamais corrigé un jour à un seul. Proposition : extraire la normalisation dans un module partagé (`mobile/src/validation/textAnswer.ts`), l'étendre pour ignorer la ponctuation (dont ¿¡), et faire réexporter `conjugation/validate.ts` par-dessus sans changer sa signature ni casser ses tests existants.
+
+**Statut : extension propre proposée et documentée dans PLAN.md, pas implémentée.** Une réponse tronquée doit rester incorrecte (confirmé par l'exemple de la mission) — pas de correspondance floue/partielle au-delà accents+ponctuation+casse+espaces, pour ne pas promettre plus de tolérance que ce qui a été démontré nécessaire.
+
+### Persistance
+
+**Constat.** Contrairement au vocabulaire et à la conjugaison (contenu bundlé en JSON statique généré par script Node, seule la progression SM-2 vit en SQLite pour la conjugaison), les vidéos de compréhension orale sont ajoutées dynamiquement par l'utilisateur pendant qu'il utilise l'app — il n'y a pas de fichier JSON à bundler, SQLite doit donc être la seule source de vérité pour le contenu (titre, transcript, horodatages) ET pour la progression, plus proche du design historique `words`+`cards` (les deux en base) que de `conjugation_cards` (progression seule).
+
+**Impact.** 4 nouvelles tables proposées (`listening_videos`, `listening_segments`, `listening_cards`, `listening_reviews`), schéma détaillé dans PLAN.md, ajoutées de façon additive dans `migrateDbIfNeeded()` — même style que l'existant (`CREATE TABLE IF NOT EXISTS`, pas de système de migration versionné à introduire). Aucun changement nécessaire dans `App.tsx` (pas de contenu à importer au démarrage, contrairement à `importMissingWords`/`importMissingConjugationCards`).
+
+**Statut : schéma décidé et documenté dans PLAN.md, pas créé.** Comme pour le reste de `database.ts`, ce code ne sera pas testable unitairement (pas de SQLite en mémoire sous Jest/jest-expo, limite déjà documentée et acceptée pour tout le reste du projet) — à vérifier manuellement sur device à l'implémentation.
+
+### Résilience
+
+**Constat.** La mission demande explicitement une dégradation silencieuse : vidéo sans captions → non plantée, gardée en bibliothèque, marquée non exploitable, jamais sélectionnée — sans système de fallback complexe.
+
+**Décisions.**
+- Captions indisponibles à l'ajout → `captionStatus = 'unavailable'`, vidéo ajoutée quand même, filtrée hors de `getDueListeningCardsSplit`.
+- Vidéo supprimée/privée/indisponible après coup → pas de vérification proactive périodique en v1 ; un échec de chargement au moment de l'exercice reste local à cet essai, la carte reste due pour la prochaine tentative.
+- Échec réseau (fetch metadata/captions/lecteur) → try/catch à chaque étape, jamais de crash ; message d'erreur simple à l'utilisateur.
+- Erreur du player YouTube → l'IFrame Player API expose des codes d'erreur documentés, à afficher tels quels, pas de tentative de contournement.
+
+**Impact.** Cohérent avec le principe déjà établi ailleurs dans le projet (ex. limite de force-quit iOS documentée et acceptée plutôt que contournée à tout prix, voir plus bas dans ce fichier) : accepter une dégradation gracieuse plutôt que de complexifier le système pour éliminer un cas limite rare.
+
+**Statut : décidé, pas implémenté, pas testé.**
+
+### Ce qui N'A PAS été fait pendant cette session, conformément à la consigne explicite
+
+Aucun fichier de code n'a été créé ni modifié pour cette fonctionnalité. Aucune dépendance n'a été installée. Aucun appel réseau n'a été fait (ni vers YouTube, ni vers npm au-delà de la lecture de `package.json` déjà présent). Seuls `PLAN.md` et `AUDIT.md` (ce fichier) ont été modifiés, comme demandé explicitement au point 20 de la mission.
+
 ## Tags CECRL de words.json : vérifiés déjà complets (20/08/2026)
 
 **Constat.** Demande explicite : compléter les tags CECRL manquants dans `words.json`, en vérifiant d'abord combien de mots en ont déjà un et combien n'en ont pas, avant de coder quoi que ce soit. Vérification faite par script one-off (comptage par valeur exacte du champ `level`) plutôt que supposée :

@@ -178,6 +178,310 @@ Demandé explicitement : un indicateur visuel de série de jours consécutifs av
 - Deux points ambigus posés à l'utilisateur avant de coder plutôt que devinés : le badge est **toujours visible, y compris à 0** (pas de seuil minimum) ; et quand la série vient de se casser, le badge le **rappelle explicitement** avec la longueur de la série perdue ("Série interrompue — tu avais N jours") plutôt qu'un simple "0 jour" neutre — nouvelle fonction pure `computeLostStreakLength` ([statsEngine.ts](mobile/src/stats/statsEngine.ts), 5 tests) pour retrouver cette longueur.
 - Vérifié : `tsc --noEmit`, `npm test` (60/60, +5 pour `computeLostStreakLength`), bundle Metro compilé. **Non vérifié sur device.**
 
+## Planification — Onglet « Compréhension orale » (20/08/2026, aucun code écrit)
+
+Mission de cadrage uniquement, demandée explicitement avant tout code : inspecter l'architecture existante, concevoir la fonctionnalité, documenter ici et dans AUDIT.md. **Rien de ce qui suit n'est implémenté.** But : dictée audio à partir de vraies vidéos YouTube que l'utilisateur ajoute à sa bibliothèque — vidéo + segment choisis automatiquement (au hasard, avec cooldown par vidéo), lecture du segment seul, saisie de ce qui a été entendu, comparaison au transcript réel, notation SM-2.
+
+### Principe directeur : pourquoi réutiliser plutôt que reconstruire
+
+Avant de proposer quoi que ce soit de nouveau, l'architecture existante a été relue en entier avec la question "pourquoi cette fonctionnalité ne pourrait-elle pas utiliser l'abstraction existante X ?" (demandé explicitement). Résultat, poste par poste :
+
+| Besoin | Abstraction existante | Réutilisable telle quelle ? |
+|---|---|---|
+| Répétition espacée | [mobile/src/sm2/engine.ts](mobile/src/sm2/engine.ts) + [types.ts](mobile/src/sm2/types.ts) — fonction pure `review(card, grade, now)`, aucune dépendance au type de contenu (déjà partagée entre vocabulaire ET conjugaison sans modification) | **Oui, sans changement.** Voir section SM-2 ci-dessous pour le choix de la clé (`segmentId`) |
+| Comparaison de réponse tolérante aux accents | [mobile/src/conjugation/validate.ts](mobile/src/conjugation/validate.ts) — `normalize()` interne (accents/casse/espaces) est générique, mais la fonction exportée `isCorrectAnswer(typed, expected, tense, personIndex)` a une signature propre à la conjugaison (le paramètre `tense` ne sert qu'à la règle -ra/-se) | **Partiellement.** La logique de normalisation doit être extraite dans un module partagé plutôt que dupliquée — voir section Validation |
+| Stockage | `expo-sqlite`, schéma additif dans `migrateDbIfNeeded()` (`CREATE TABLE IF NOT EXISTS`, pas de vrai système de migration versionné — c'est le principe déjà en place, pas une lacune à corriger ici) | **Oui**, nouvelles tables dans le même fichier, même style |
+| Import de contenu en gros volume par lots | `insertInBatches()` ([database.ts](mobile/src/data/database.ts)) | **Oui si besoin**, mais le volume ici (dizaines de vidéos, quelques centaines/milliers de segments) est sans commune mesure avec les 6002 mots/63 800 formes de conjugaison — probablement pas nécessaire, à réévaluer si la bibliothèque grossit beaucoup |
+| Navigation par onglets + sous-onglets | [TabBar.tsx](mobile/src/navigation/TabBar.tsx)/[RootTabs.tsx](mobile/src/navigation/RootTabs.tsx) (`TabKey` union, `ActiveSession` union pour les écrans plein écran) + pattern sous-onglets ([ConjugationScreen.tsx](mobile/src/screens/ConjugationScreen.tsx), [SettingsScreen.tsx](mobile/src/screens/SettingsScreen.tsx)) | **Oui**, un 6e onglet + 2 sous-onglets (Entraînement/Bibliothèque), même mécanique |
+| UI (carte, boutons, animations, thème) | `ScreenContainer`, `AnimatedPressable`, `FadeInView`, palette Sol y sombra | **Oui, sans changement** |
+| Génération de contenu par script Node hors-ligne | [generate-vocabulary/](mobile/scripts/generate-vocabulary/), [generate-conjugations/](mobile/scripts/generate-conjugations/) — script lancé par le développeur sur son PC, produit un JSON statique embarqué dans le bundle de l'app | **Non applicable ici**, et c'est la divergence architecturale la plus importante de tout ce chantier — voir section suivante |
+
+### Divergence architecturale majeure : contenu dynamique + besoin réseau en direct
+
+Deux principes déjà établis et respectés jusqu'ici par tout le reste de l'app sont mis sous tension par cette fonctionnalité, et il faut le dire clairement plutôt que le glisser sous le tapis :
+
+1. **"Tout doit tourner hors ligne et dans Expo Go"** (contrainte non négociable de ce fichier, section plus haut). Or lire une vidéo YouTube nécessite une connexion internet active — c'est inhérent à la demande elle-même ("vraies personnes qui parlent dans des vidéos YouTube" via "le lecteur YouTube officiel/intégré"), pas un choix d'implémentation évitable. **Décision proposée : accepter une exception explicite et documentée à cette contrainte pour ce seul onglet** — le reste de l'app (vocabulaire, conjugation, notifications) continue de fonctionner 100% hors ligne, seul l'onglet Compréhension orale nécessite du réseau, et seulement quand on l'utilise.
+2. **Contenu généré par script Node avant le build** (`words.json`, `conjugations.json`) — modèle qui ne convient pas ici : la mission décrit explicitement un flux "coller une URL YouTube dans l'app" (`+ Ajouter une vidéo`), pas "relancer un script sur son PC puis reconstruire l'app". **Décision proposée : la récupération de métadonnées + captions se fait EN DIRECT depuis l'app**, au moment où l'utilisateur ajoute une vidéo — via le `fetch()` natif de React Native, qui n'est **pas** soumis aux restrictions CORS d'un navigateur (CORS est une politique appliquée par les navigateurs web, pas par le runtime réseau de React Native) — donc techniquement faisable sans serveur intermédiaire. Puisque regarder la vidéo nécessite de toute façon internet au même moment, ça n'ajoute pas une nouvelle rupture du principe hors-ligne, seulement le même réseau déjà indispensable utilisé un peu plus tôt dans le flux.
+
+### YouTube — ce qui est officiel, ce qui ne l'est pas
+
+Recherche faite avant de proposer quoi que ce soit, pour ne pas présenter une méthode fragile comme officiellement supportée :
+
+| Besoin | Méthode envisagée | Statut |
+|---|---|---|
+| Lecture vidéo | WebView + YouTube IFrame Player API (`https://www.youtube.com/iframe_api`), avec `playerVars: { start, end }` | **Officiel et documenté** par Google/YouTube (`developers.google.com/youtube/iframe_api_reference`) — les paramètres `start`/`end` en secondes font partie de l'API publique. C'est aussi la seule méthode conforme à la demande explicite "le lecteur doit utiliser le lecteur YouTube officiel/intégré" — exclut d'office toute extraction de flux vidéo brut, qui violerait les CGU YouTube et n'a jamais été envisagée |
+| Métadonnées (titre, chaîne, miniature) | oEmbed : `https://www.youtube.com/oembed?url=...&format=json` | **Officiel, documenté, sans clé API.** Ne fournit pas la durée de la vidéo |
+| Durée de la vidéo | Pas de source officielle sans clé API | **Best-effort seulement.** Option A : ignorer ce champ (pas strictement nécessaire au fonctionnement — les segments ont leurs propres horodatages). Option B : demander à l'utilisateur une clé YouTube Data API v3 gratuite (quota généreux pour un usage personnel) s'il veut ce champ rempli. Proposé : **Option A pour la v1**, champ `durationSeconds` nullable |
+| Liste des pistes de sous-titres disponibles | Extraction du JSON `ytInitialPlayerResponse.captions.playerCaptionsTracklistRenderer.captionTracks[]` embarqué dans le HTML de la page `watch?v=...`, ou endpoint non documenté `timedtext?type=list&v=...` | **Non officiel.** Aucune API publique YouTube ne permet de lister/télécharger les sous-titres d'une vidéo tierce sans être authentifié comme propriétaire de cette vidéo (`captions.download` de YouTube Data API v3 exige l'autorisation OAuth du propriétaire — inutilisable pour des vidéos publiques quelconques). Chaque piste expose normalement si elle est auto-générée (`kind: "asr"`) ou humaine |
+| Contenu du transcript (texte + horodatages) | Endpoint non documenté `timedtext?lang=xx&v=...&fmt=json3` (ou XML par défaut), une fois l'URL de la piste connue | **Non officiel, fragile.** Format observé stable depuis des années dans l'écosystème (bibliothèques communautaires comme `youtube-transcript` s'appuient dessus), mais peut changer sans préavis, n'est couvert par aucune garantie de compatibilité, et pourrait nécessiter des en-têtes/paramètres supplémentaires selon la région ou des évolutions côté YouTube. **Rien de tout ça n'a été testé pendant cette session de planification** (aucun appel réseau fait) — la toute première étape de l'implémentation doit être de vérifier concrètement que ça fonctionne encore, avant de construire le reste par-dessus |
+
+**Aucune dépendance npm de récupération de transcript n'est proposée par défaut.** Deux options pour l'implémentation, à trancher à ce moment-là plutôt que devinées ici :
+- **Option A (recommandée)** : implémenter le fetch + parsing à la main en TypeScript (juste `fetch()` + extraction JSON/regex + parsing XML ou JSON3 léger) — pas de nouvelle dépendance runtime, contrôle total, mais il faut écrire et vérifier soi-même le parsing.
+- **Option B** : une bibliothèque npm communautaire (ex. `youtube-transcript`) — plus rapide à démarrer, mais ajoute une dépendance à un paquet potentiellement peu maintenu, qui repose sur exactement la même mécanique non officielle en interne (pas plus fiable qu'Option A, juste déjà écrite).
+
+**Auto-générées vs humaines** : les sous-titres auto-générés (ASR) contiennent souvent des erreurs de transcription et une segmentation moins naturelle (coupures en plein milieu d'une phrase). Proposition : accepter les deux en v1 (rejeter uniquement l'absence totale de sous-titres) mais retenir dans `captionStatus` la distinction (`available` = humain, `auto_generated` = ASR) pour l'afficher dans l'UI de la bibliothèque — l'utilisateur reste libre de juger si une vidéo à captions auto-générées vaut la peine d'être gardée.
+
+### Modèle de données proposé
+
+Nouveau module `mobile/src/listening/types.ts` (même esprit que `conjugation/types.ts`) :
+
+```ts
+export type CaptionStatus = 'available' | 'auto_generated' | 'unavailable';
+
+export interface ListeningVideo {
+  id: string;              // videoId YouTube (ex. "dQw4w9WgXcQ")
+  title: string;
+  channel: string;
+  thumbnailUrl: string;
+  durationSeconds: number | null;  // best-effort, voir ci-dessus
+  language: string;                // code de la piste de sous-titres utilisée (ex. "es")
+  captionStatus: CaptionStatus;
+  addedAt: string;                 // ISO
+}
+
+export interface ListeningSegment {
+  id: string;        // `${videoId}:${index}`
+  videoId: string;
+  index: number;      // ordre stable dans la vidéo (pas garanti trié par une autre colonne)
+  startTime: number;  // secondes, décimales autorisées
+  endTime: number;
+  transcript: string;
+}
+```
+
+**Contrairement au vocabulaire et à la conjugaison, il n'y a pas de fichier JSON statique bundlé** : les vidéos sont ajoutées dynamiquement par l'utilisateur pendant qu'il utilise l'app, donc SQLite est la seule source de vérité pour le contenu ET pour la progression — plus proche du design historique de `words`/`cards` (contenu + progression toutes deux en base) que de `conjugation_cards` (progression seule, contenu en JSON importé).
+
+Schéma SQLite proposé (additif dans `migrateDbIfNeeded()`, même style que l'existant) :
+
+```sql
+CREATE TABLE IF NOT EXISTS listening_videos (
+  id TEXT PRIMARY KEY NOT NULL,
+  title TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  thumbnail_url TEXT NOT NULL,
+  duration_seconds REAL,
+  language TEXT NOT NULL,
+  caption_status TEXT NOT NULL,
+  added_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS listening_segments (
+  id TEXT PRIMARY KEY NOT NULL,
+  video_id TEXT NOT NULL REFERENCES listening_videos(id),
+  segment_index INTEGER NOT NULL,
+  start_time REAL NOT NULL,
+  end_time REAL NOT NULL,
+  transcript TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_listening_segments_video_id ON listening_segments(video_id);
+
+-- Même forme que conjugation_cards/conjugation_reviews (progression SM-2 séparée du contenu).
+CREATE TABLE IF NOT EXISTS listening_cards (
+  id TEXT PRIMARY KEY NOT NULL,  -- = segment id, un segment = une carte (voir section SM-2)
+  ease_factor REAL NOT NULL,
+  interval_days REAL NOT NULL,
+  repetitions INTEGER NOT NULL,
+  lapses INTEGER NOT NULL,
+  learning_step_index INTEGER NOT NULL,
+  lifecycle TEXT NOT NULL,
+  due_date TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_listening_cards_due_date ON listening_cards(due_date);
+
+CREATE TABLE IF NOT EXISTS listening_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id TEXT NOT NULL,
+  grade TEXT NOT NULL,
+  reviewed_at TEXT NOT NULL
+);
+```
+
+**Pas de table séparée pour l'historique de sélection/cooldown** — dérivé de `listening_reviews` jointe à `listening_segments` (dernières notes distinctes par `video_id`, triées par `reviewed_at DESC`), même principe que "pas de nouvelle abstraction si l'existante suffit". Limite assumée : le cooldown ne compte que les exercices **terminés et notés**, pas ceux commencés puis abandonnés (app fermée en cours de segment) — cohérent avec "ne pas complexifier inutilement", à revoir seulement si ça s'avère gênant à l'usage.
+
+### SM-2 : quelle unité ?
+
+Confirmé par lecture de `sm2/engine.ts`/`types.ts` : `review()` est une fonction pure sur un `SM2CardState` générique, aucune référence au type de contenu — déjà partagée par le vocabulaire (clé = `word.id`) et la conjugaison (clé composite `${verbId}:${tense}:${person}`) sans aucune modification du moteur. **Confirmation de la préférence de l'utilisateur : `segmentId` (soit `${videoId}:${index}`) comme clé, chaque segment est une unité d'apprentissage indépendante** — s'intègre proprement, exactement le même patron que `conjugation_cards.id`. Pas de nouveau moteur, pas de nouvelle abstraction de carte.
+
+### Validation : extension proposée, pas un nouveau validateur
+
+`conjugation/validate.ts` contient déjà la bonne brique de base — `normalize()` (accents via `NFD` + suppression des diacritiques, casse, espaces) — mais :
+1. Elle n'est pas exportée séparément de `isCorrectAnswer(typed, expected, tense, personIndex)`, dont la signature est spécifique à la conjugaison (le paramètre `tense` ne sert qu'à la règle -ra/-se du subjonctif imparfait, non pertinente ici).
+2. Elle ne supprime pas la ponctuation — **testé sur l'exemple donné dans la mission** ("No sé lo que quieres decir." vs "No se lo que quieres decir" sans point final) : avec la logique actuelle telle quelle, la comparaison échouerait à cause du point final manquant côté réponse, ce qui casserait l'exemple donné. La ponctuation (dont les signes espagnols ouvrants ¿¡) doit être ignorée des deux côtés pour que cet exemple précis fonctionne.
+
+**Proposition (à faire en tout début d'implémentation, avant le reste)** : extraire `normalize()` dans un nouveau module partagé `mobile/src/validation/textAnswer.ts`, l'étendre pour ignorer aussi la ponctuation, et faire réexporter `conjugation/validate.ts` par-dessus (garde sa signature actuelle et ses tests existants inchangés, `isCorrectAnswer` de la conjugaison appelle juste la fonction partagée en interne). La compréhension orale utilise directement la fonction générique, sans les règles -ra/-se propres à la conjugaison. Concrètement :
+
+```ts
+// mobile/src/validation/textAnswer.ts
+export function normalizeAnswer(s: string): string { /* accents + casse + ponctuation + espaces */ }
+export function isExactMatch(typed: string, expected: string): boolean {
+  return normalizeAnswer(typed) === normalizeAnswer(expected);
+}
+```
+
+Ni plus ni moins que ce que les exemples donnés dans la mission exigent — pas de correspondance floue/partielle (une réponse tronquée doit rester incorrecte, exactement comme l'exemple "No sé lo que quieres" le montre), pas de tolérance orthographique au-delà des accents/ponctuation.
+
+### Sélection aléatoire : cooldown vidéo puis segment, intégré au SM-2 existant plutôt qu'à côté
+
+Point le plus important de la mission, détaillé précisément comme demandé.
+
+**Constat d'intégration clé, pas explicitement dans la mission mais nécessaire pour éviter deux systèmes de sélection parallèles** : le vocabulaire et la conjugaison utilisent déjà un patron à deux temps — `getDueCardsSplit`/`getDueConjugationCardsSplit` renvoie les cartes **dues maintenant** (nouvelles + à réviser, plafonnées séparément), et une carte neuve est due immédiatement dès sa création (`due_date = now`). Un segment de compréhension orale suit exactement la même mécanique : neuf tant que jamais noté, donc "due" par défaut. **Proposition : ne pas construire un sélecteur aléatoire séparé du système SM-2, mais un troisième `getDueListeningCardsSplit`, puis appliquer le cooldown vidéo par-dessus son résultat** — un segment "dû" au sens SM-2 ET dont la vidéo n'est pas en cooldown est la définition de "segment exploitable maintenant". Ça répond en même temps à la demande de l'utilisateur (point 8) de ne pas re-proposer un segment déjà vu trop récemment : c'est déjà géré par `due_date`, sans logique supplémentaire à inventer.
+
+Algorithme proposé :
+
+```text
+1. dueSegments = getDueListeningCardsSplit(db, now, settings)
+   → segments dus (nouveaux + à réviser), plafonnés séparément
+     comme pour le vocabulaire/la conjugaison
+2. dueVideoIds = ensemble des video_id distincts parmi dueSegments
+3. recentVideoIds = derniers VIDEO_COOLDOWN video_id distincts
+   (du plus récent au plus ancien), dérivés de listening_reviews
+4. eligibleVideoIds = dueVideoIds - recentVideoIds
+5. si eligibleVideoIds non vide :
+     video = choix aléatoire uniforme dans eligibleVideoIds
+   sinon (relâchement progressif, voir section suivante) :
+     réduire progressivement combien de "derniers X" comptent comme
+     récents, jusqu'à ce qu'au moins une vidéo devienne éligible
+6. segment = choix aléatoire uniforme parmi dueSegments filtrés sur
+   video_id == video (PAS parmi tous les segments de la vidéo —
+   seulement ceux effectivement dus, cohérent avec SM-2)
+```
+
+**Pourquoi vidéo d'abord, segment ensuite (jamais l'inverse)**, exactement comme demandé : à l'étape 5-6, le tirage aléatoire porte sur l'ENSEMBLE DES VIDÉOS ÉLIGIBLES, pas sur l'ensemble des segments dus toutes vidéos confondues — une vidéo à 100 segments dus et une vidéo à 2 segments dus ont exactement la même probabilité d'être choisie à l'étape 5 (chacune compte une fois dans `eligibleVideoIds`, indépendamment de son nombre de segments). Le biais que la mission demande explicitement d'éviter est ainsi structurellement impossible, pas juste évité par convention.
+
+### Cas limite : trop peu de vidéos pour respecter le cooldown
+
+Algorithme de relâchement progressif proposé, jamais bloquant :
+
+```text
+function selectEligibleVideos(dueVideoIds, recentVideoIdsOrdered, cooldown):
+  for windowSize from cooldown down to 0:
+    recent = premiers `windowSize` éléments de recentVideoIdsOrdered
+    eligible = dueVideoIds - recent
+    si eligible non vide : renvoyer eligible
+  # windowSize = 0 signifie "aucune vidéo exclue" → eligible = dueVideoIds
+  # si dueVideoIds est vide, aucun segment n'est dû, ce n'est plus un
+  # problème de cooldown mais l'écran "rien à réviser" (même état que
+  # pour le vocabulaire/la conjugaison), pas un cas à gérer ici
+```
+
+Exemple concret avec `VIDEO_COOLDOWN = 3` et seulement A, B disponibles (dues) : historique récent `[A, B, A]` → `windowSize=3` exclut A et B, `eligible` vide → `windowSize=2` exclut B et A (les 2 derniers), toujours vide → `windowSize=1` exclut seulement A (le tout dernier) → `eligible = {B}`, non vide, on s'arrête là. Résultat : la contrainte de cooldown est respectée **autant que mathématiquement possible** (ne jamais répéter la toute dernière vidéo si une alternative due existe), et se dégrade en douceur plutôt que de bloquer l'app ou de planter.
+
+### Sélection du segment — pas de logique supplémentaire
+
+Comme expliqué plus haut : le segment est choisi aléatoirement parmi les segments **dus** de la vidéo choisie (`due_date <= now`), pas parmi tous ses segments. Un segment qui vient d'être noté a sa `due_date` repoussée dans le futur par `review()` (comportement déjà existant du moteur SM-2, inchangé) — il ne réapparaîtra donc pas immédiatement, sans avoir besoin d'un tracker "derniers segments vus" séparé. Si la vidéo choisie n'a qu'un seul segment dû, il est réutilisé (comportement attendu et sans alternative, pas un bug).
+
+### Constantes proposées
+
+```ts
+export const VIDEO_COOLDOWN = 3;              // demandé explicitement
+export const LISTENING_NEW_SEGMENTS_PER_DAY = 5;   // proposition, pas testée à l'usage
+export const LISTENING_REVIEW_CAP_PER_DAY = 15;    // proposition, pas testée à l'usage
+```
+
+Les deux derniers seraient des réglages utilisateur persistés (`AppSettings.listeningNewSegmentsPerDay`/`listeningReviewCapPerDay`), même patron que `conjugationNewCardsPerDay`/`conjugationReviewCapPerDay` — valeurs de départ plus basses que le vocabulaire/la conjugaison **par hypothèse, pas par mesure** : un exercice de dictée (écouter, taper une phrase entière, comparer) demande plus de temps/effort qu'une carte de vocabulaire ou une forme conjuguée isolée. À ajuster une fois testé en usage réel.
+
+### Pipeline complet
+
+```text
+URL YouTube (collée par l'utilisateur)
+  ↓ parsing (regex, plusieurs formats : watch?v=, youtu.be/, embed/, shorts/)
+videoId
+  ↓ fetch oEmbed (officiel)
+métadonnées (titre, chaîne, miniature ; durée = null si indisponible)
+  ↓ fetch + parsing non officiel (à vérifier en tout début d'implémentation)
+captions (liste des pistes, choix de la piste espagnole, contenu horodaté)
+  ↓ si aucune piste : captionStatus = 'unavailable', vidéo quand même
+    ajoutée à la bibliothèque (visible, non exploitable) — dégradation
+    silencieuse demandée explicitement, pas une erreur bloquante
+segments (1 cue de sous-titre = 1 segment en v1 — pas de fusion de
+  phrases pour rester simple, cohérent avec "ne complexifie pas
+  inutilement" ; amélioration possible plus tard, pas en v1)
+  ↓ import en base (listening_videos + listening_segments + une
+    listening_cards neuve par segment, même patron que
+    importMissingWords/importMissingConjugationCards)
+vidéo exploitable (captionStatus ≠ 'unavailable' ET ≥ 1 segment)
+  ↓
+getDueListeningCardsSplit() → cooldown vidéo → vidéo choisie → segment dû choisi
+  ↓
+lecteur YouTube (WebView + IFrame API, start/end du segment)
+  ↓
+réponse tapée par l'utilisateur
+  ↓
+validation (mobile/src/validation/textAnswer.ts, accents + ponctuation)
+  ↓
+note (voir point ouvert ci-dessous : mappage auto correct/incorrect →
+  grade SM-2, ou 4 boutons comme le reste de l'app)
+  ↓
+review() (sm2/engine.ts, inchangé) → updateListeningCard + logListeningReview
+```
+
+### UI proposée (pas codée, juste l'intégration prévue)
+
+- **6e onglet "Écoute"** (ou "Compréhension orale" si la barre le permet — à mesurer, voir Risques) dans [TabBar.tsx](mobile/src/navigation/TabBar.tsx)/[RootTabs.tsx](mobile/src/navigation/RootTabs.tsx), même patron que Conjugaison (`ActiveSession` étendu avec `'listening'`).
+- `ListeningScreen.tsx` : 2 sous-onglets, même patron que `ConjugationScreen.tsx`/`SettingsScreen.tsx` :
+  - **Entraînement** : nombre de segments dus + bouton "Commencer la session" (copie du patron `TrainingView` de `ConjugationScreen.tsx`).
+  - **Bibliothèque** : liste des vidéos ajoutées (titre, statut des captions, nombre de segments), formulaire "+ Ajouter une vidéo" (`TextInput` URL + bouton, avec état de chargement pendant le fetch metadata+captions).
+- `ListeningReviewContainer.tsx` + `ListeningReviewScreen.tsx` : copie du patron `ConjugationReviewContainer.tsx`/`ConjugationReviewScreen.tsx` (chargement du prochain segment dû, `TextInput` de réponse, résultat, notation, "Exercice suivant"), avec le lecteur vidéo en haut de la carte à la place du prompt "verbe + temps + personne".
+- Nouveau composant `mobile/src/components/YouTubePlayer.tsx` : wrapper autour d'une `WebView` (nouvelle dépendance, voir ci-dessous) chargeant une page HTML minimale embarquant l'IFrame Player API, exposant au composant React `play()`/`seekTo(startTime)` et un événement "segment terminé" (soit via le paramètre `end` natif de l'API, soit via un minuteur JS côté page si `end` s'avère peu fiable en pratique — **à vérifier**, pas supposé).
+
+### Résilience — dégradation silencieuse, comme demandé explicitement
+
+| Cas | Comportement proposé |
+|---|---|
+| Captions indisponibles à l'ajout | `captionStatus = 'unavailable'`, vidéo ajoutée quand même à la bibliothèque, visible mais marquée non exploitable, jamais sélectionnée par `getDueListeningCardsSplit` (filtre `WHERE caption_status != 'unavailable'` côté requête ou côté jointure) |
+| Vidéo supprimée/privée/indisponible après coup | Non détecté proactivement en v1 (pas de vérification périodique) — si le lecteur ne peut pas la charger au moment de l'exercice, l'échec est local à cet essai (voir ligne suivante), la vidéo reste en base telle quelle jusqu'à ce que l'utilisateur la supprime manuellement |
+| Échec réseau (fetch metadata/captions, ou chargement du lecteur) | Try/catch à chaque étape, jamais de crash — à l'ajout : message d'erreur dans le formulaire, rien n'est inséré en base ; en session : écran d'erreur simple avec retour à Entraînement, la carte reste due pour la prochaine tentative |
+| Erreur du player YouTube (vidéo bloquée à l'intégration, région, etc.) | La WebView/l'IFrame API expose un événement d'erreur documenté (codes d'erreur du player) — à afficher comme message simple, pas de tentative de contournement |
+
+### Fichiers concernés (proposition, pas figée)
+
+**Nouveaux :**
+- `mobile/src/listening/types.ts`
+- `mobile/src/listening/selection.ts` (logique pure de cooldown + sélection — testable sans réseau ni SQLite)
+- `mobile/src/listening/youtubeUrl.ts` (parsing d'URL → videoId — pure, testable)
+- `mobile/src/listening/metadata.ts` (fetch oEmbed)
+- `mobile/src/listening/captions.ts` (fetch + parsing des sous-titres — non testable unitairement sans mock réseau, à vérifier manuellement)
+- `mobile/src/validation/textAnswer.ts` (extraction généralisée depuis `conjugation/validate.ts`)
+- `mobile/src/components/YouTubePlayer.tsx`
+- `mobile/src/screens/ListeningScreen.tsx`
+- `mobile/src/screens/ListeningReviewContainer.tsx`
+- `mobile/src/screens/ListeningReviewScreen.tsx`
+
+**Modifiés :**
+- `mobile/src/data/database.ts` (4 nouvelles tables + fonctions CRUD, même patron que la section Conjugaison)
+- `mobile/src/data/settings.ts` (`listeningNewSegmentsPerDay`/`listeningReviewCapPerDay`)
+- `mobile/src/conjugation/validate.ts` (réexporte la logique partagée au lieu de la dupliquer)
+- `mobile/src/navigation/TabBar.tsx` / `RootTabs.tsx` (6e onglet)
+- `mobile/package.json` / `app.json` (nouvelle dépendance WebView, voir Risques)
+
+**Pas de changement attendu dans `App.tsx`** : contrairement au vocabulaire/à la conjugaison, il n'y a pas de contenu bundlé à importer au démarrage (la bibliothèque est vide au premier lancement, remplie au fil de l'usage) — seul `migrateDbIfNeeded()` (déjà appelé) a besoin des nouvelles tables.
+
+### Tests prévus
+
+- `listening/selection.test.ts` : cooldown avec 4 vidéos A/B/C/D (aucune répétition avant `VIDEO_COOLDOWN`) ; absence de biais par nombre de segments (vidéo à 100 segments dus vs vidéo à 2, test statistique sur de nombreux tirages façon `shuffle.test.ts`) ; cas 1/2/3/4 vidéos disponibles avec `VIDEO_COOLDOWN = 3` (relâchement progressif) ; segment renvoyé appartient toujours à la vidéo choisie.
+- `listening/youtubeUrl.test.ts` : extraction du `videoId` pour les formats `watch?v=`, `youtu.be/`, `embed/`, `shorts/`, et rejet propre d'une URL invalide.
+- `validation/textAnswer.test.ts` : reprend et étend les cas déjà couverts par `conjugation/validate.test.ts` (accents), ajoute la ponctuation (exemple exact de la mission : "No sé lo que quieres decir." vs "No se lo que quieres decir") et confirme qu'une réponse tronquée reste incorrecte.
+- `conjugation/validate.test.ts` : doit continuer à passer sans modification après l'extraction, comme garde-fou de non-régression.
+- **Persistance (vidéos/segments/cartes/historique) : pas testable unitairement**, même limite déjà documentée pour `database.ts` (pas de SQLite en mémoire disponible sous Jest/jest-expo) — à vérifier manuellement sur device au moment de l'implémentation, pas promis comme testé automatiquement.
+
+### Points à valider avant implémentation (pas devinés ici)
+
+1. **`react-native-webview` fonctionne-t-il réellement dans l'Expo Go installé sur l'iPhone de l'utilisateur (SDK 54) sans development build ?** C'est la question la plus bloquante de tout ce chantier — si la réponse est non, toute l'approche WebView doit être reconsidérée, et ça remettrait en cause la contrainte "pas de development build" pour cette seule fonctionnalité. À vérifier en tout premier, avant d'écrire quoi que ce soit d'autre.
+2. **La récupération de captions (endpoint non officiel) fonctionne-t-elle encore aujourd'hui, et le paramètre `end` de l'IFrame Player API arrête-t-il fiablement la lecture au bon moment ?** Aucun appel réseau fait pendant cette session de planification — à vérifier en tout début d'implémentation, avant de construire le reste par-dessus une hypothèse non vérifiée.
+3. **Mappage résultat binaire (✓/✗) → note SM-2 à 4 valeurs.** La maquette UX donnée dans la mission ne montre que "✓ Correct"/"✗ Incorrect" suivi de "Réécouter"/"Exercice suivant" — pas de 4 boutons de notation comme pour le vocabulaire/la conjugaison. Deux options : (A) mappage automatique correct→"Bien", incorrect→"Otra vez" (colle à la maquette donnée telle quelle) ; (B) réutiliser le patron à 4 boutons de la conjugaison après affichage du résultat, pour un signal SM-2 plus nuancé mais qui s'écarte de la maquette fournie. **Recommandation : option A**, mais à confirmer.
+4. **Nom exact du 6e onglet dans la barre du bas** ("Écoute" tient sur une pilule à 6 onglets, "Compréhension orale" est nettement plus long) — à trancher en fonction de ce que rend réellement la barre une fois testée à 6 pilules.
+5. **Valeurs de départ `LISTENING_NEW_SEGMENTS_PER_DAY`/`LISTENING_REVIEW_CAP_PER_DAY`** (proposées à 5/15 par hypothèse, jamais testées).
+6. **Fusion future de segments trop courts/fragmentés** (sous-titres auto-générés parfois coupés en plein milieu d'une phrase) — explicitement hors v1, à revisiter seulement si ça s'avère gênant en usage réel.
+
+## Quatre retours après test réel : vocabulaire aléatoire, notification exacte, stat conjugaison, thèmes (20/08/2026)
+
+- **Le vocabulaire aussi n'était pas aléatoire.** Même défaut que celui déjà corrigé pour la conjugaison, jamais appliqué au vocabulaire jusqu'ici car jamais signalé cassé de ce côté : `fetchNewCardRows` triait les nouveaux mots par `frequency_rank ASC`, donc toujours introduits dans le même ordre (ser, estar, tener...). Corrigé : `ORDER BY RANDOM()` côté SQL + `shuffle()` du résultat combiné révisions+nouvelles dans `getDueCardsSplit`, même patron que `getDueConjugationCardsSplit`.
+- **Heure de notification enfin exacte, pas recalculée.** `getNextNotificationTime` relisait le calcul de planification à chaque consultation, et l'espacement aléatoire (15-30 min) faisait diverger l'estimation de l'heure réellement programmée — signalé "pas exact". Corrigé en persistant les créneaux réellement programmés (`scheduled_notifications`, nouvelle table miroir) au moment où `refillNotificationQueue` les programme pour de vrai ; `getNextNotificationTime` les LIT maintenant au lieu de les recalculer. Signature simplifiée (`settings` n'est plus nécessaire).
+- **Onglet Conjugaison → Entraînement affiche le total acquis, pas le nombre dû.** Nouvelle fonction `getConjugationCounts` (même principe que `getWordCounts` côté vocabulaire) ; le nombre dû reste utilisé en interne pour activer/désactiver le bouton de session.
+- **Tags thématiques pour le vocabulaire généré.** [mobile/scripts/tag-themes/](mobile/scripts/tag-themes/), heuristique par mots-clés sur la glose anglaise — 1027 mots sur 5966 sans tag (17,2%) en ont reçu un ; le reste (mots grammaticaux/abstraits) n'a pas de thème naturel. Détail complet des faux positifs trouvés et corrigés (verbes à sens phrasal, collisions mois/saisons) dans le README du script et AUDIT.md — limite résiduelle assumée, pas une méthode parfaite.
+
+Vérifié : `tsc --noEmit`, `npm test` (60/60), bundle Metro compilé. **Non vérifié sur device.**
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.
@@ -187,6 +491,7 @@ Demandé explicitement : un indicateur visuel de série de jours consécutifs av
 - [ ] Gloses verbeuses sur les mots grammaticaux (pronoms/déterminants/prépositions) dans le vocabulaire généré — pas corrigées automatiquement (voir AUDIT.md), correctibles au cas par cas si un mot précis pose problème à l'usage (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression).
 - [ ] Intégration de la conjugaison aux notifications verrouillées — explicitement hors périmètre, confirmé une deuxième fois par l'utilisateur (vocabulaire uniquement) : à ne plus reproposer sauf demande explicite.
 - [ ] Filtre "B2" dans Decks & mots actuellement toujours vide (voir section CECRL ci-dessus) — pas un problème signalé, à corriger seulement si demandé (ajuster `levelForIndex` pour produire aussi du B2, ou retirer le filtre).
+- [ ] **Onglet Compréhension orale — planifié, pas commencé.** Voir section dédiée ci-dessus et AUDIT.md. Avant d'écrire le moindre code : vérifier que `react-native-webview` fonctionne dans l'Expo Go de l'utilisateur (bloquant si non), et que la récupération de captions non officielle fonctionne encore aujourd'hui — les deux points les plus risqués du chantier, à confirmer en premier.
 - [ ] Claude : maintenir ce fichier et [AUDIT.md](AUDIT.md) à jour à chaque étape significative.
 
 ## Archive — plan de la version iOS native

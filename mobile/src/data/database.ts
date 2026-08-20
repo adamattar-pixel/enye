@@ -130,6 +130,21 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
       grade TEXT NOT NULL,
       reviewed_at TEXT NOT NULL
     );
+
+    -- Miroir de ce que refillNotificationQueue programme réellement
+    -- côté OS (20/08/2026) — jusqu'ici, l'heure de la "prochaine
+    -- notification" affichée dans Réglages était RECALCULÉE à chaque
+    -- consultation plutôt que lue, et l'espacement entre cartes étant
+    -- tiré au hasard à chaque calcul (voir ReviewScheduler), l'heure
+    -- affichée pouvait différer de celle réellement programmée —
+    -- signalé comme pas assez exact. Cette table stocke les créneaux
+    -- réels au moment où ils sont programmés, pour que la lecture
+    -- ultérieure soit une lecture, pas une nouvelle estimation.
+    CREATE TABLE IF NOT EXISTS scheduled_notifications (
+      word_id TEXT PRIMARY KEY NOT NULL,
+      fire_date TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_fire_date ON scheduled_notifications(fire_date);
   `);
 }
 
@@ -326,7 +341,14 @@ export async function getDueCardsSplit(
 
   const newRows = await fetchNewCardRows(db, now, settings.disabledTags, settings.newCardsPerDay);
 
-  return [...reviewRows, ...newRows].map(mapWordCardRow);
+  // Mélangé avant présentation — signalé explicitement non aléatoire
+  // (20/08/2026) : `fetchNewCardRows` triait par fréquence, donc les
+  // nouveaux mots apparaissaient toujours dans le même ordre (ser,
+  // estar, tener...) à chaque session. Même correctif que pour la
+  // conjugaison (voir `getDueConjugationCardsSplit`), appliqué ici
+  // seulement maintenant que le problème a aussi été signalé côté
+  // vocabulaire.
+  return shuffle([...reviewRows, ...newRows]).map(mapWordCardRow);
 }
 
 async function fetchNewCardRows(
@@ -335,10 +357,13 @@ async function fetchNewCardRows(
   disabledTags: string[],
   limit: number
 ): Promise<WordCardRow[]> {
+  // Tiré aléatoirement parmi les mots neufs (`ORDER BY RANDOM()`) plutôt
+  // que par fréquence — l'ancien tri par `frequency_rank` rendait
+  // l'ordre d'introduction des nouveaux mots entièrement prévisible.
   const candidateRows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
      WHERE c.due_date <= ? AND c.lifecycle = 'new'
-     ORDER BY w.frequency_rank ASC
+     ORDER BY RANDOM()
      LIMIT ?;`,
     now.toISOString(),
     // Marge pour compenser les mots filtrés ensuite par `disabledTags`.
@@ -346,9 +371,8 @@ async function fetchNewCardRows(
   );
 
   const disabled = new Set(disabledTags);
-  return candidateRows
-    .filter((r) => !(JSON.parse(r.tags) as string[]).some((tag) => disabled.has(tag)))
-    .slice(0, limit);
+  // Déjà aléatoire depuis le tri SQL ci-dessus — pas besoin de remélanger.
+  return candidateRows.filter((r) => !(JSON.parse(r.tags) as string[]).some((tag) => disabled.has(tag))).slice(0, limit);
 }
 
 /** Un lot supplémentaire de nouvelles cartes, au-delà du plafond
@@ -793,6 +817,25 @@ export async function getDueConjugationCardsSplit(
   return shuffle([...reviewRows, ...newRows]).map(mapConjugationCardRow);
 }
 
+export interface ConjugationCounts {
+  total: number;
+  learned: number;
+}
+
+/** Même définition d'"acquis" que `getWordCounts` côté vocabulaire : a
+ * été vu au moins une fois (au-delà de l'état `new`), pas de seuil sur
+ * l'intervalle. Affiché sur l'onglet Conjugaison → Entraînement à la
+ * place du nombre de conjugaisons dues (demandé explicitement,
+ * 20/08/2026) — le nombre dû reste utilisé en interne pour activer/
+ * désactiver le bouton de session, juste plus affiché en gros. */
+export async function getConjugationCounts(db: SQLiteDatabase): Promise<ConjugationCounts> {
+  const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM conjugation_cards;');
+  const learned = await db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM conjugation_cards WHERE lifecycle != 'new';"
+  );
+  return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
+}
+
 export async function updateConjugationCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
   await db.runAsync(
     `UPDATE conjugation_cards
@@ -865,4 +908,43 @@ export async function getConjugationHistory(db: SQLiteDatabase, limit = 200): Pr
  * l'échéance déjà programmée de la carte. */
 export async function updateConjugationReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE conjugation_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
+}
+
+// MARK: - Miroir de la file de notifications programmée
+
+/** Remplace le miroir local de ce qui vient d'être programmé côté OS —
+ * appelée par `refillNotificationQueue` juste après avoir vraiment
+ * programmé les notifications, avec exactement les mêmes créneaux (pas
+ * recalculés). Permet à `getNextScheduledNotificationTime` de LIRE
+ * l'heure réelle plutôt que d'en réestimer une nouvelle à chaque
+ * consultation (voir AUDIT.md, 20/08/2026). */
+export async function replaceScheduledNotifications(
+  db: SQLiteDatabase,
+  slots: { wordId: string; fireDate: Date }[]
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM scheduled_notifications;');
+    if (slots.length === 0) return;
+    await insertInBatches(
+      db,
+      slots,
+      2,
+      'INSERT INTO scheduled_notifications (word_id, fire_date)',
+      (slot) => [slot.wordId, slot.fireDate.toISOString()]
+    );
+  });
+}
+
+/** Heure exacte de la prochaine notification déjà programmée, lue depuis
+ * le miroir local plutôt que recalculée — voir `replaceScheduledNotifications`.
+ * `null` si rien n'est programmé ou si tout ce qui l'est déjà est passé
+ * (ne devrait pas arriver en pratique : `refillNotificationQueue` est
+ * appelé à l'ouverture de l'app et après chaque note, donc le miroir
+ * reste à jour). */
+export async function getNextScheduledNotificationTime(db: SQLiteDatabase, now: Date = new Date()): Promise<Date | null> {
+  const row = await db.getFirstAsync<{ fire_date: string }>(
+    'SELECT fire_date FROM scheduled_notifications WHERE fire_date > ? ORDER BY fire_date ASC LIMIT 1;',
+    now.toISOString()
+  );
+  return row ? new Date(row.fire_date) : null;
 }

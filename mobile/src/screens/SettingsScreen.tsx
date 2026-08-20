@@ -334,21 +334,22 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
 
 // MARK: - Prochaine notification
 
-/** Estime quand la prochaine notification de révision devrait arriver —
+/** Affiche quand la prochaine notification de révision arrivera —
  * demandé explicitement ("un onglet où quand je clique, il me dit quand
- * la prochaine notification aura lieu"). Rejoue simplement le calcul de
- * planification (`getNextNotificationTime`) sans rien reprogrammer ; la
- * mention "environ" dans le texte est volontaire, pas cosmétique : la
- * carte due la plus proche est certaine, mais l'espacement exact avant
- * elle est tiré aléatoirement à chaque calcul (voir queue.ts). */
+ * la prochaine notification aura lieu"). Lit l'heure exacte depuis le
+ * miroir persisté par `refillNotificationQueue` (`getNextNotificationTime`,
+ * voir queue.ts) plutôt que de la recalculer — corrigé le 20/08/2026
+ * suite à un retour explicite ("l'heure n'est pas exacte") : la version
+ * précédente rejouait le calcul de planification à chaque consultation,
+ * et l'espacement aléatoire entre cartes (15-30 min) faisait diverger
+ * l'estimation de l'heure réellement programmée. */
 function NotificationsView({ db, styles, theme }: { db: SQLiteDatabase; styles: Styles; theme: SolYSombraPalette }) {
   const [state, setState] = useState<'loading' | 'none' | 'found'>('loading');
   const [nextTime, setNextTime] = useState<Date | null>(null);
 
   const refresh = useCallback(async () => {
     setState('loading');
-    const settings = await getSettings(db);
-    const next = await getNextNotificationTime(db, settings);
+    const next = await getNextNotificationTime(db);
     setNextTime(next);
     setState(next ? 'found' : 'none');
   }, [db]);
@@ -381,9 +382,8 @@ function NotificationsView({ db, styles, theme }: { db: SQLiteDatabase; styles: 
       </FadeInView>
 
       <Text style={styles.notificationHint}>
-        Estimation approximative, pas l'heure exacte programmée : l'espacement entre deux cartes dues en même temps
-        est tiré au hasard entre 15 et 30 minutes à chaque calcul (voir Réglages), donc l'heure réelle peut varier de
-        quelques minutes.
+        Heure exacte de la notification réellement programmée — se met à jour à chaque ouverture de l'app et après
+        chaque révision.
       </Text>
 
       <AnimatedPressable style={[styles.button, styles.buttonOutline]} haptic="selection" onPress={refresh}>

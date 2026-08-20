@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import {
   getDueConjugationCardsSplit,
+  getConjugationCounts,
   getConjugationHistory,
   updateConjugationReviewGrade,
   type ConjugationHistoryRow,
@@ -90,12 +91,19 @@ function SubTabButton({
 
 function TrainingView({ db, styles, onStartSession }: { db: SQLiteDatabase; styles: Styles; onStartSession: () => void }) {
   const [dueCount, setDueCount] = useState(0);
+  const [learned, setLearned] = useState(0);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     const settings = await getSettings(db);
-    const due = await getDueConjugationCardsSplit(db, new Date(), settings);
+    const [due, counts] = await Promise.all([
+      getDueConjugationCardsSplit(db, new Date(), settings),
+      getConjugationCounts(db),
+    ]);
     setDueCount(due.length);
+    setLearned(counts.learned);
+    setTotal(counts.total);
     setLoading(false);
   }, [db]);
 
@@ -107,11 +115,15 @@ function TrainingView({ db, styles, onStartSession }: { db: SQLiteDatabase; styl
     <View style={styles.trainingContent}>
       {!loading && (
         <>
+          {/* Total acquis plutôt que nombre dû, demandé explicitement
+           * (20/08/2026) — le compteur dû reste utilisé pour activer/
+           * désactiver le bouton juste en dessous, simplement plus mis
+           * en avant comme gros chiffre. */}
           <FadeInView duration={400} style={styles.statCard}>
-            <Text style={styles.statNumber}>{dueCount}</Text>
-            <Text style={styles.statCaption}>
-              conjugaison{dueCount !== 1 ? 's' : ''} due{dueCount !== 1 ? 's' : ''}
+            <Text style={styles.statNumber}>
+              {learned} <Text style={styles.statNumberTotal}>/ {total}</Text>
             </Text>
+            <Text style={styles.statCaption}>conjugaison{learned !== 1 ? 's' : ''} acquise{learned !== 1 ? 's' : ''}</Text>
           </FadeInView>
 
           <Text style={styles.trainingHint}>
@@ -334,6 +346,7 @@ function createStyles(t: SolYSombraPalette) {
       marginBottom: 16,
     },
     statNumber: { fontSize: 44, fontWeight: '700', color: t.wordText },
+    statNumberTotal: { fontSize: 22, fontWeight: '600', color: t.metaText },
     statCaption: { fontSize: 14, color: t.metaText, marginTop: 4 },
     trainingHint: { fontSize: 13, color: t.metaText, lineHeight: 18, marginBottom: 24 },
     button: { backgroundColor: t.buttonFilled, paddingVertical: 16, borderRadius: 24, alignItems: 'center' },

@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDueCardsSplit, type DueCardRow } from '../data/database';
+import { getDueCardsSplit, replaceScheduledNotifications, getNextScheduledNotificationTime, type DueCardRow } from '../data/database';
 import type { AppSettings } from '../data/settings';
 import { schedule } from '../scheduler/reviewScheduler';
 import type { ScheduledNotification } from '../scheduler/types';
@@ -61,9 +61,21 @@ export async function refillNotificationQueue(
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const { due, slots } = await computeQueueSlots(db, settings, now);
-  if (due.length === 0) return 0;
+  if (due.length === 0) {
+    await replaceScheduledNotifications(db, []);
+    return 0;
+  }
 
   const byId = new Map(due.map((row) => [row.word.id, row.word]));
+
+  // Miroir local des créneaux réellement programmés — voir
+  // `getNextNotificationTime` plus bas, qui les LIT au lieu de les
+  // recalculer (demandé explicitement le 20/08/2026, l'estimation
+  // précédente n'était pas jugée assez exacte).
+  await replaceScheduledNotifications(
+    db,
+    slots.map((slot) => ({ wordId: slot.id, fireDate: slot.fireDate }))
+  );
 
   // En parallèle, pas en séquence : programmer jusqu'à 50 notifications
   // une par une (chacune un appel au pont natif) ajoutait plusieurs
@@ -94,26 +106,19 @@ export async function refillNotificationQueue(
   return slots.length;
 }
 
-/** Estimation de l'heure de la prochaine notification, sans rien
- * reprogrammer — relit simplement les cartes dues et rejoue le même
- * calcul de créneaux que `refillNotificationQueue`. Approximatif et
- * assumé comme tel (demandé explicitement ainsi) : l'espacement entre
- * cartes dues simultanément est tiré aléatoirement (15-30 min, voir
- * PLAN.md) à chaque appel, donc cette estimation peut différer de
- * quelques minutes de l'heure réellement programmée par le dernier
- * `refillNotificationQueue` — lire l'heure exacte demanderait de parser
- * le format de retour spécifique à l'OS de
- * `Notifications.getAllScheduledNotificationsAsync()` (non documenté de
- * façon fiable pour un trigger de type date sur iOS), ce qui a été
- * évité plutôt que deviné. Retourne `null` si aucune carte n'est due. */
-export async function getNextNotificationTime(
-  db: SQLiteDatabase,
-  settings: AppSettings,
-  now: Date = new Date()
-): Promise<Date | null> {
-  const { slots } = await computeQueueSlots(db, settings, now);
-  if (slots.length === 0) return null;
-  return slots.reduce((earliest, s) => (s.fireDate < earliest ? s.fireDate : earliest), slots[0].fireDate);
+/** Heure exacte de la prochaine notification, LUE depuis le miroir local
+ * (`scheduled_notifications`) plutôt que recalculée — corrige un défaut
+ * signalé explicitement (20/08/2026) : la version précédente rejouait
+ * le calcul de planification à chaque consultation, et comme
+ * l'espacement entre cartes dues simultanément est tiré aléatoirement
+ * (15-30 min, voir PLAN.md) à chaque calcul, l'heure affichée pouvait
+ * différer de celle réellement programmée par le dernier
+ * `refillNotificationQueue`. Maintenant que `refillNotificationQueue`
+ * persiste les créneaux réellement programmés dans ce miroir, cette
+ * fonction n'a plus qu'à les lire — plus d'approximation. Retourne
+ * `null` si rien n'est programmé. */
+export async function getNextNotificationTime(db: SQLiteDatabase, now: Date = new Date()): Promise<Date | null> {
+  return getNextScheduledNotificationTime(db, now);
 }
 
 function randomSpacing(minMinutes: number, maxMinutes: number): number {
