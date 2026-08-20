@@ -11,21 +11,37 @@ import type { CaptionStatus } from './types';
  *    `watch?v=...`. Testé fonctionnel pendant cette session
  *    (20/08/2026) : le JSON est bien présent et parsable.
  * 2. **Contenu d'une piste** (le texte + horodatages) — récupéré à
- *    l'URL `baseUrl` fournie par l'étape 1. **Testé pendant cette
- *    session et le résultat a été une réponse HTTP 200 avec un corps
- *    VIDE**, y compris en reproduisant les cookies de session et
- *    différents paramètres de format (`fmt=json3`). Cause exacte non
- *    identifiée avec certitude — hypothèse la plus probable : YouTube a
- *    renforcé la détection de requêtes non-navigateur sur cet endpoint
- *    depuis que cette méthode a été documentée par la communauté (une
- *    tentative avec l'API interne InnerTube, utilisée par des outils à
- *    jour comme yt-dlp, a aussi échoué avec une erreur
- *    "Precondition check failed"). **Il est possible que ça fonctionne
- *    différemment depuis le contexte réseau réel d'un iPhone (IP
- *    résidentielle plutôt que le réseau de ce bac à sable de
- *    développement, souvent plus agressivement filtré) — à vérifier en
- *    priorité sur device avant de considérer cette fonctionnalité
- *    fiable.** Voir AUDIT.md pour le détail exact des tests faits.
+ *    l'URL `baseUrl` fournie par l'étape 1. **Re-testé en profondeur le
+ *    20/08/2026 (session de débogage dédiée) : cassé de façon
+ *    systémique, pas un problème de paramètre ou de vidéo précise.**
+ *    HTTP 200 avec un corps VIDE pour : la piste manuelle, la piste
+ *    auto-générée, `type=list` (qui ne nécessite normalement AUCUNE
+ *    signature) sur la vidéo la plus regardée de toute la plateforme,
+ *    avec et sans cookies de session repris de la page. L'API interne
+ *    InnerTube (`get_transcript`/`player`), testée avec un contexte
+ *    client WEB **entièrement authentique** (copié tel quel depuis la
+ *    page, `visitorData`/`configInfo` inclus) ainsi qu'avec les
+ *    contextes ANDROID/IOS/WEB_EMBEDDED_PLAYER, échoue systématiquement
+ *    avec `400 "Precondition check failed"`. Diagnostic : très
+ *    probablement l'exigence de "PoToken" de YouTube (attestation
+ *    générée par un vrai moteur de navigateur exécutant leur script
+ *    BotGuard) — documentée publiquement par les mainteneurs de yt-dlp
+ *    depuis 2024, appliquée de façon croissante à toute requête qui n'est
+ *    pas émise par un vrai navigateur, quel que soit le endpoint ou le
+ *    client déclaré.
+ *
+ *    **Solution retenue : faire émettre la requête par un vrai moteur de
+ *    navigateur plutôt que par un client HTTP nu** — voir
+ *    [TranscriptFetcher.tsx](./TranscriptFetcher.tsx), qui charge la
+ *    vraie page `youtube.com/watch` dans la `WebView` déjà utilisée pour
+ *    le lecteur, et fait le `fetch()` DEPUIS le contexte JS de cette
+ *    page (même origine, vrais cookies, vrai moteur WebKit/Chromium) —
+ *    indiscernable d'un utilisateur réel pour YouTube, contrairement à
+ *    ce fichier. Utilisé en secours quand `fetchVideoCaptions`
+ *    ci-dessous revient vide. **Non vérifié de bout en bout dans cette
+ *    session** (aucun moteur de WebView disponible hors de l'app
+ *    elle-même) — à tester en priorité sur device. Voir AUDIT.md pour le
+ *    détail exact de chaque test.
  *
  * En cas d'échec à n'importe quelle étape, retourne un statut
  * `unavailable` plutôt que de lever une exception — cohérent avec la
@@ -118,20 +134,44 @@ function parseTimedTextXml(xml: string): CaptionCue[] {
   return cues;
 }
 
-/** Point d'entrée unique : récupère et segmente les sous-titres
- * espagnols d'une vidéo, ou renvoie `unavailable` si quoi que ce soit
- * échoue à n'importe quelle étape (jamais d'exception). */
+/** Tentative n°1 (bon marché, pas de WebView à monter) : requête HTTP
+ * brute vers `timedtext`. **Confirmé cassé à 100% depuis le réseau de
+ * développement de cette session** (20/08/2026) — HTTP 200 avec un corps
+ * vide, y compris pour `type=list` (qui n'a normalement besoin d'aucune
+ * signature) sur la vidéo la plus regardée de tout YouTube, donc pas un
+ * problème lié à une vidéo ou un paramètre précis. Cause probable :
+ * exigence de "PoToken" (attestation générée par un vrai moteur de
+ * navigateur) de plus en plus appliquée par YouTube contre les requêtes
+ * non-navigateur, y compris pour cet endpoint historiquement public — voir
+ * AUDIT.md pour le détail exact des tests. **Peut fonctionner ou non
+ * depuis un autre réseau (device réel)** — gardé comme premier essai
+ * gratuit avant d'escalader vers `TranscriptFetcher.tsx` (WebView), pas
+ * supprimé.
+ *
+ * Logs de diagnostic temporaires : demandés explicitement pour localiser
+ * précisément où le contenu disparaît. Jamais de cookie/jeton loggué. */
 export async function fetchVideoCaptions(videoId: string): Promise<VideoCaptionsResult> {
   try {
     const tracks = await fetchCaptionTrackList(videoId);
+    console.log('[captions] track list:', tracks.length, 'pistes,', tracks.filter((t) => t.languageCode.startsWith('es')).length, 'en espagnol');
+
     const track = pickSpanishTrack(tracks);
-    if (!track) return { status: 'unavailable', language: 'es', segments: [] };
+    if (!track) {
+      console.log('[captions] aucune piste espagnole trouvée pour', videoId);
+      return { status: 'unavailable', language: 'es', segments: [] };
+    }
+    console.log('[captions] piste choisie:', track.languageCode, track.kind === 'asr' ? '(auto-générée)' : '(manuelle)');
 
     const res = await fetch(track.baseUrl, { headers: { 'User-Agent': BROWSER_USER_AGENT } });
-    if (!res.ok) return { status: 'unavailable', language: track.languageCode, segments: [] };
+    const bodyText = await res.text();
+    console.log('[captions] fetch timedtext — HTTP', res.status, '— corps:', bodyText.length, 'caractères', bodyText.length > 0 ? `— début: ${bodyText.slice(0, 120)}` : '(vide)');
 
-    const xml = await res.text();
-    const segments = parseTimedTextXml(xml);
+    if (!res.ok || bodyText.length === 0) {
+      return { status: 'unavailable', language: track.languageCode, segments: [] };
+    }
+
+    const segments = parseTimedTextXml(bodyText);
+    console.log('[captions] segments parsés depuis le corps reçu:', segments.length);
     if (segments.length === 0) return { status: 'unavailable', language: track.languageCode, segments: [] };
 
     return {
@@ -139,7 +179,8 @@ export async function fetchVideoCaptions(videoId: string): Promise<VideoCaptions
       language: track.languageCode,
       segments,
     };
-  } catch {
+  } catch (err) {
+    console.log('[captions] exception pendant fetchVideoCaptions:', err instanceof Error ? err.message : String(err));
     return { status: 'unavailable', language: 'es', segments: [] };
   }
 }

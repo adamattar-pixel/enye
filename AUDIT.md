@@ -140,6 +140,47 @@ En revanche, deux étapes ont été testées et fonctionnent : l'extraction de l
 
 **Statut : implémenté mais NON FONCTIONNEL EN L'ÉTAT pour la récupération de contenu.** À revérifier en priorité depuis le réseau réel d'un iPhone (IP résidentielle/mobile) avant de considérer cette fonctionnalité utilisable — c'est plausible que ça fonctionne différemment là-bas, mais ce n'est qu'une hypothèse, pas vérifié.
 
+## Débogage dédié de la récupération de captions — cause identifiée, solution WebView implémentée, non vérifiée de bout en bout (20/08/2026)
+
+Suite à un retour explicite ("la fonctionnalité est inutilisable en pratique, débogue et répare"), session de débogage dédiée avec pour consigne explicite de ne pas se contenter d'un essai superficiel avant de conclure à un blocage YouTube. Démarche : reproduire le bug avec de vraies vidéos avant de toucher au code, tester méthodiquement plusieurs approches avec preuve à l'appui de chacune, puis corriger.
+
+### Reproduction — bug confirmé systémique, pas lié à une vidéo ou un paramètre précis
+
+**Constat.** Testé en direct (accès réseau du bac à sable de développement) avec DEUX vidéos réelles différentes (une petite chaîne d'apprentissage de l'espagnol, et la vidéo la plus regardée de toute la plateforme — choisie précisément pour éliminer l'hypothèse "cette vidéo précise a un souci") :
+
+| Méthode testée | Requête exacte | Résultat |
+|---|---|---|
+| `timedtext`, piste manuelle espagnole, URL signée complète | `GET .../api/timedtext?v=...&signature=...&lang=es` | HTTP 200, `Content-Length: 0` |
+| `timedtext`, piste ASR espagnole, URL signée complète | idem avec `&kind=asr` | HTTP 200, `Content-Length: 0` |
+| `timedtext`, `type=list` (liste des pistes — **ne nécessite normalement AUCUNE signature**, endpoint public historique) | `GET .../api/timedtext?type=list&v=...` | HTTP 200, `Content-Length: 0` |
+| `timedtext` avec cookies de session repris de la page (cookie jar `curl -c/-b`) | idem + `Cookie: ...` | HTTP 200, `Content-Length: 0` |
+| InnerTube `get_transcript`, contexte client **WEB entièrement authentique** (copié tel quel depuis `INNERTUBE_CONTEXT` de la page réelle, `visitorData`/`configInfo.appInstallData` inclus, vrai `continuationEndpoint.getTranscriptEndpoint.params` extrait de `ytInitialData`) | `POST .../youtubei/v1/get_transcript?key=...` | HTTP 400 `"Precondition check failed"` |
+| InnerTube `player`, contexte client ANDROID (clé publique connue de la communauté) | `POST .../youtubei/v1/player?key=...` | HTTP 400 `"Precondition check failed"` |
+| InnerTube `player`, contexte client IOS | idem | HTTP 400 `"Precondition check failed"` |
+| InnerTube `get_transcript`, contexte client WEB_EMBEDDED_PLAYER | idem | HTTP 400 `"Precondition check failed"` |
+
+**8 méthodes sur 8 échouent**, dont une (`type=list`) qui n'a historiquement jamais nécessité de signature et qui échoue même sur la vidéo la plus regardée de toute la plateforme — élimine l'hypothèse d'un problème de signature/expiration/vidéo précise. Seule l'extraction de la LISTE des pistes (pas leur contenu) depuis le HTML de la page fonctionne, de façon reproductible, sur les deux vidéos testées.
+
+### Diagnostic
+
+**Cause la plus probable, avec un niveau de confiance raisonnable mais pas une certitude absolue** (impossible à confirmer à 100% sans accès aux systèmes internes de YouTube) : l'exigence croissante de "PoToken" (attestation d'origine générée par l'exécution réelle du script BotGuard de Google dans un vrai moteur de navigateur) que YouTube applique désormais à un périmètre de plus en plus large de requêtes non émises par un navigateur véritable — documentée publiquement par les mainteneurs de yt-dlp depuis 2024 et toujours d'actualité. Le motif observé colle exactement à ce diagnostic : la requête HTTP nue échoue systématiquement quel que soit le endpoint ou le client déclaré, alors que la LECTURE de la page elle-même (HTML brut, sans exécution JS) réussit toujours — cohérent avec un blocage appliqué spécifiquement à la couche "récupération de contenu dynamique", pas à la lecture de page statique.
+
+**Non déterminé avec certitude** : si ce blocage est spécifique à l'IP de ce bac à sable de développement (plage d'adresses de datacenter, souvent plus sévèrement filtrée) ou s'il est désormais appliqué universellement à toute requête non-navigateur, y compris depuis un réseau résidentiel/mobile. Les deux hypothèses sont plausibles ; aucune n'a pu être testée depuis un réseau autre que celui de ce bac à sable dans cette session.
+
+### Solution retenue — faire émettre la requête par un vrai moteur de navigateur, pas par un client HTTP
+
+**Décision.** Plutôt que de continuer à chercher une combinaison de paramètres/headers qui contournerait le blocage (déjà 8 tentatives infructueuses, rendement décroissant), exploiter ce que l'app a déjà : une vraie `WebView` (déjà utilisée pour le lecteur vidéo, `YouTubePlayer.tsx`). Nouveau fichier [mobile/src/listening/TranscriptFetcher.tsx](mobile/src/listening/TranscriptFetcher.tsx) : charge la vraie page `youtube.com/watch?v=...` dans une `WebView` invisible (1×1px, hors écran), attend que `captionTracks` apparaisse dans le HTML (déjà présent dans le rendu serveur initial, pas besoin d'attendre l'hydratation complète de la SPA), puis exécute le `fetch()` vers l'URL `timedtext` **depuis le contexte JS de cette page** — même origine (`youtube.com`), vrais cookies du moteur WebKit/Chromium de la WebView, vrai fingerprint de navigateur. Cette requête est, par construction, indiscernable de celle d'un utilisateur réel qui aurait ouvert cette page — précisément ce qu'aucune des 8 méthodes en HTTP nu ne pouvait offrir.
+
+**Intégration.** [ListeningScreen.tsx](mobile/src/screens/ListeningScreen.tsx) essaie d'abord `fetchVideoCaptions()` (gratuit, pas de WebView à monter — peut très bien fonctionner sur un réseau non bloqué, gardé comme premier essai plutôt que supprimé) ; si ça revient sans segment, bascule sur `fetchTranscript()` (le hook `useTranscriptFetcher`, WebView). Aucun autre système touché : SM-2, cooldown, sélection vidéo-puis-segment, lecteur de révision, validation des réponses — tous inchangés, conformément à la consigne explicite de ne pas réécrire ce qui fonctionne déjà.
+
+**Logs de diagnostic ajoutés** (temporaires, demandés explicitement) dans `captions.ts` et `TranscriptFetcher.tsx` : nombre de pistes détectées, langue/type de piste choisie, statut HTTP et taille du corps reçu à chaque tentative, début du corps si non vide — jamais de cookie ni de jeton loggué.
+
+### Ce qui N'A PAS pu être vérifié, et pourquoi ce n'est PAS marqué "résolu"
+
+**Une vraie `WebView` ne peut pas être instanciée ni exécutée depuis les outils de cette session** (Bash/Node n'ont pas de moteur de rendu web/JS de navigateur) — impossible de reproduire ici la preuve de bout en bout explicitement demandée (nombre de cues récupérés, exemple de segment en espagnol réel, insertion DB réussie). `tsc --noEmit` et `npm test` confirment que le code compile et n'introduit aucune régression, mais **ça ne prouve rien sur le comportement réel de la WebView face à YouTube** — seul un test sur l'iPhone de l'utilisateur peut le confirmer.
+
+**Statut : cause du blocage identifiée avec un diagnostic argumenté (pas une certitude absolue), solution architecturale implémentée et compilée, mécanisme non vérifié de bout en bout faute d'environnement WebView disponible dans cette session.** Ne pas présenter comme "réparé" tant qu'un test réel sur device n'a pas montré un nombre de segments > 0 pour une vraie vidéo. Si le test sur device échoue aussi (c'est-à-dire si le blocage n'est pas spécifique à l'IP du bac à sable mais universel), l'étape suivante documentée mais non implémentée serait un petit service local minimal (voir PLAN.md) — pas construit maintenant, conformément à la consigne de ne l'implémenter que si un test démontre que c'est nécessaire.
+
 ### Compatibilité Expo Go — toujours non vérifiée sur device, mais l'installation du paquet s'est bien passée
 
 **Constat.** `npx expo install react-native-webview` s'est exécuté proprement (résolution automatique d'une version compatible SDK 54, `13.15.0`), et `expo-doctor` rapporte 18/18 vérifications passées après installation. Le bundle Metro iOS a aussi été récupéré avec succès (`HTTP 200`, ~9,5 Mo) pendant cette session, confirmant que le module se résout et se bundle sans erreur de compilation ou de dépendance manquante.

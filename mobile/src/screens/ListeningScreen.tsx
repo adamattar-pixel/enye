@@ -13,6 +13,7 @@ import { getSettings } from '../data/settings';
 import { extractVideoId } from '../listening/youtubeUrl';
 import { fetchVideoMetadata } from '../listening/metadata';
 import { fetchVideoCaptions } from '../listening/captions';
+import { useTranscriptFetcher } from '../listening/TranscriptFetcher';
 import { searchYoutubeVideos, type YoutubeSearchResult } from '../listening/search';
 import type { CaptionStatus, ListeningVideo } from '../listening/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
@@ -142,6 +143,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { node: transcriptFetcherNode, fetchTranscript } = useTranscriptFetcher();
 
   const refresh = useCallback(async () => {
     setVideos(await getListeningVideosWithStats(db));
@@ -194,7 +196,19 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     setAddingId(result.videoId);
     setAddError(null);
     try {
-      const captions = await fetchVideoCaptions(result.videoId);
+      // Essai n°1 : requête HTTP brute (gratuite, pas de WebView à
+      // monter) — confirmé cassé à 100% depuis le réseau de
+      // développement (voir captions.ts, AUDIT.md), mais peut
+      // fonctionner sur d'autres réseaux, donc gardé comme premier essai
+      // plutôt que supprimé. Essai n°2 seulement si le premier ne
+      // renvoie aucun segment : la même requête émise depuis une vraie
+      // page youtube.com chargée dans une WebView (voir
+      // `TranscriptFetcher.tsx`), plus lente à monter mais qui contourne
+      // le blocage anti-bot identifié.
+      let captions = await fetchVideoCaptions(result.videoId);
+      if (captions.segments.length === 0) {
+        captions = await fetchTranscript(result.videoId);
+      }
       const video: ListeningVideo = {
         id: result.videoId,
         title: result.title,
@@ -253,6 +267,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   // défile avec le reste dans le même `FlatList` natif.
   return (
     <View style={{ flex: 1 }}>
+      {transcriptFetcherNode}
       <FlatList
         data={videos}
         keyExtractor={(v) => v.id}
