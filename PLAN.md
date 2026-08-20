@@ -473,6 +473,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : correctifs appliqués et compilés, PAS vérifiés — appliqués sur une hypothèse argumentée, pas sur un log de confirmation déjà vu (je n'ai pas eu accès au résultat de `page_context` avant d'écrire ce correctif).** Détail complet dans AUDIT.md. Prochaine étape : retester sur device et regarder ce que `page_context`/`button_search` rapportent cette fois.
 
+## Deuxième test réel : `&app=desktop` servait en fait une page YouTube legacy (20/08/2026)
+
+**Retour réel avec le log `page_context`** : la page est bien servie en desktop (le `userAgent` fonctionne), mais `&app=desktop` s'est révélé être un vieux paramètre traité comme "sers la version legacy pré-2017" (`watch7-content`/`watch-main-col`, Polymer 1) — pas le site moderne pour lequel les sélecteurs sont écrits. Diagnostic confirmé par une preuve directe cette fois (le DOM capturé), pas une nouvelle hypothèse.
+
+**Correctif appliqué** : `&app=desktop` retiré de l'URL, le `userAgent` desktop seul suffisait déjà à éviter la version mobile. Log `page_context` gardé pour confirmer au prochain test qu'une page moderne (`ytd-*`) est bien servie.
+
+**Statut : correctif appliqué et compilé, PAS encore revérifié sur device.** Si le bouton "Show transcript" reste introuvable malgré une page moderne confirmée, point suivant signalé par l'utilisateur : il faudrait peut-être ouvrir la description ("...more") avant que le bouton n'apparaisse dans le DOM. Détail complet dans AUDIT.md.
+
 ## Les 6002 mots ont désormais tous un thème (20/08/2026)
 
 **Demande explicite** : après le premier passage (1027/5966 mots tagués, 17,2%), l'utilisateur a demandé que les 6002 mots aient tous un thème.

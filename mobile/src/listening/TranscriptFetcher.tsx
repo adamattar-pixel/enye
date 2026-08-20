@@ -10,15 +10,15 @@ export interface TranscriptFetchResult {
   segments: CaptionCue[];
 }
 
-/** Forcé sur la `WebView` ET dans l'URL (`&app=desktop` ci-dessous) —
- * hypothèse principale du retour de test du 20/08/2026 : sur iPhone, le
- * user-agent par défaut de la `WebView` ressemble à Safari mobile, et
- * YouTube sert alors `m.youtube.com` (DOM différent, pas de bouton
- * "Show transcript" à cet endroit) plutôt que la version desktop pour
- * laquelle `CLICK_SCRIPT`/`DOM_FALLBACK_SCRIPT` sont écrits. Les deux
- * leviers sont posés ensemble plutôt qu'un seul : la détection
- * serveur de YouTube peut se baser sur l'un ou l'autre selon le
- * contexte, pas garanti qu'un seul suffise. */
+/** Forcé sur la `WebView` — deuxième test réel sur device (20/08/2026)
+ * après le premier correctif (`&app=desktop` sur l'URL + ce `userAgent`) :
+ * le log `page_context` a confirmé que le `userAgent` desktop fonctionne
+ * (page bien servie en desktop), MAIS `&app=desktop` s'est révélé être
+ * un ancien paramètre YouTube traité aujourd'hui comme "sers la version
+ * legacy pré-2017" (DOM `watch7-content`/`watch-main-col`, polymer 1) —
+ * pas la version desktop moderne pour laquelle `CLICK_SCRIPT`/
+ * `DOM_FALLBACK_SCRIPT` sont écrits (`ytd-*`). `&app=desktop` retiré de
+ * l'URL en conséquence, seul le `userAgent` reste. */
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
@@ -137,19 +137,21 @@ const NETWORK_PATCH_SCRIPT = `
  * texte — la page est chargée en anglais via `Accept-Language` pour que
  * ce libellé soit stable) et clique dessus si trouvé.
  *
- * **20/08/2026, sur retour de test réel sur iPhone** : `button_search`
- * ne trouvait jamais rien (`found: false`) et le repli DOM ne trouvait
- * aucune ligne non plus — le panneau de transcription ne s'ouvrait
- * probablement jamais. Deux hypothèses à départager, dans l'ordre :
- * (1) la WebView charge `m.youtube.com` (version mobile, DOM différent
- * de celui pour lequel ces sélecteurs ont été écrits) à cause du
- * user-agent par défaut d'iOS — combattu ci-dessous par `&app=desktop`
- * dans l'URL ET un `userAgent` desktop explicite sur la `WebView` (les
- * deux, un seul ne suffit pas forcément selon la détection côté
- * serveur) ; (2) un bandeau de consentement cookies (RGPD) bloque
- * l'interaction avant que le bouton n'apparaisse — une tentative de
- * fermeture est faite avant la recherche du bouton, sans certitude que
- * les sélecteurs ci-dessous couvrent la bonne variante régionale.
+ * **20/08/2026, deux tests réels sur iPhone.** Premier test :
+ * `button_search` ne trouvait jamais rien et le repli DOM ne trouvait
+ * aucune ligne — hypothèse retenue : la WebView charge `m.youtube.com`
+ * (mobile) plutôt que desktop, combattue avec `userAgent` desktop +
+ * `&app=desktop` sur l'URL. **Deuxième test, avec le log `page_context`
+ * (href + échantillon du DOM) : le `userAgent` desktop fonctionne bien,
+ * mais `&app=desktop` sert en réalité la version LEGACY pré-2017 de
+ * YouTube** (`id="watch7-content"`, `class="watch-main-col"`, Polymer 1
+ * — pas de composants `ytd-*`) — un vieux paramètre désormais traité
+ * comme "dégrade la page", pas "sers le desktop moderne". `&app=desktop`
+ * retiré ; seul le `userAgent` desktop reste. Hypothèse secondaire
+ * toujours en place au cas où : un bandeau de consentement cookies
+ * (RGPD) pourrait aussi bloquer l'interaction — tentative de fermeture
+ * faite avant la recherche du bouton, sans certitude de couvrir toutes
+ * les variantes régionales.
  *
  * Log de diagnostic `page_context` ajouté en tout premier, AVANT toute
  * tentative de correction — capture `location.href` et le début du DOM
@@ -443,7 +445,7 @@ export function useTranscriptFetcher() {
         <WebView
           ref={webviewRef}
           source={{
-            uri: `https://www.youtube.com/watch?v=${pendingVideoId}&app=desktop`,
+            uri: `https://www.youtube.com/watch?v=${pendingVideoId}`,
             headers: { 'Accept-Language': 'en-US,en;q=0.9' },
           }}
           userAgent={DESKTOP_USER_AGENT}

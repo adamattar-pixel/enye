@@ -3,7 +3,7 @@ import { ActivityIndicator, SafeAreaView, StyleSheet, useColorScheme } from 'rea
 import * as Notifications from 'expo-notifications';
 import * as SQLite from 'expo-sqlite';
 import { setAudioModeAsync } from 'expo-audio';
-import { DB_NAME, migrateDbIfNeeded, importMissingWords, importMissingConjugationCards } from './src/data/database';
+import { DB_NAME, migrateDbIfNeeded, importMissingWords, resyncWordTags, importMissingConjugationCards } from './src/data/database';
 import { parseWords } from './src/data/wordRepository';
 import wordsJson from './src/data/words.json';
 import { conjugationVerbs } from './src/conjugation/data';
@@ -33,7 +33,18 @@ export default function App() {
       // principe pour les 10 400 triplets de conjugaison (200 verbes ×
       // 52 formes) — voir AUDIT.md pour le risque de premier lancement
       // plus lent avec ce volume combiné, pas mesuré sur device.
-      await importMissingWords(database, parseWords(wordsJson));
+      const parsedWords = parseWords(wordsJson);
+      await importMissingWords(database, parsedWords);
+      // `importMissingWords` n'insère que les mots ABSENTS de la base —
+      // un mot déjà importé garde pour toujours ses anciens tags sans
+      // ça, même après une mise à jour du contenu de `words.json` (ex.
+      // l'ajout de tags thématiques aux 6002 mots, 20/08/2026 — signalé
+      // explicitement : "je clique sur un tag, pas beaucoup de mots
+      // apparaissent"). Appelé à chaque démarrage, pas seulement au
+      // premier lancement — `resyncWordTags` ne réécrit que les lignes
+      // dont le tag stocké diffère réellement du bundle, donc un
+      // no-op rapide une fois les tags synchronisés une première fois.
+      await resyncWordTags(database, parsedWords);
       await importMissingConjugationCards(database, conjugationVerbs);
 
       // Bug documenté et de longue date d'expo-speech sur iOS : sans

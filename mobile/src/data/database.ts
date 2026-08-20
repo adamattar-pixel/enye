@@ -275,6 +275,47 @@ export async function importMissingWords(db: SQLiteDatabase, words: Word[], now:
   return missing.length;
 }
 
+/** Resynchronise les tags des mots DÉJÀ en base avec ceux du bundle
+ * (`words.json`) — nécessaire en plus de `importMissingWords`, qui
+ * n'insère que les mots ABSENTS de la base et ne touche jamais un mot
+ * déjà importé. Sans cette fonction, une mise à jour du contenu de
+ * `words.json` (ex. l'ajout de tags thématiques à des mots qui n'en
+ * avaient aucun, 20/08/2026) ne serait jamais visible sur une
+ * installation déjà en place : les lignes SQLite existantes garderaient
+ * pour toujours leurs anciens tags (souvent `[]`), même après une mise à
+ * jour de l'app — signalé explicitement ("je clique sur un tag, pas
+ * beaucoup de mots apparaissent, alors qu'il devrait y en avoir 6002").
+ *
+ * Ne touche jamais un mot ajouté par l'utilisateur (`is_user_added`) —
+ * ces mots n'existent pas dans `words.json`, rien à resynchroniser.
+ * Ne compare/écrit QUE la colonne `tags`, pas le reste du mot (portée
+ * volontairement limitée au bug signalé, pas un resync général). */
+export async function resyncWordTags(db: SQLiteDatabase, words: Word[]): Promise<number> {
+  const existingRows = await db.getAllAsync<{ id: string; tags: string; is_user_added: number }>(
+    'SELECT id, tags, is_user_added FROM words;'
+  );
+  const existingById = new Map(existingRows.map((r) => [r.id, r]));
+
+  const toUpdate: { id: string; tags: string }[] = [];
+  for (const word of words) {
+    const existing = existingById.get(word.id);
+    if (!existing || existing.is_user_added === 1) continue;
+    const newTags = JSON.stringify(word.tags);
+    if (existing.tags !== newTags) {
+      toUpdate.push({ id: word.id, tags: newTags });
+    }
+  }
+  if (toUpdate.length === 0) return 0;
+
+  await db.withTransactionAsync(async () => {
+    for (const { id, tags } of toUpdate) {
+      await db.runAsync('UPDATE words SET tags = ? WHERE id = ?;', tags, id);
+    }
+  });
+
+  return toUpdate.length;
+}
+
 export interface DueCardRow {
   word: Word;
   card: SM2CardState;

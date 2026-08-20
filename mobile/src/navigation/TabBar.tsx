@@ -23,12 +23,16 @@ const TABS: { key: TabKey; label: string }[] = [
 const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.7);
 
 // Hauteur de l'icône ☰ (`hamburgerRow.paddingTop` + `hamburgerButton.height`,
-// voir plus bas) — le tiroir doit commencer exactement au bord bas de
-// l'icône, pas à une valeur devinée depuis le haut de l'écran (bug
-// signalé le 20/08/2026 : un décalage fixe en pixels depuis le tout haut
-// de l'écran ignore la hauteur réelle de l'encoche/l'île dynamique selon
-// l'appareil, donc le tiroir pouvait démarrer plus haut que l'icône).
-const DRAWER_TOP_OFFSET = 6 + 38;
+// voir plus bas) + un espace visible en dessous — le tiroir doit
+// commencer sous l'icône avec un vrai espace, pas à une valeur devinée
+// depuis le haut de l'écran (bug signalé le 20/08/2026 : un décalage
+// fixe en pixels depuis le tout haut de l'écran ignore la hauteur réelle
+// de l'encoche/l'île dynamique selon l'appareil, donc le tiroir pouvait
+// démarrer plus haut que l'icône). Sans l'espace supplémentaire de 16px,
+// le tiroir touchait exactement le bas de l'icône (aucun espace visible
+// entre les deux) — signalé "trop haut, ne devrait pas atteindre le
+// bouton".
+const DRAWER_TOP_OFFSET = 6 + 38 + 16;
 
 /**
  * Remplace l'ancienne barre de pilules fixe en bas d'écran par une icône
