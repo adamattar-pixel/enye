@@ -1,6 +1,6 @@
 # Spec: Listening comprehension (Compréhension orale / Écoute tab)
 
-Status: **captions pipeline confirmed working end-to-end on device (2026-08-21); video playback was confirmed broken the same day, then the homegrown player was replaced with `react-native-youtube-iframe` after 18 failed fix iterations — not yet reverified on device** — see `docs/AUDIT.md` Issues #1–#2, Decision 014. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
+Status: **captions AND video playback both confirmed working end-to-end on real device (2026-08-21)** — the homegrown player was replaced with `react-native-youtube-iframe` after 18 failed fix iterations, then confirmed by the user ("parfait ca marche"). Closed captions explicitly disabled as a follow-up (they were sometimes revealing the dictation answer) — not yet reconfirmed. See `docs/AUDIT.md` Issues #1–#2, Decision 014. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
 
 ## Problem
 
@@ -25,7 +25,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 - No backend/server of any kind (see `CLAUDE.md`) — everything runs from the Expo app itself, inside a `WebView` where a real browser engine is needed.
 - No official YouTube API covers caption *content* retrieval for arbitrary third-party videos (`captions.download` requires OAuth from the video's owner) — every mechanism here is unofficial and can break without notice if YouTube changes its page/API structure.
-- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly, used both directly (captions) and as a peer dependency of `react-native-youtube-iframe` (video playback, added 2026-08-21). Its JS-execution and network-request capability is confirmed working on device (captions interception proves it); actual **video playback** was confirmed broken on device with a homegrown synthetic-HTML player across 18 fix iterations (Decision 013), then replaced entirely with `react-native-youtube-iframe` (Decision 014) — pure JS/WebView, Expo Go compatible, `expo-doctor` 18/18. **Not yet reverified on device.** See `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
+- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly, used both directly (captions) and as a peer dependency of `react-native-youtube-iframe` (video playback, added 2026-08-21). Both captions interception and video playback are now **confirmed working on a real device** — playback via `react-native-youtube-iframe` (pure JS/WebView, Expo Go compatible, `expo-doctor` 18/18) after a homegrown synthetic-HTML player failed across 18 fix iterations (Decisions 013 → 014). See `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
 
 ## Selection algorithm (implemented, `mobile/src/listening/selection.ts` + `ListeningReviewContainer.tsx`)
 
@@ -121,7 +121,7 @@ Add video (URL or search result)
 
 - [x] Adding a real Spanish-language YouTube video from the app produces `captionStatus !== 'unavailable'` and at least one segment — confirmed 2026-08-21 across multiple videos, user-reported non-zero segment counts in the app.
 - [ ] At least one segment's transcript text is real, readable Spanish (not empty/garbled) — not empty is confirmed (real payloads up to ~858KB parsed), readability specifically not yet checked.
-- [ ] A review session plays the video segment, accepts a typed answer, and grades it — implemented and not currently suspected broken, but not yet exercised end-to-end now that segments exist to review.
+- [x] A review session plays the video segment — confirmed working on device 2026-08-21 (`react-native-youtube-iframe`, after 18 failed fixes on a homegrown player). Accepting a typed answer and grading it is implemented and not currently suspected broken, but not explicitly confirmed end-to-end by the user yet.
 - [ ] The same video does not repeat within 3 consecutive exercises when ≥4 videos have due segments (already covered by unit tests; real end-to-end confirmation still pending — needs enough added videos with segments to actually test).
 
 The captions-retrieval blocker (the main open risk) is resolved. Don't mark the whole feature "done" until a review session has actually been run on device.

@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the `react-native-youtube-iframe` swap fixes video playback.** After 18 failed fixes on the homegrown player, switched to this community library (Expo Go compatible, no native deps) — same underlying technique but served from a real HTTPS origin by default, likely the actual fix. `tsc`/`jest`/`expo-doctor`/bundle boot-check all pass. The `Linking.openURL` fallback (opens the video at the correct start time when playback fails) is kept regardless. **Not yet verified on device.** See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the closed-captions-disabled fix.** Video playback itself is resolved and confirmed by the user (`react-native-youtube-iframe` swap after 18 failed homegrown fixes). Follow-up: captions sometimes appeared during segments, revealing the dictation answer — `showClosedCaptions: false` added to `initialPlayerParams`. Not yet reconfirmed on device. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

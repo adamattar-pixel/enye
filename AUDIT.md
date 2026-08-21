@@ -430,7 +430,15 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Impact / correctif appliqué.** `npx expo install react-native-youtube-iframe` (installation propre, aucune config native requise, `expo-doctor` 18/18 après installation). `YouTubePlayer.tsx` entièrement réécrit en fine surcouche autour du composant `YoutubeIframe` de la librairie : `initialPlayerParams={{ start, end, controls: true, rel: false }}` pour le bornage du segment (mécanisme natif `start`/`end` de YouTube, identique en principe à ce qui était déjà tenté, mais cette fois sur une page qui charge correctement), `onError`/`onChangeState`/`onReady` mappés sur les callbacks existants du composant, `ref.seekTo(startTime, true)` pour `replay()`. Le filet de secours "Écouter sur YouTube" ajouté à l'itération précédente est conservé tel quel (toujours utile si cette librairie échoue aussi).
 
-**Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants, `expo-doctor` 18/18, bundle Metro récupéré avec succès), PAS encore vérifié sur device.** C'est un changement de stratégie plus radical que les 18 correctifs précédents (abandon de l'implémentation maison plutôt qu'un correctif de plus dessus) — à retester en priorité absolue, avec plusieurs vidéos si possible.
+**Statut : CONFIRMÉ sur device (21/08/2026) — "parfait ca marche".** Le changement de librairie a résolu le blocage : la lecture vidéo bornée au segment fonctionne enfin, après 18 correctifs infructueux sur l'implémentation maison. **C'est la conclusion du chantier lecture vidéo de l'onglet Écoute** — combinée à la confirmation antérieure du pipeline de captions (itérations 1-7), les deux plus gros risques de la fonctionnalité Compréhension orale sont maintenant résolus et confirmés sur device réel.
+
+### Vingtième itération — sous-titres YouTube désactivés explicitement (21/08/2026)
+
+**Constat.** Retour utilisateur juste après la confirmation ci-dessus : la lecture fonctionne, mais les sous-titres YouTube s'affichent parfois pendant le segment — problématique pour un exercice de compréhension orale où le sous-titre donne la réponse. L'utilisateur devait les désactiver manuellement à chaque fois via le bouton CC du lecteur.
+
+**Impact.** `initialPlayerParams.showClosedCaptions: false` ajouté explicitement dans `YouTubePlayer.tsx` (correspond au paramètre `cc_load_policy` de l'API YouTube). C'est déjà la valeur par défaut documentée de la librairie, mais l'explicitiser garantit le comportement plutôt que de compter sur un défaut implicite, et documente clairement l'intention dans le code (pourquoi les sous-titres ne doivent jamais s'afficher pour cette fonctionnalité précise).
+
+**Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.**
 
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 

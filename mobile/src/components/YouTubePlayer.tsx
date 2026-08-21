@@ -84,6 +84,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             end: Math.ceil(endTime),
             controls: true,
             rel: false,
+            // Les sous-titres révéleraient la réponse avant que l'utilisateur
+            // ait tapé ce qu'il a entendu — explicitement désactivés plutôt
+            // que de compter sur le défaut de la librairie (demandé
+            // explicitement, l'utilisateur devait sinon les couper à la main).
+            showClosedCaptions: false,
           }}
           onReady={() => onReady?.()}
           onChangeState={handleChangeState}
