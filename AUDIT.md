@@ -315,6 +315,20 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Statut : logging + correctif candidat appliqués et compilés (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** Prochaine étape : retester une session d'écoute et, si l'erreur persiste, lire les logs `[YouTubePlayer] ...` dans Metro pour voir la vraie cause (code d'erreur YouTube en particulier) plutôt que d'essayer un autre correctif à l'aveugle.
 
+### Neuvième itération — `baseUrl` insuffisant seul, code d'erreur 152 obtenu (21/08/2026)
+
+**Constat.** Log réel après le correctif `baseUrl` ci-dessus, sur trois cycles de suite :
+```
+[YouTubePlayer] message: {"step": "script_start", "type": "debug"}
+[YouTubePlayer] message: {"type": "ready"}
+[YouTubePlayer] message: {"code": 152, "type": "error"}
+```
+Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge, le JS s'exécute, `baseUrl` a au moins permis d'atteindre cette étape) — mais une erreur survient juste après. **Code 152 : honnêtement non identifié avec certitude** — ce n'est PAS l'un des quatre codes officiellement documentés par YouTube (2, 5, 100, 101/150). Ne pas présenter une signification comme confirmée.
+
+**Hypothèse retenue pour la suite (pas confirmée) : toujours un problème d'origine/autorisation, pas la vidéo elle-même.** Le paramètre `origin` de `playerVars` — recommandé explicitement par la documentation Google précisément pour les pages où l'origine réelle n'est pas fiable (exactement le cas ici) — n'était pas défini. Ajouté (`origin: 'https://www.youtube.com'`), avec en plus `location.href`/`document.referrer` maintenant inclus dans le message d'erreur pour objectiver l'origine réellement vue par la page côté device au prochain test, et le `videoId` concerné loggé pour vérifier si l'erreur est systématique (toutes les vidéos) ou spécifique à une vidéo précise (les trois logs ci-dessus ne permettent pas de trancher : impossible de savoir s'il s'agissait de la même vidéo rejouée ou de vidéos différentes).
+
+**Statut : nouveau correctif candidat appliqué et compilé (`tsc --noEmit` propre), PAS encore vérifié sur device.** Si l'erreur persiste malgré `origin`, l'hypothèse à examiner ensuite (pas encore engagée, changement d'architecture plus lourd) : WebKit traite parfois une page chargée via `loadHTMLString`/`baseURL` comme ayant une origine "opaque" pour certaines vérifications de sécurité malgré `baseURL` — dans ce cas, il faudrait charger une vraie page `https://www.youtube.com/embed/{id}` par URL réelle (`source.uri`) plutôt qu'un document HTML de repli, sur le même principe que la solution déjà confirmée fonctionnelle pour les captions (`TranscriptFetcher.tsx`, qui charge une vraie page `youtube.com`).
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

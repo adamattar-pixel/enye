@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Fix video playback, confirmed broken on device (2026-08-21).** The captions pipeline is confirmed working end-to-end; the player itself now fails with "Cette vidéo n'a pas pu être chargée...". Diagnostic logging added (`mobile/src/components/YouTubePlayer.tsx`) plus a candidate fix (`baseUrl` on the WebView source, since a null origin is a documented cause of YouTube IFrame API embedding failures) — not yet reverified on device. What's left: retest a review session and, if it still fails, read the `[YouTubePlayer] ...` Metro logs for the real error code. See `docs/AUDIT.md` Issue #2.
+- [ ] **Fix video playback, confirmed broken on device (2026-08-21).** First fix attempt (`baseUrl`) got the player to `onReady` but then an undocumented error code 152 fired. Second attempt applied: `origin: 'https://www.youtube.com'` in `playerVars` (per Google's own recommendation for pages with an unreliable origin) plus more diagnostic fields logged. Not yet reverified on device. What's left: retest, read `[YouTubePlayer] ...` Metro logs. If still broken, the next (bigger) fix is switching to a real `https://www.youtube.com/embed/{id}` URL instead of a synthetic HTML page — see `docs/AUDIT.md` Issue #2.
 
 ## Next
 

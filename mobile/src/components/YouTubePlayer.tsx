@@ -154,10 +154,16 @@ function buildPlayerHtml(videoId: string, startTime: number, endTime: number): s
       height: '100%',
       width: '100%',
       videoId: '${videoId}',
-      playerVars: { start: Math.floor(startTime), end: Math.ceil(endTime), playsinline: 1, controls: 1 },
+      playerVars: {
+        start: Math.floor(startTime),
+        end: Math.ceil(endTime),
+        playsinline: 1,
+        controls: 1,
+        origin: 'https://www.youtube.com',
+      },
       events: {
         onReady: function () {
-          post({ type: 'ready' });
+          post({ type: 'ready', videoId: '${videoId}' });
           player.playVideo();
           startEndCheck();
         },
@@ -168,7 +174,7 @@ function buildPlayerHtml(videoId: string, startTime: number, endTime: number): s
           }
         },
         onError: function (e) {
-          post({ type: 'error', code: e.data });
+          post({ type: 'error', code: e.data, videoId: '${videoId}', href: location.href, referrer: document.referrer });
         }
       }
     });
