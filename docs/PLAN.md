@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Video playback still broken after five candidate fixes (`baseUrl`, `origin`, `Referer`, real embed URL, desktop `userAgent`).** Confirmed systemic via a universal reference video. The app's own error detection has also never caught the failure live despite two rounds of fixes — diagnosis has shifted to instrumenting the script to report back raw page text/href on the next test, rather than guessing another root-cause fix blind. `tsc`/`jest` pass. **Waiting on the next device log with the raw diagnostic dump before further code changes.** See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the redirect fix resolves video playback.** Root cause finally confirmed by direct evidence (not inferred): the `Referer` header was causing YouTube to silently redirect `/embed/{id}` to the full `/watch?v={id}` desktop page, which was crashing when squeezed into the small player component — hence the "player configuration error" every time. Removed the `Referer` header; added explicit detection if this redirect recurs. `tsc`/`jest` pass. **Not yet verified on device.** See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

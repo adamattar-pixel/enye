@@ -118,7 +118,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
         key={reloadKey}
         ref={webviewRef}
         style={styles.webview}
-        source={{ uri, headers: { Referer: 'https://www.youtube.com/' } }}
+        source={{ uri }}
         userAgent={DESKTOP_USER_AGENT}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
@@ -178,9 +178,16 @@ const ERROR_CHECK_SCRIPT = `
     checksLeft--;
     var text = ((document.body && document.body.innerText) || '').toLowerCase();
     var matched = errorMarkers.find(function (m) { return text.indexOf(m) !== -1; });
-    if (matched) {
+    // Bug confirmé le 21/08/2026 : avec l'en-tête Referer précédemment
+    // ajouté, la page était redirigée de /embed/{id} vers /watch?v={id}
+    // (la vraie page desktop complète, pas le player seul) -- l'écran
+    // d'erreur affiché à l'utilisateur n'était donc pas un blocage
+    // d'intégration mais le lecteur intégré de la page /watch échouant
+    // dans un cadre 16:9 minuscule. Détection explicite si ça se reproduit.
+    var wrongPage = location.href.indexOf('/embed/') === -1;
+    if (matched || wrongPage) {
       clearInterval(interval);
-      post({ type: 'error', reason: matched });
+      post({ type: 'error', reason: matched || 'redirected_away_from_embed', href: location.href });
     } else if (checksLeft <= 0) {
       clearInterval(interval);
       post({ type: 'ready', href: location.href, bodySample: text.slice(0, 300) });
