@@ -3,10 +3,20 @@ import { ActivityIndicator, SafeAreaView, StyleSheet, useColorScheme } from 'rea
 import * as Notifications from 'expo-notifications';
 import * as SQLite from 'expo-sqlite';
 import { setAudioModeAsync } from 'expo-audio';
-import { DB_NAME, migrateDbIfNeeded, importMissingWords, resyncWordTags, importMissingConjugationCards } from './src/data/database';
+import {
+  DB_NAME,
+  migrateDbIfNeeded,
+  importMissingWords,
+  resyncWordTags,
+  importMissingConjugationCards,
+  importMissingExpressionCards,
+  importMissingReadingCards,
+} from './src/data/database';
 import { parseWords } from './src/data/wordRepository';
 import wordsJson from './src/data/words.json';
 import { conjugationVerbs } from './src/conjugation/data';
+import { expressions } from './src/expressions/data';
+import { readingTexts } from './src/reading/data';
 import { getSettings } from './src/data/settings';
 import { ensurePermissions, registerCategories } from './src/notifications/categories';
 import { handleNotificationResponse } from './src/notifications/responseHandler';
@@ -46,6 +56,11 @@ export default function App() {
       // no-op rapide une fois les tags synchronisés une première fois.
       await resyncWordTags(database, parsedWords);
       await importMissingConjugationCards(database, conjugationVerbs);
+      // Expressions et Compréhension écrite (21/08/2026) — même principe
+      // delta que la conjugaison, contenu bien plus petit (60 expressions,
+      // 15 textes) donc sans le même enjeu de lenteur au premier lancement.
+      await importMissingExpressionCards(database, expressions);
+      await importMissingReadingCards(database, readingTexts);
 
       // Bug documenté et de longue date d'expo-speech sur iOS : sans
       // activer explicitement le mode audio, la prononciation ne joue

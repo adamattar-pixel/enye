@@ -4,6 +4,8 @@ import type { Word } from './types';
 import { CONJUGATION_TENSES, personCountForTense, type ConjugationTense, type ConjugationVerb } from '../conjugation/types';
 import { shuffle } from '../utils/shuffle';
 import type { CaptionStatus, ListeningSegment, ListeningVideo } from '../listening/types';
+import type { Expression } from '../expressions/types';
+import type { ReadingText } from '../reading/types';
 
 /** Groupe de placeholders `(?, ?, ...)` répété `rowCount` fois, pour un
  * INSERT multi-lignes en un seul aller-retour au pont natif plutôt
@@ -203,6 +205,62 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_listening_reviews_reviewed_at ON listening_reviews(reviewed_at);
+
+    -- Onglet Expressions et locutions (21/08/2026) — même principe que
+    -- conjugation_cards : le contenu (expression, traduction, exemple)
+    -- vit dans expressions.json, cette table ne garde que la progression
+    -- SM-2. id = id de l'expression directement (relation 1:1, pas de
+    -- clé composite comme pour la conjugaison puisqu'il n'y a ni temps
+    -- ni personne ici).
+    CREATE TABLE IF NOT EXISTS expression_cards (
+      id TEXT PRIMARY KEY NOT NULL,
+      ease_factor REAL NOT NULL,
+      interval_days REAL NOT NULL,
+      repetitions INTEGER NOT NULL,
+      lapses INTEGER NOT NULL,
+      learning_step_index INTEGER NOT NULL,
+      lifecycle TEXT NOT NULL,
+      due_date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_expression_cards_due_date ON expression_cards(due_date);
+
+    CREATE TABLE IF NOT EXISTS expression_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id TEXT NOT NULL,
+      grade TEXT NOT NULL,
+      reviewed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_expression_reviews_reviewed_at ON expression_reviews(reviewed_at);
+
+    -- Onglet Compréhension écrite (21/08/2026) — même principe que
+    -- listening_cards pour la cardinalité (une carte = un texte ENTIER
+    -- avec toutes ses questions, pas une carte par question), mais le
+    -- contenu vit dans reading.json comme la conjugaison/les expressions
+    -- (pas ajouté à l'exécution par l'utilisateur comme les vidéos
+    -- d'écoute) — cette table ne garde donc que la progression SM-2.
+    CREATE TABLE IF NOT EXISTS reading_cards (
+      id TEXT PRIMARY KEY NOT NULL,
+      ease_factor REAL NOT NULL,
+      interval_days REAL NOT NULL,
+      repetitions INTEGER NOT NULL,
+      lapses INTEGER NOT NULL,
+      learning_step_index INTEGER NOT NULL,
+      lifecycle TEXT NOT NULL,
+      due_date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reading_cards_due_date ON reading_cards(due_date);
+
+    CREATE TABLE IF NOT EXISTS reading_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id TEXT NOT NULL,
+      grade TEXT NOT NULL,
+      reviewed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reading_reviews_reviewed_at ON reading_reviews(reviewed_at);
   `);
 }
 
@@ -838,6 +896,36 @@ export async function resetProgress(db: SQLiteDatabase, now: Date = new Date()):
       card.lifecycle,
       card.dueDate.toISOString()
     );
+
+    // Idem pour les expressions et la compréhension écrite (21/08/2026) —
+    // mêmes règles que la conjugaison/l'écoute ci-dessus : le contenu
+    // (expressions.json/reading.json) n'est pas touché, seule la
+    // progression SM-2 repart à zéro.
+    await db.runAsync('DELETE FROM expression_reviews;');
+    await db.runAsync(
+      `UPDATE expression_cards
+       SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?;`,
+      card.easeFactor,
+      card.intervalDays,
+      card.repetitions,
+      card.lapses,
+      card.learningStepIndex,
+      card.lifecycle,
+      card.dueDate.toISOString()
+    );
+
+    await db.runAsync('DELETE FROM reading_reviews;');
+    await db.runAsync(
+      `UPDATE reading_cards
+       SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?;`,
+      card.easeFactor,
+      card.intervalDays,
+      card.repetitions,
+      card.lapses,
+      card.learningStepIndex,
+      card.lifecycle,
+      card.dueDate.toISOString()
+    );
   });
 }
 
@@ -1074,6 +1162,334 @@ export async function getConjugationHistory(db: SQLiteDatabase, limit = 200): Pr
  * l'échéance déjà programmée de la carte. */
 export async function updateConjugationReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE conjugation_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
+}
+
+// MARK: - Expressions et locutions
+
+type ExpressionCardRow = {
+  id: string;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  lapses: number;
+  learning_step_index: number;
+  lifecycle: string;
+  due_date: string;
+};
+
+export interface DueExpressionCardRow {
+  cardId: string;
+  card: SM2CardState;
+}
+
+function mapExpressionCardRow(r: ExpressionCardRow): DueExpressionCardRow {
+  return {
+    cardId: r.id,
+    card: {
+      easeFactor: r.ease_factor,
+      intervalDays: r.interval_days,
+      repetitions: r.repetitions,
+      lapses: r.lapses,
+      learningStepIndex: r.learning_step_index,
+      lifecycle: parseLifecycle(r.lifecycle),
+      dueDate: new Date(r.due_date),
+    },
+  };
+}
+
+/** Importe dans SQLite toute expression de `expressions.json` pas
+ * encore présente en base, avec une carte SM-2 neuve pour chacune —
+ * même principe que `importMissingConjugationCards`, en plus simple
+ * (id = id de l'expression directement, pas de triplet à construire). */
+export async function importMissingExpressionCards(
+  db: SQLiteDatabase,
+  expressionsList: Expression[],
+  now: Date = new Date()
+): Promise<number> {
+  const existingRows = await db.getAllAsync<{ id: string }>('SELECT id FROM expression_cards;');
+  const existingIds = new Set(existingRows.map((r) => r.id));
+  const missing = expressionsList.filter((e) => !existingIds.has(e.id));
+  if (missing.length === 0) return 0;
+
+  await db.withTransactionAsync(async () => {
+    await insertInBatches(
+      db,
+      missing,
+      8,
+      'INSERT INTO expression_cards (id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)',
+      (item) => {
+        const card = createCard({ dueDate: now });
+        return [
+          item.id,
+          card.easeFactor,
+          card.intervalDays,
+          card.repetitions,
+          card.lapses,
+          card.learningStepIndex,
+          card.lifecycle,
+          card.dueDate.toISOString(),
+        ];
+      }
+    );
+  });
+
+  return missing.length;
+}
+
+/** Même principe de plafond séparé nouvelles/révisions et de mélange
+ * final que `getDueConjugationCardsSplit` — voir ce commentaire pour le
+ * détail du raisonnement (ordre aléatoire côté SQL pour les nouvelles,
+ * `shuffle` côté JS sur l'ensemble avant renvoi). */
+export async function getDueExpressionCardsSplit(
+  db: SQLiteDatabase,
+  now: Date,
+  settings: { expressionNewCardsPerDay: number; expressionReviewCapPerDay: number }
+): Promise<DueExpressionCardRow[]> {
+  const reviewRows = await db.getAllAsync<ExpressionCardRow>(
+    `SELECT * FROM expression_cards WHERE due_date <= ? AND lifecycle != 'new' ORDER BY due_date ASC LIMIT ?;`,
+    now.toISOString(),
+    settings.expressionReviewCapPerDay
+  );
+  const newRows = await db.getAllAsync<ExpressionCardRow>(
+    `SELECT * FROM expression_cards WHERE due_date <= ? AND lifecycle = 'new' ORDER BY RANDOM() LIMIT ?;`,
+    now.toISOString(),
+    settings.expressionNewCardsPerDay
+  );
+  return shuffle([...reviewRows, ...newRows]).map(mapExpressionCardRow);
+}
+
+export interface ExpressionCounts {
+  total: number;
+  learned: number;
+}
+
+export async function getExpressionCounts(db: SQLiteDatabase): Promise<ExpressionCounts> {
+  const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM expression_cards;');
+  const learned = await db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM expression_cards WHERE lifecycle != 'new';"
+  );
+  return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
+}
+
+export async function updateExpressionCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+  await db.runAsync(
+    `UPDATE expression_cards
+     SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
+     WHERE id = ?;`,
+    card.easeFactor,
+    card.intervalDays,
+    card.repetitions,
+    card.lapses,
+    card.learningStepIndex,
+    card.lifecycle,
+    card.dueDate.toISOString(),
+    cardId
+  );
+}
+
+export async function logExpressionReview(
+  db: SQLiteDatabase,
+  cardId: string,
+  grade: SM2Grade,
+  at: Date = new Date()
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO expression_reviews (card_id, grade, reviewed_at) VALUES (?, ?, ?);',
+    cardId,
+    grade,
+    at.toISOString()
+  );
+}
+
+export interface ExpressionHistoryRow {
+  id: number;
+  expressionId: string;
+  grade: SM2Grade;
+  reviewedAt: Date;
+}
+
+/** Historique de révisions d'expressions, le plus récent d'abord — ne
+ * renvoie que l'id de l'expression (pas son texte) : le contenu n'est
+ * pas dupliqué en base, voir `expressions/data.ts` (`getExpression`)
+ * pour la jointure côté appelant, même principe que
+ * `getConjugationHistory`. */
+export async function getExpressionHistory(db: SQLiteDatabase, limit = 200): Promise<ExpressionHistoryRow[]> {
+  type Row = { id: number; card_id: string; grade: string; reviewed_at: string };
+  const rows = await db.getAllAsync<Row>(
+    `SELECT id, card_id, grade, reviewed_at FROM expression_reviews ORDER BY reviewed_at DESC LIMIT ?;`,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    expressionId: r.card_id,
+    grade: parseGrade(r.grade),
+    reviewedAt: new Date(r.reviewed_at),
+  }));
+}
+
+export async function updateExpressionReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+  await db.runAsync('UPDATE expression_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
+}
+
+// MARK: - Compréhension écrite
+
+type ReadingCardRow = {
+  id: string;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  lapses: number;
+  learning_step_index: number;
+  lifecycle: string;
+  due_date: string;
+};
+
+export interface DueReadingCardRow {
+  cardId: string;
+  card: SM2CardState;
+}
+
+function mapReadingCardRow(r: ReadingCardRow): DueReadingCardRow {
+  return {
+    cardId: r.id,
+    card: {
+      easeFactor: r.ease_factor,
+      intervalDays: r.interval_days,
+      repetitions: r.repetitions,
+      lapses: r.lapses,
+      learningStepIndex: r.learning_step_index,
+      lifecycle: parseLifecycle(r.lifecycle),
+      dueDate: new Date(r.due_date),
+    },
+  };
+}
+
+/** Importe dans SQLite tout texte de `reading.json` pas encore présent
+ * en base, avec une carte SM-2 neuve pour chacun — une carte par TEXTE
+ * entier (questions comprises), pas par question (demandé explicitement
+ * le 21/08/2026). */
+export async function importMissingReadingCards(
+  db: SQLiteDatabase,
+  texts: ReadingText[],
+  now: Date = new Date()
+): Promise<number> {
+  const existingRows = await db.getAllAsync<{ id: string }>('SELECT id FROM reading_cards;');
+  const existingIds = new Set(existingRows.map((r) => r.id));
+  const missing = texts.filter((t) => !existingIds.has(t.id));
+  if (missing.length === 0) return 0;
+
+  await db.withTransactionAsync(async () => {
+    await insertInBatches(
+      db,
+      missing,
+      8,
+      'INSERT INTO reading_cards (id, ease_factor, interval_days, repetitions, lapses, learning_step_index, lifecycle, due_date)',
+      (item) => {
+        const card = createCard({ dueDate: now });
+        return [
+          item.id,
+          card.easeFactor,
+          card.intervalDays,
+          card.repetitions,
+          card.lapses,
+          card.learningStepIndex,
+          card.lifecycle,
+          card.dueDate.toISOString(),
+        ];
+      }
+    );
+  });
+
+  return missing.length;
+}
+
+export async function getDueReadingCardsSplit(
+  db: SQLiteDatabase,
+  now: Date,
+  settings: { readingNewCardsPerDay: number; readingReviewCapPerDay: number }
+): Promise<DueReadingCardRow[]> {
+  const reviewRows = await db.getAllAsync<ReadingCardRow>(
+    `SELECT * FROM reading_cards WHERE due_date <= ? AND lifecycle != 'new' ORDER BY due_date ASC LIMIT ?;`,
+    now.toISOString(),
+    settings.readingReviewCapPerDay
+  );
+  const newRows = await db.getAllAsync<ReadingCardRow>(
+    `SELECT * FROM reading_cards WHERE due_date <= ? AND lifecycle = 'new' ORDER BY RANDOM() LIMIT ?;`,
+    now.toISOString(),
+    settings.readingNewCardsPerDay
+  );
+  return shuffle([...reviewRows, ...newRows]).map(mapReadingCardRow);
+}
+
+export interface ReadingCounts {
+  total: number;
+  learned: number;
+}
+
+export async function getReadingCounts(db: SQLiteDatabase): Promise<ReadingCounts> {
+  const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM reading_cards;');
+  const learned = await db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM reading_cards WHERE lifecycle != 'new';"
+  );
+  return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
+}
+
+export async function updateReadingCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+  await db.runAsync(
+    `UPDATE reading_cards
+     SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
+     WHERE id = ?;`,
+    card.easeFactor,
+    card.intervalDays,
+    card.repetitions,
+    card.lapses,
+    card.learningStepIndex,
+    card.lifecycle,
+    card.dueDate.toISOString(),
+    cardId
+  );
+}
+
+export async function logReadingReview(
+  db: SQLiteDatabase,
+  cardId: string,
+  grade: SM2Grade,
+  at: Date = new Date()
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO reading_reviews (card_id, grade, reviewed_at) VALUES (?, ?, ?);',
+    cardId,
+    grade,
+    at.toISOString()
+  );
+}
+
+export interface ReadingHistoryRow {
+  id: number;
+  textId: string;
+  grade: SM2Grade;
+  reviewedAt: Date;
+}
+
+/** Historique de révisions de compréhension écrite, le plus récent
+ * d'abord — ne renvoie que l'id du texte (pas son contenu), même
+ * principe que `getExpressionHistory`/`getConjugationHistory`. */
+export async function getReadingHistory(db: SQLiteDatabase, limit = 200): Promise<ReadingHistoryRow[]> {
+  type Row = { id: number; card_id: string; grade: string; reviewed_at: string };
+  const rows = await db.getAllAsync<Row>(
+    `SELECT id, card_id, grade, reviewed_at FROM reading_reviews ORDER BY reviewed_at DESC LIMIT ?;`,
+    limit
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    textId: r.card_id,
+    grade: parseGrade(r.grade),
+    reviewedAt: new Date(r.reviewed_at),
+  }));
+}
+
+export async function updateReadingReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+  await db.runAsync('UPDATE reading_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
 
 // MARK: - Miroir de la file de notifications programmée

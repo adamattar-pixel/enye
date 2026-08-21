@@ -33,6 +33,15 @@ export interface AppSettings {
    * la bibliothèque est petite. Voir docs/PLAN.md. */
   listeningNewSegmentsPerDay: number;
   listeningReviewCapPerDay: number;
+  /** Rythme des onglets Expressions et Compréhension écrite (21/08/2026)
+   * — même logique de budget séparé que la conjugaison, mêmes valeurs
+   * par défaut (8 + 22) faute de retour utilisateur spécifique : les deux
+   * domaines ont un contenu bundlé de taille comparable à la conjugaison
+   * (pas dépendant de l'ajout manuel de l'utilisateur comme l'écoute). */
+  expressionNewCardsPerDay: number;
+  expressionReviewCapPerDay: number;
+  readingNewCardsPerDay: number;
+  readingReviewCapPerDay: number;
 }
 
 /** Réglages validés (voir docs/PLAN.md, "Décisions validées avec l'utilisateur"). */
@@ -49,6 +58,10 @@ export const defaultSettings: AppSettings = {
   conjugationReviewCapPerDay: 22,
   listeningNewSegmentsPerDay: 5,
   listeningReviewCapPerDay: 15,
+  expressionNewCardsPerDay: 8,
+  expressionReviewCapPerDay: 22,
+  readingNewCardsPerDay: 8,
+  readingReviewCapPerDay: 22,
 };
 
 const SETTINGS_KEY = 'app';

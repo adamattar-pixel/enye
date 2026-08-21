@@ -103,7 +103,7 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const handleResetProgress = () => {
     Alert.alert(
       'Réinitialiser ma progression ?',
-      "Toutes les notes et l'historique seront effacés, et chaque mot ET chaque conjugaison repartiront de zéro comme au premier lancement. Le contenu lui-même (mots, verbes) n'est pas supprimé. Cette action est irréversible.",
+      "Toutes les notes et l'historique seront effacés, et chaque mot, conjugaison, expression, segment d'écoute et texte de compréhension repartiront de zéro comme au premier lancement. Le contenu lui-même n'est pas supprimé. Cette action est irréversible.",
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -111,7 +111,7 @@ function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
           style: 'destructive',
           onPress: async () => {
             await resetProgress(db);
-            Alert.alert('Progression réinitialisée', 'Tous les mots sont de nouveau à réviser.');
+            Alert.alert('Progression réinitialisée', 'Tout est de nouveau à réviser.');
           },
         },
       ]
