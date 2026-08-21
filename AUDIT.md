@@ -410,6 +410,16 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : `origin` retiré, compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** Si ce dernier retrait ne change rien, il faudra sérieusement considérer l'hypothèse d'une limitation de plateforme (WebView d'Expo Go incompatible avec les exigences du lecteur intégré moderne de YouTube — codecs/Media Source Extensions, restrictions sandbox iOS, etc.) plutôt qu'un problème de configuration corrigible par du code — auquel cas la piste à explorer avec l'utilisateur ne serait plus "corriger le lecteur intégré" mais "accepter le lien de secours 'Ver en Youtube' comme flux principal assumé", une décision produit à discuter, pas à prendre unilatéralement.
 
+### Dix-huitième itération — priorité clarifiée par l'utilisateur : le mécanisme importe peu, seule la lecture bornée au segment compte (21/08/2026)
+
+**Constat.** Retour explicite de l'utilisateur, sans attendre le test du retrait `origin` : "i dont care as long as it only plays the sequence with the part of the subtitle. Which it currently does not." Le vrai besoin produit n'est donc pas "le lecteur intégré doit fonctionner" mais "la lecture doit être bornée au bon segment", peu importe le mécanisme — et le filet de secours actuel ne le fait pas du tout : quand `playerError` se déclenche, [ListeningReviewScreen.tsx](mobile/src/screens/ListeningReviewScreen.tsx) affichait un message générique sans aucun lien, laissant l'utilisateur cliquer sur le bouton natif de la page d'erreur YouTube elle-même (qui ouvre la vidéo complète depuis le début, sans aucun paramètre de temps).
+
+**Impact.** Ajout d'un bouton "▶ Écouter sur YouTube" dans `playerErrorBox`, qui ouvre `https://www.youtube.com/watch?v={videoId}&t={Math.floor(startTime)}s` via `Linking.openURL` — le paramètre `t=` est un paramètre standard de YouTube, reconnu de façon fiable par l'app et le navigateur (contrairement à `start`/`end`, spécifiques à l'intégration `/embed/`). **Limite assumée et documentée dans le code** : YouTube ne fournit aucun moyen fiable de couper automatiquement la lecture à `endTime` depuis un lien externe (seul le lecteur intégré, actuellement en panne, le permettrait) — l'utilisateur doit mettre en pause manuellement à la fin du passage souhaité. Message affiché mis à jour en conséquence pour ne pas prétendre à un comportement non tenu.
+
+**Cette amélioration est indépendante du résultat du test `origin`** (itération 17, toujours en attente) — elle corrige le filet de secours quel que soit l'état du lecteur intégré à l'avenir.
+
+**Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.**
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

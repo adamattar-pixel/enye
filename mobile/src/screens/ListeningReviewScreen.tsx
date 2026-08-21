@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -62,6 +62,19 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
     onGrade(grade);
   };
 
+  // Filet de secours tant que la lecture intégrée échoue (voir AUDIT.md,
+  // itérations 8-17) : ouvre la vraie vidéo YouTube au bon timestamp de
+  // départ (`&t=Xs`, paramètre standard reconnu par l'app/le navigateur
+  // YouTube). Limite assumée : YouTube ne fournit aucun moyen fiable de
+  // couper automatiquement à `endTime` depuis un lien externe (seul le
+  // player intégré le permet) — l'utilisateur devra mettre en pause
+  // manuellement à la fin du segment souhaité.
+  const openInYouTubeApp = () => {
+    Linking.openURL(`https://www.youtube.com/watch?v=${card.videoId}&t=${Math.floor(card.startTime)}s`).catch(
+      (err) => console.log('[ListeningReviewScreen] échec ouverture YouTube:', err)
+    );
+  };
+
   return (
     // Toucher en dehors du champ de saisie ferme le clavier — même
     // correctif que ConjugationReviewScreen.tsx, demandé explicitement.
@@ -80,9 +93,12 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
         {playerError ? (
           <View style={styles.playerErrorBox}>
             <Text style={styles.playerErrorText}>
-              Cette vidéo n'a pas pu être chargée (bloquée, privée ou supprimée). Reviens à l'onglet Écoute — cet
-              exercice restera dû pour un prochain essai.
+              La lecture intégrée n'a pas pu démarrer. Écoute le passage directement dans l'app YouTube — il
+              démarrera au bon moment, pense juste à arrêter à la fin du passage.
             </Text>
+            <AnimatedPressable style={styles.openYoutubeButton} haptic="none" onPress={openInYouTubeApp}>
+              <Text style={styles.openYoutubeButtonText}>▶ Écouter sur YouTube</Text>
+            </AnimatedPressable>
           </View>
         ) : (
           <YouTubePlayer
@@ -186,7 +202,16 @@ function createStyles(t: SolYSombraPalette) {
       aspectRatio: 16 / 9,
       justifyContent: 'center',
     },
-    playerErrorText: { fontSize: 13, color: t.metaText, textAlign: 'center', lineHeight: 18 },
+    playerErrorText: { fontSize: 13, color: t.metaText, textAlign: 'center', lineHeight: 18, marginBottom: 16 },
+    openYoutubeButton: {
+      height: 44,
+      paddingHorizontal: 20,
+      borderRadius: 22,
+      backgroundColor: t.buttonFilled,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    openYoutubeButtonText: { color: t.buttonFilledText, fontWeight: '600', fontSize: 14 },
     input: {
       borderWidth: 1.5,
       borderColor: t.buttonOutline,

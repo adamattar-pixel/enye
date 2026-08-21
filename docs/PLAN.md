@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Video playback — redirect confirmed fixed, but the embed itself still fails, even on the universal reference video.** Removing `Referer` fixed the redirect (confirmed: `href` now correctly shows `/embed/`), but the same native error still appears on the real embed page. Last untested variable (`origin` query param) removed as a final targeted test. **If this doesn't work, treat it as a likely platform limitation (Expo Go WebView vs. YouTube's embedded player) rather than keep guessing config fixes — raise with the user whether "Ver en YouTube" becomes the accepted primary flow instead of in-app playback.** See `docs/AUDIT.md` Issue #2.
+- [ ] **Video playback — embed mechanism still unconfirmed (likely platform limitation), but the fallback now meets the actual requirement.** User clarified: mechanism doesn't matter, only that playback is bounded to the segment. Fixed the fallback path to open the real video at the correct start time (`Linking.openURL` with `&t=Xs`) instead of a dead-end error message — known limitation: no external link can auto-stop at the segment end, only embedded playback could. Embed itself (`origin` param removed as a last test) still pending confirmation; if it never works, this fallback is now a genuinely usable primary path rather than a broken dead end. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 
