@@ -30,7 +30,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files — `.env` ajouté explicitement (21/08/2026, feature
+# Livres) : contient la clé API DeepL personnelle de l'utilisateur, ne
+# doit jamais être commit. Voir .env.example pour le nom de variable
+# attendu, sans valeur réelle.
+.env
 .env*.local
 
 # typescript

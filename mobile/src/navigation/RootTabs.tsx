@@ -8,6 +8,8 @@ import { ConjugationScreen } from '../screens/ConjugationScreen';
 import { ListeningScreen } from '../screens/ListeningScreen';
 import { ExpressionsScreen } from '../screens/ExpressionsScreen';
 import { ReadingScreen } from '../screens/ReadingScreen';
+import { BooksScreen } from '../screens/BooksScreen';
+import { ReaderScreen } from '../screens/ReaderScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
 import { ConjugationReviewContainer } from '../screens/ConjugationReviewContainer';
@@ -22,27 +24,38 @@ import { useTheme, useThemeToggle, type SolYSombraPalette } from '../theme/solYS
 type ActiveSession = 'none' | 'vocab' | 'conjugation' | 'listening' | 'expressions' | 'reading';
 
 /** Aujourd'hui / Statistiques / Decks & mots / Conjugaison / Écoute /
- * Expressions / Compréhension écrite / Réglages vivent derrière une barre
- * d'onglets (Conjugaison ajouté le 20/08/2026 — entraînement SM-2 +
- * référence statique en sous-onglets, voir ConjugationScreen.tsx ; Écoute
- * ajouté le même jour — compréhension orale sur vidéos YouTube, voir
- * ListeningScreen.tsx ; Expressions et Compréhension écrite ajoutés le
- * 21/08/2026, même patron que la conjugaison (contenu JSON, progression
- * SQLite séparée) — voir ExpressionsScreen.tsx/ReadingScreen.tsx ;
- * Réglages séparé de Decks & mots le même jour, regroupe réglages/historique/prochaine
- * notification à part de la liste de mots) ; Session (révision
- * vocabulaire, conjugaison, écoute, expressions OU compréhension écrite,
- * plein écran) masque la barre, lancée depuis l'onglet correspondant et
- * y ramène en sortant. */
+ * Expressions / Compréhension écrite / Livres / Réglages vivent derrière
+ * une barre d'onglets (Conjugaison ajouté le 20/08/2026 — entraînement
+ * SM-2 + référence statique en sous-onglets, voir ConjugationScreen.tsx ;
+ * Écoute ajouté le même jour — compréhension orale sur vidéos YouTube,
+ * voir ListeningScreen.tsx ; Expressions et Compréhension écrite ajoutés
+ * le 21/08/2026, même patron que la conjugaison (contenu JSON, progression
+ * SQLite séparée) — voir ExpressionsScreen.tsx/ReadingScreen.tsx ; Livres
+ * ajouté le même jour — lecture libre, PAS de moteur SM-2 (voir
+ * BooksScreen.tsx/ReaderScreen.tsx, `activeBookId` distinct de
+ * `activeSession` ci-dessous) ; Réglages séparé de Decks & mots le même
+ * jour, regroupe réglages/historique/prochaine notification à part de la
+ * liste de mots) ; Session (révision vocabulaire, conjugaison, écoute,
+ * expressions OU compréhension écrite, plein écran) masque la barre,
+ * lancée depuis l'onglet correspondant et y ramène en sortant. */
 export function RootTabs({ db }: { db: SQLiteDatabase }) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [tab, setTab] = useState<TabKey>('today');
   const [activeSession, setActiveSession] = useState<ActiveSession>('none');
+  // Distinct de `activeSession` — la lecture d'un livre n'est pas une
+  // session SM-2 (pas de note, pas de sortie automatique en fin de
+  // contenu), donc pas modélisée comme une valeur de plus dans cette
+  // union, juste un id de livre optionnel affiché en plein écran.
+  const [activeBookId, setActiveBookId] = useState<string | null>(null);
 
   return (
     <View style={styles.root}>
-      {activeSession !== 'none' ? (
+      {activeBookId !== null ? (
+        <FadeInView duration={250} direction="none" style={styles.root}>
+          <ReaderScreen db={db} bookId={activeBookId} onExit={() => setActiveBookId(null)} />
+        </FadeInView>
+      ) : activeSession !== 'none' ? (
         <FadeInView duration={250} direction="none" style={styles.root}>
           {activeSession === 'vocab' && <ReviewScreenContainer db={db} onExit={() => setActiveSession('none')} />}
           {activeSession === 'conjugation' && <ConjugationReviewContainer db={db} onExit={() => setActiveSession('none')} />}
@@ -62,6 +75,7 @@ export function RootTabs({ db }: { db: SQLiteDatabase }) {
             {tab === 'listening' && <ListeningScreen db={db} onStartSession={() => setActiveSession('listening')} />}
             {tab === 'expressions' && <ExpressionsScreen db={db} onStartSession={() => setActiveSession('expressions')} />}
             {tab === 'reading' && <ReadingScreen db={db} onStartSession={() => setActiveSession('reading')} />}
+            {tab === 'books' && <BooksScreen db={db} onOpenBook={(bookId) => setActiveBookId(bookId)} />}
             {tab === 'settings' && <SettingsScreen db={db} />}
           </FadeInView>
           <TabBar current={tab} onChange={setTab} />

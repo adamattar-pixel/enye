@@ -4,7 +4,16 @@ import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-export type TabKey = 'today' | 'stats' | 'decks' | 'conjugation' | 'listening' | 'expressions' | 'reading' | 'settings';
+export type TabKey =
+  | 'today'
+  | 'stats'
+  | 'decks'
+  | 'conjugation'
+  | 'listening'
+  | 'expressions'
+  | 'reading'
+  | 'books'
+  | 'settings';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'today', label: 'Aujourd’hui' },
@@ -14,6 +23,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'listening', label: 'Écoute' },
   { key: 'expressions', label: 'Expressions' },
   { key: 'reading', label: 'Compréhension écrite' },
+  { key: 'books', label: 'Livres' },
   { key: 'settings', label: 'Réglages' },
 ];
 

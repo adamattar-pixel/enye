@@ -6,6 +6,7 @@ import { shuffle } from '../utils/shuffle';
 import type { CaptionStatus, ListeningSegment, ListeningVideo } from '../listening/types';
 import type { Expression } from '../expressions/types';
 import type { ReadingText } from '../reading/types';
+import type { Book, BookChapter, BookBookmark, BookFormat } from '../books/types';
 
 /** Groupe de placeholders `(?, ?, ...)` répété `rowCount` fois, pour un
  * INSERT multi-lignes en un seul aller-retour au pont natif plutôt
@@ -261,6 +262,49 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_reading_reviews_reviewed_at ON reading_reviews(reviewed_at);
+
+    -- Onglet Livres (21/08/2026) — lecture libre, INDÉPENDANTE du moteur
+    -- SM-2 (pas de carte de révision, demandé explicitement) : pas de
+    -- table _cards/_reviews comme les autres domaines. Contrairement
+    -- à la conjugaison/aux expressions, le contenu N'EST PAS bundlé avec
+    -- l'app — chaque utilisateur ajoute ses propres livres à l'exécution
+    -- (URL directe ou recherche Open Library/Internet Archive), donc le
+    -- texte complet vit en base, pas dans un JSON versionné (même
+    -- principe que listening_videos/listening_segments).
+    CREATE TABLE IF NOT EXISTS books (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      author TEXT,
+      source_url TEXT NOT NULL,
+      format TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      last_chapter_id TEXT,
+      last_position INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS book_chapters (
+      id TEXT PRIMARY KEY NOT NULL,
+      book_id TEXT NOT NULL REFERENCES books(id),
+      order_index INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_book_chapters_book_id ON book_chapters(book_id);
+
+    -- Signets manuels, plusieurs possibles par livre — distincts de
+    -- books.last_chapter_id/last_position (position AUTOMATIQUE, un
+    -- seul champ, mise à jour au fil de la lecture), demandé explicitement.
+    CREATE TABLE IF NOT EXISTS book_bookmarks (
+      id TEXT PRIMARY KEY NOT NULL,
+      book_id TEXT NOT NULL REFERENCES books(id),
+      chapter_id TEXT NOT NULL REFERENCES book_chapters(id),
+      position INTEGER NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_book_bookmarks_book_id ON book_bookmarks(book_id);
   `);
 }
 
@@ -1490,6 +1534,160 @@ export async function getReadingHistory(db: SQLiteDatabase, limit = 200): Promis
 
 export async function updateReadingReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE reading_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
+}
+
+// MARK: - Livres
+
+type BookRow = {
+  id: string;
+  title: string;
+  author: string | null;
+  source_url: string;
+  format: string;
+  added_at: string;
+  last_chapter_id: string | null;
+  last_position: number;
+};
+
+const VALID_BOOK_FORMATS = new Set<string>(['epub', 'txt', 'html']);
+
+function parseBookFormat(value: string): BookFormat {
+  if (VALID_BOOK_FORMATS.has(value)) return value as BookFormat;
+  throw new Error(`Format de livre invalide en base : "${value}"`);
+}
+
+function mapBookRow(r: BookRow): Book {
+  return {
+    id: r.id,
+    title: r.title,
+    author: r.author,
+    sourceUrl: r.source_url,
+    format: parseBookFormat(r.format),
+    addedAt: new Date(r.added_at),
+    lastChapterId: r.last_chapter_id,
+    lastPosition: r.last_position,
+  };
+}
+
+/** Crée un livre et tous ses chapitres en une transaction — id des
+ * chapitres dérivé de l'id du livre (`${bookId}_ch${index}`), même
+ * principe que les ids composites déjà utilisés ailleurs (voir
+ * `conjugationCardId`) plutôt qu'un identifiant aléatoire, pour rester
+ * simple et lisible en base. */
+export async function createBook(
+  db: SQLiteDatabase,
+  book: { id: string; title: string; author: string | null; sourceUrl: string; format: BookFormat },
+  chapters: { title: string; content: string }[],
+  now: Date = new Date()
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO books (id, title, author, source_url, format, added_at, last_chapter_id, last_position)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, 0);`,
+      book.id,
+      book.title,
+      book.author,
+      book.sourceUrl,
+      book.format,
+      now.toISOString()
+    );
+
+    const chapterRows = chapters.map((c, index) => ({
+      id: `${book.id}_ch${index}`,
+      orderIndex: index,
+      title: c.title,
+      content: c.content,
+    }));
+
+    await insertInBatches(
+      db,
+      chapterRows,
+      5,
+      'INSERT INTO book_chapters (id, book_id, order_index, title, content)',
+      (c) => [c.id, book.id, c.orderIndex, c.title, c.content]
+    );
+  });
+}
+
+export async function getBooks(db: SQLiteDatabase): Promise<Book[]> {
+  const rows = await db.getAllAsync<BookRow>('SELECT * FROM books ORDER BY added_at DESC;');
+  return rows.map(mapBookRow);
+}
+
+export async function getBook(db: SQLiteDatabase, bookId: string): Promise<Book | null> {
+  const row = await db.getFirstAsync<BookRow>('SELECT * FROM books WHERE id = ?;', bookId);
+  return row ? mapBookRow(row) : null;
+}
+
+export async function getBookChapters(db: SQLiteDatabase, bookId: string): Promise<BookChapter[]> {
+  type Row = { id: string; book_id: string; order_index: number; title: string; content: string };
+  const rows = await db.getAllAsync<Row>('SELECT * FROM book_chapters WHERE book_id = ? ORDER BY order_index ASC;', bookId);
+  return rows.map((r) => ({ id: r.id, bookId: r.book_id, orderIndex: r.order_index, title: r.title, content: r.content }));
+}
+
+export async function getBookChapter(db: SQLiteDatabase, chapterId: string): Promise<BookChapter | null> {
+  type Row = { id: string; book_id: string; order_index: number; title: string; content: string };
+  const row = await db.getFirstAsync<Row>('SELECT * FROM book_chapters WHERE id = ?;', chapterId);
+  return row ? { id: row.id, bookId: row.book_id, orderIndex: row.order_index, title: row.title, content: row.content } : null;
+}
+
+/** Position AUTOMATIQUE de reprise de lecture — mise à jour au fil de la
+ * lecture (voir ReaderScreen.tsx), distincte des signets manuels
+ * ci-dessous. `position` est un index de PARAGRAPHE dans le chapitre,
+ * pas un offset de caractères (voir docs/DECISIONS.md pour le choix de
+ * granularité). */
+export async function updateBookProgress(db: SQLiteDatabase, bookId: string, chapterId: string, position: number): Promise<void> {
+  await db.runAsync('UPDATE books SET last_chapter_id = ?, last_position = ? WHERE id = ?;', chapterId, position, bookId);
+}
+
+export async function deleteBook(db: SQLiteDatabase, bookId: string): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM book_bookmarks WHERE book_id = ?;', bookId);
+    await db.runAsync('DELETE FROM book_chapters WHERE book_id = ?;', bookId);
+    await db.runAsync('DELETE FROM books WHERE id = ?;', bookId);
+  });
+}
+
+/** Signet manuel — id généré ici (horodatage + suffixe aléatoire) plutôt
+ * que dérivé du contenu comme les chapitres : plusieurs signets peuvent
+ * exister pour la même position au fil de sessions différentes, pas de
+ * clé métier naturelle. */
+export async function addBookmark(
+  db: SQLiteDatabase,
+  bookmark: { bookId: string; chapterId: string; position: number; note: string | null },
+  now: Date = new Date()
+): Promise<string> {
+  const id = `bm_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
+  await db.runAsync(
+    'INSERT INTO book_bookmarks (id, book_id, chapter_id, position, note, created_at) VALUES (?, ?, ?, ?, ?, ?);',
+    id,
+    bookmark.bookId,
+    bookmark.chapterId,
+    bookmark.position,
+    bookmark.note,
+    now.toISOString()
+  );
+  return id;
+}
+
+export async function getBookmarks(db: SQLiteDatabase, bookId: string): Promise<BookBookmark[]> {
+  type Row = { id: string; book_id: string; chapter_id: string; position: number; note: string | null; created_at: string };
+  const rows = await db.getAllAsync<Row>(
+    'SELECT * FROM book_bookmarks WHERE book_id = ? ORDER BY created_at DESC;',
+    bookId
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    bookId: r.book_id,
+    chapterId: r.chapter_id,
+    position: r.position,
+    note: r.note,
+    createdAt: new Date(r.created_at),
+  }));
+}
+
+export async function deleteBookmark(db: SQLiteDatabase, bookmarkId: string): Promise<void> {
+  await db.runAsync('DELETE FROM book_bookmarks WHERE id = ?;', bookmarkId);
 }
 
 // MARK: - Miroir de la file de notifications programmée
