@@ -482,6 +482,16 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 103/107 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore vérifié sur device.**
 
+### Vingt-cinquième itération — autoplay non muet bloqué par WebKit, gros bouton rouge YouTube à cliquer manuellement (21/08/2026)
+
+**Constat.** Retour utilisateur ("c presque parfait") : tout fonctionne, sauf qu'il faut cliquer manuellement sur le gros bouton rouge de lecture de YouTube pour démarrer chaque segment, alors que la lecture devrait démarrer seule.
+
+**Diagnostic, pas une simple supposition : comportement documenté et très répandu de WebKit/iOS.** L'autoplay AVEC son est bloqué par la plupart des navigateurs mobiles pour du contenu vidéo intégré dans un contexte cross-origin (l'iframe YouTube) sans geste utilisateur direct sur cette vidéo précise ; l'autoplay MUET, en revanche, est largement autorisé. `play` (déjà à `true`) et `mediaPlaybackRequiresUserAction={false}` (déjà fixé par la librairie elle-même sur la WebView) ne suffisent pas à eux seuls à contourner cette restriction spécifique à la lecture avec son. Le gros bouton rouge affiché est exactement l'écran de repli que YouTube affiche quand son propre autoplay est refusé par le navigateur.
+
+**Correctif : démarrage muet, démutage automatique dès que la lecture démarre réellement.** Technique standard et largement documentée pour ce problème précis : `mute={true}` au montage (autorisé sans geste utilisateur), puis `setMuted(false)` dès que `onChangeState` rapporte l'état `'playing'` (pas juste `'ready'` — la lecture doit avoir réellement commencé avant de tenter de rétablir le son, sans quoi la même restriction pourrait s'appliquer à nouveau). État réinitialisé à `muted: true` à chaque nouveau montage (`replayKey`/`videoId` changés), pour que le contournement s'applique aussi après un "Réécouter" ou un changement de vidéo, pas seulement au tout premier chargement.
+
+**Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 103/107 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore vérifié sur device.**
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

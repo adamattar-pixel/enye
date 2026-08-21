@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import YoutubeIframe, { type YoutubeIframeRef } from 'react-native-youtube-iframe';
 
@@ -44,6 +44,20 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
   const playerRef = useRef<YoutubeIframeRef>(null);
   const [width, setWidth] = useState(0);
   const [replayKey, setReplayKey] = useState(0);
+  // WebKit/iOS bloque l'autoplay avec son pour du contenu vidéo intégré
+  // (iframe cross-origin) sans geste utilisateur direct, mais autorise
+  // largement l'autoplay MUET — d'où le gros bouton rouge YouTube exigeant
+  // un tap manuel malgré `play` (demandé explicitement, 21/08/2026).
+  // Contournement standard : démarrer muet, démuter dès que la lecture a
+  // réellement commencé (pas juste "prête") plutôt qu'immédiatement, pour
+  // laisser le temps au navigateur d'accepter l'autoplay muet d'abord.
+  const [muted, setMuted] = useState(true);
+  const hasUnmutedRef = useRef(false);
+
+  useEffect(() => {
+    setMuted(true);
+    hasUnmutedRef.current = false;
+  }, [replayKey, videoId]);
 
   useImperativeHandle(ref, () => ({
     // `seekTo` seul ne reprend jamais la lecture si le player est en
@@ -63,6 +77,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
   const handleChangeState = useCallback(
     (state: string) => {
       console.log('[YouTubePlayer] state:', state);
+      if (state === 'playing' && !hasUnmutedRef.current) {
+        hasUnmutedRef.current = true;
+        setMuted(false);
+      }
       if (state === 'ended') onSegmentEnded?.();
     },
     [onSegmentEnded]
@@ -86,6 +104,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
           width={width}
           videoId={videoId}
           play
+          mute={muted}
           initialPlayerParams={{
             start: Math.floor(startTime),
             end: Math.ceil(endTime),
