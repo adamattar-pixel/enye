@@ -1,6 +1,6 @@
 # Spec: Listening comprehension (Compréhension orale / Écoute tab)
 
-Status: **captions pipeline confirmed working end-to-end on device (2026-08-21); video playback confirmed BROKEN the same day** — see `docs/AUDIT.md` Issues #1–#2. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
+Status: **captions pipeline confirmed working end-to-end on device (2026-08-21); video playback was confirmed broken the same day, then the homegrown player was replaced with `react-native-youtube-iframe` after 18 failed fix iterations — not yet reverified on device** — see `docs/AUDIT.md` Issues #1–#2, Decision 014. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
 
 ## Problem
 
@@ -25,7 +25,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 - No backend/server of any kind (see `CLAUDE.md`) — everything runs from the Expo app itself, inside a `WebView` where a real browser engine is needed.
 - No official YouTube API covers caption *content* retrieval for arbitrary third-party videos (`captions.download` requires OAuth from the video's owner) — every mechanism here is unofficial and can break without notice if YouTube changes its page/API structure.
-- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly. Its JS-execution and network-request capability is confirmed working on device (captions interception proves it); actual **video playback** was confirmed BROKEN on device (2026-08-21) with a synthetic-HTML + IFrame-JS-API player (undocumented error 152, reproduced on two different videos after ruling out origin and video-specific causes). Rebuilt to load a real `youtube.com/embed/{id}` URL instead (Decision 013) — **not yet reverified on device.** See `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
+- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly, used both directly (captions) and as a peer dependency of `react-native-youtube-iframe` (video playback, added 2026-08-21). Its JS-execution and network-request capability is confirmed working on device (captions interception proves it); actual **video playback** was confirmed broken on device with a homegrown synthetic-HTML player across 18 fix iterations (Decision 013), then replaced entirely with `react-native-youtube-iframe` (Decision 014) — pure JS/WebView, Expo Go compatible, `expo-doctor` 18/18. **Not yet reverified on device.** See `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
 
 ## Selection algorithm (implemented, `mobile/src/listening/selection.ts` + `ListeningReviewContainer.tsx`)
 

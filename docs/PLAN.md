@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Video playback — embed mechanism still unconfirmed (likely platform limitation), but the fallback now meets the actual requirement.** User clarified: mechanism doesn't matter, only that playback is bounded to the segment. Fixed the fallback path to open the real video at the correct start time (`Linking.openURL` with `&t=Xs`) instead of a dead-end error message — known limitation: no external link can auto-stop at the segment end, only embedded playback could. Embed itself (`origin` param removed as a last test) still pending confirmation; if it never works, this fallback is now a genuinely usable primary path rather than a broken dead end. See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the `react-native-youtube-iframe` swap fixes video playback.** After 18 failed fixes on the homegrown player, switched to this community library (Expo Go compatible, no native deps) — same underlying technique but served from a real HTTPS origin by default, likely the actual fix. `tsc`/`jest`/`expo-doctor`/bundle boot-check all pass. The `Linking.openURL` fallback (opens the video at the correct start time when playback fails) is kept regardless. **Not yet verified on device.** See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

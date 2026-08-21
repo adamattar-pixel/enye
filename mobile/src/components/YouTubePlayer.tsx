@@ -1,17 +1,6 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-
-/** Même user-agent desktop que `TranscriptFetcher.tsx` (confirmé fiable sur
- * device pour charger de vraies pages `youtube.com`) — absent ici jusqu'au
- * 21/08/2026, alors que c'est la seule différence notable entre les deux
- * WebViews. Ajouté après que `baseUrl`/`origin`/`Referer` aient tous été
- * testés et écartés individuellement, et que l'échec ait été confirmé
- * systémique (même erreur sur une vidéo de contrôle garantie intégrable —
- * voir AUDIT.md, itération 14) : le user-agent par défaut de la WebView
- * peut être traité différemment par YouTube pour l'intégration `/embed/`. */
-const DESKTOP_USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import YoutubeIframe, { type YoutubeIframeRef } from 'react-native-youtube-iframe';
 
 export type YouTubePlayerHandle = {
   /** Relance la lecture depuis `startTime` (voir `types.ts`). */
@@ -24,8 +13,7 @@ type Props = {
   endTime: number;
   /** Appelé quand le player a fini de charger et est prêt à lire. */
   onReady?: () => void;
-  /** Appelé quand la lecture atteint `endTime` (segment terminé) — estimation
-   * par minuteur RN, pas un événement natif du player (voir plus bas). */
+  /** Appelé quand la lecture atteint `endTime` (segment terminé). */
   onSegmentEnded?: () => void;
   /** Appelé sur une erreur du player YouTube (voir la table de
    * résilience de PLAN.md — vidéo bloquée à l'intégration, région,
@@ -35,169 +23,77 @@ type Props = {
 };
 
 /**
- * Wrapper autour d'une vraie page `youtube.com/embed/{id}` chargée par URL
- * réelle dans une WebView — PAS une page HTML custom embarquant l'IFrame
- * Player API JS (ancienne approche, abandonnée le 21/08/2026 après avoir
- * échoué de façon systémique sur device réel : erreur non documentée
- * "code 152" reproduite sur deux vidéos différentes, y compris après avoir
- * confirmé que `baseUrl`/`origin` fonctionnaient correctement — voir
- * AUDIT.md itérations 8 à 10). Cette nouvelle approche évite tout le
- * problème d'origine synthétique en chargeant une vraie page YouTube par
- * une vraie URL https, sur le même principe que `TranscriptFetcher.tsx`
- * (confirmé fonctionnel sur device pour les captions).
- *
- * Pas de dépendance vidéo tierce, la vidéo n'est jamais téléchargée (voir
- * la mission : "uniquement via le lecteur natif de YouTube").
- *
- * **Compromis assumé** : sans script custom embarquant l'IFrame Player API
- * (qui exigerait de re-attaquer le même problème d'origine), on perd les
- * événements JS précis (`onReady`/`onStateChange`). `onReady` est déduit
- * d'un script injecté qui vérifie, 1,8 s après chargement, l'absence de
- * texte d'erreur connu dans la page (multilingue, best-effort — pas une
- * détection garantie à 100%). `onSegmentEnded` est estimé par un minuteur
- * côté RN (`endTime - startTime`), pas un événement natif — actuellement
- * sans conséquence car [ListeningReviewScreen.tsx](../screens/ListeningReviewScreen.tsx)
- * ne câble que `onError`, ni `onReady` ni `onSegmentEnded`. Le blocage de
- * lecture au bon moment reste géré nativement par le paramètre `end` de
- * l'URL d'intégration YouTube (documenté, indépendant de cette API JS).
- *
- * **Non encore revérifié sur device** — voir AUDIT.md, itérations 8 à 10
- * pour l'historique complet du diagnostic qui a mené à ce changement.
+ * Wrapper autour de `react-native-youtube-iframe` (LonelyCpp) — remplace
+ * le 21/08/2026 une implémentation maison (page HTML custom embarquant
+ * l'API JS IFrame Player de YouTube) qui a échoué de façon systémique sur
+ * device réel après 18 itérations de correctifs ciblés (`baseUrl`,
+ * `origin`, `Referer`, URL d'embed réelle, `userAgent` desktop — voir
+ * AUDIT.md, itérations 8 à 18). Cette librairie utilise EXACTEMENT la
+ * même technique de fond (page HTML embarquant `YT.Player`), mais la sert
+ * par défaut depuis une vraie URL HTTPS tierce (`lonelycpp.github.io`,
+ * `baseUrlOverride` par défaut) plutôt qu'une chaîne HTML synthétique
+ * sans origine réelle — c'est très probablement la différence qui la
+ * rend fiable là où l'implémentation maison ne l'était pas (~700 ⭐,
+ * support Expo explicite, aucune dépendance native — compatible Expo Go
+ * sans dev build). **Non encore vérifié sur device** — voir AUDIT.md.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function YouTubePlayer(
   { videoId, startTime, endTime, onReady, onSegmentEnded, onError },
   ref
 ) {
-  const webviewRef = useRef<WebView>(null);
-  const [webviewError, setWebviewError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const playerRef = useRef<YoutubeIframeRef>(null);
+  const [width, setWidth] = useState(0);
 
   useImperativeHandle(ref, () => ({
-    replay: () => setReloadKey((k) => k + 1),
+    replay: () => {
+      playerRef.current?.seekTo(startTime, true);
+    },
   }));
 
-  useEffect(() => {
-    setWebviewError(false);
-  }, [videoId, reloadKey]);
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    setWidth(event.nativeEvent.layout.width);
+  }, []);
 
-  // Filet de sécurité côté RN pour `onSegmentEnded` (voir docstring) —
-  // approximatif, part du principe que la lecture démarre peu après le
-  // montage grâce à `autoplay=1` dans l'URL.
-  useEffect(() => {
-    const durationMs = Math.max(0, (endTime - startTime) * 1000);
-    if (!durationMs) return;
-    const timer = setTimeout(() => onSegmentEnded?.(), durationMs + 500);
-    return () => clearTimeout(timer);
-  }, [videoId, startTime, endTime, reloadKey, onSegmentEnded]);
-
-  const handleMessage = useCallback(
-    (event: WebViewMessageEvent) => {
-      try {
-        const data = JSON.parse(event.nativeEvent.data) as { type: string; reason?: string };
-        console.log('[YouTubePlayer] message:', data);
-        if (data.type === 'ready') onReady?.();
-        else if (data.type === 'error') onError?.();
-      } catch (err) {
-        console.log('[YouTubePlayer] message JSON invalide:', event.nativeEvent.data, err);
-      }
+  const handleChangeState = useCallback(
+    (state: string) => {
+      console.log('[YouTubePlayer] state:', state);
+      if (state === 'ended') onSegmentEnded?.();
     },
-    [onReady, onError]
+    [onSegmentEnded]
   );
 
-  if (webviewError) {
-    return <View style={styles.container} />;
-  }
-
-  const uri = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}&end=${Math.ceil(
-    endTime
-  )}&autoplay=1&playsinline=1&controls=1&rel=0`;
+  const handleError = useCallback(
+    (error: string) => {
+      console.log('[YouTubePlayer] error:', error);
+      onError?.();
+    },
+    [onError]
+  );
 
   return (
-    <View style={styles.container}>
-      <WebView
-        key={reloadKey}
-        ref={webviewRef}
-        style={styles.webview}
-        source={{ uri }}
-        userAgent={DESKTOP_USER_AGENT}
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
-        javaScriptEnabled
-        domStorageEnabled
-        injectedJavaScript={ERROR_CHECK_SCRIPT}
-        injectedJavaScriptForMainFrameOnly={false}
-        onMessage={handleMessage}
-        onError={(event) => {
-          console.log('[YouTubePlayer] WebView onError:', event.nativeEvent);
-          setWebviewError(true);
-          onError?.();
-        }}
-        onHttpError={(event) => {
-          console.log('[YouTubePlayer] WebView onHttpError:', event.nativeEvent);
-          setWebviewError(true);
-          onError?.();
-        }}
-      />
+    <View style={styles.container} onLayout={handleLayout}>
+      {width > 0 && (
+        <YoutubeIframe
+          ref={playerRef}
+          height={(width * 9) / 16}
+          width={width}
+          videoId={videoId}
+          play
+          initialPlayerParams={{
+            start: Math.floor(startTime),
+            end: Math.ceil(endTime),
+            controls: true,
+            rel: false,
+          }}
+          onReady={() => onReady?.()}
+          onChangeState={handleChangeState}
+          onError={handleError}
+        />
+      )}
     </View>
   );
 });
 
-// La page `/embed/{id}` répond HTTP 200 même quand la vidéo est bloquée,
-// privée ou introuvable — elle affiche juste un message d'erreur dans la
-// page (pas d'erreur réseau détectable par `onError`/`onHttpError`).
-// Détection heuristique par texte, multilingue (device testé en français,
-// YouTube peut aussi répondre en anglais/espagnol selon l'Accept-Language
-// envoyé par la WebView) — best-effort, pas garanti exhaustif.
-const ERROR_CHECK_SCRIPT = `
-(function () {
-  function post(msg) {
-    window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-  }
-  var errorMarkers = [
-    'video unavailable', 'private video', "isn't available", 'unavailable in your country',
-    'sign in to confirm your age', 'this video is not available', 'video player configuration error',
-    'watch this video on youtube', 'watch on youtube',
-    'vidéo n\\'est pas disponible', 'vidéo indisponible', 'vidéo privée', 'n\\'est plus disponible',
-    'non disponible dans votre pays', 'confirmez votre âge', 'erreur de configuration du lecteur',
-    'regarder cette vidéo sur youtube', 'regarder sur youtube',
-    'vídeo no disponible', 'vídeo privado', 'ya no está disponible', 'error de configuración del reproductor',
-    'ver este video en youtube', 'ver en youtube'
-  ];
-  // La page d'erreur de YouTube se rend parfois de façon asynchrone (après
-  // un contrôle JS interne) -- un contrôle ponctuel peut la manquer si elle
-  // apparaît après coup (bug confirmé le 21/08/2026 : "ready" reçu alors
-  // que l'utilisateur voyait bien l'écran d'erreur, y compris avec un
-  // sondage répété sur 5,6 s -- donc soit la fenêtre était trop courte,
-  // soit le texte n'est pas dans le frame/document attendu). Fenêtre
-  // élargie (20 sondages, ~14 s), et le dernier sondage envoie un extrait
-  // brut du texte de la page (même sans marqueur reconnu) pour diagnostiquer
-  // précisément ce que voit le script, plutôt que de deviner encore à
-  // l'aveugle si ce correctif échoue aussi.
-  var checksLeft = 20;
-  var interval = setInterval(function () {
-    checksLeft--;
-    var text = ((document.body && document.body.innerText) || '').toLowerCase();
-    var matched = errorMarkers.find(function (m) { return text.indexOf(m) !== -1; });
-    // Bug confirmé le 21/08/2026 : avec l'en-tête Referer précédemment
-    // ajouté, la page était redirigée de /embed/{id} vers /watch?v={id}
-    // (la vraie page desktop complète, pas le player seul) -- l'écran
-    // d'erreur affiché à l'utilisateur n'était donc pas un blocage
-    // d'intégration mais le lecteur intégré de la page /watch échouant
-    // dans un cadre 16:9 minuscule. Détection explicite si ça se reproduit.
-    var wrongPage = location.href.indexOf('/embed/') === -1;
-    if (matched || wrongPage) {
-      clearInterval(interval);
-      post({ type: 'error', reason: matched || 'redirected_away_from_embed', href: location.href });
-    } else if (checksLeft <= 0) {
-      clearInterval(interval);
-      post({ type: 'ready', href: location.href, bodySample: text.slice(0, 300) });
-    }
-  }, 700);
-  true;
-})();
-`;
-
 const styles = StyleSheet.create({
   container: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 14, overflow: 'hidden' },
-  webview: { flex: 1, backgroundColor: '#000' },
 });

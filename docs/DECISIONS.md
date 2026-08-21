@@ -183,7 +183,7 @@ Consequences: ~3100 of 6002 words carry a tag only via the `"divers"` catch-all 
 # Decision 013 — YouTube video player: real `embed/{id}` URL, not a synthetic HTML page with the IFrame JS API
 
 Date: 2026-08-21
-Status: Accepted
+Status: Superseded by Decision 014 (2026-08-21, same day) — the real-embed-URL approach still failed on device (confirmed even on a universal reference video), and the homegrown player was abandoned entirely in favor of a library. Kept here because the reasoning about synthetic-origin pages remains correct and directly informed Decision 014.
 
 Context: `mobile/src/components/YouTubePlayer.tsx` originally loaded a custom HTML document (`source={{ html: ... }}`) embedding YouTube's official IFrame Player API (`YT.Player`) via a `<script>` tag, to get precise `onReady`/`onStateChange`/`onError` JS events. Confirmed broken on device 2026-08-21 with an undocumented error code 152 on every video tested. Two targeted fixes (`baseUrl` on the WebView source, `origin` in `playerVars` — both documented, standard remedies for exactly this class of failure) were applied and both individually confirmed *not* the cause via device logs (origin was provably correct, error persisted identically). A "maybe it's just this one video" hypothesis was also tested and ruled out — a second, unrelated video produced the identical error.
 
@@ -194,3 +194,20 @@ Reasoning: With the origin and video-specific hypotheses both eliminated by dire
 Alternatives considered and rejected: continuing to patch the synthetic-HTML approach with further playerVars/config tweaks — rejected once two independent, well-documented candidate fixes both failed to change the outcome, since further tweaks in that direction would be unguided guessing rather than evidence-driven.
 
 Consequences: Precise JS player events (`onReady`, `onStateChange`) are no longer available without re-introducing the same origin problem via an injected IFrame-API script. `onReady`/`onError` are now inferred from a best-effort, multilingual text scan of the page 1.8s after load (not guaranteed exhaustive); `onSegmentEnded` is estimated by an RN-side timer (`endTime - startTime`), not a native event. Currently low-risk: `ListeningReviewScreen.tsx` only wires up `onError`, not the other two callbacks. If a future feature needs precise playback state, revisit this trade-off rather than silently degrading behavior.
+
+---
+
+# Decision 014 — YouTube video player: `react-native-youtube-iframe` library, not a homegrown WebView player
+
+Date: 2026-08-21
+Status: Accepted
+
+Context: The homegrown player (Decision 013 and its predecessor) failed across 18 fix iterations, including on the real `/embed/{id}` URL with every plausible config fix applied (`baseUrl`, `origin`, `Referer`, desktop `userAgent`) — confirmed failing even on `dQw4w9WgXcQ` (Rick Astley/Sony Music's official upload), the standard universal-embeddability reference video used industry-wide, ruling out both origin and video-specific explanations. The user then asked directly for a library search ("cherche un api qui resoud tout") instead of continuing to patch a homegrown implementation.
+
+Decision: Replace `mobile/src/components/YouTubePlayer.tsx`'s homegrown implementation with a thin wrapper around `react-native-youtube-iframe` (LonelyCpp), using its `initialPlayerParams.start`/`end` for segment bounding, `onReady`/`onChangeState`/`onError` callbacks, and `ref.seekTo()` for replay.
+
+Reasoning: The library is pure JS/WebView (its only runtime dependency is a JS `events` polyfill; `react-native-webview` is an already-satisfied peer dependency) — no native linking, so it doesn't violate the Expo-Go-only constraint (`CLAUDE.md`), confirmed via `expo-doctor` (18/18) after install. Verified via its GitHub source (`iframe.html`) that it uses the *same* fundamental technique the homegrown player used (a page embedding YouTube's official `YT.Player` JS API) — the meaningful difference is that it serves that page from a real third-party HTTPS URL by default (`baseUrlOverride`, defaults to a GitHub Pages URL) rather than a synthetic HTML string with no genuine origin. Given every homegrown fix targeting "give the synthetic page a believable origin" failed, and this library (used by thousands of apps) succeeds using a *genuinely real* origin instead of a spoofed one, this is a well-justified explanation for the difference, not a coincidence.
+
+Alternatives considered and rejected: continuing to patch the homegrown implementation — rejected given the sheer number of already-eliminated hypotheses (18 iterations) without success, and the user's explicit request to look for an existing solution rather than keep hand-rolling one. `react-native-youtube` (native module, requires linking/dev client) — rejected outright, violates the Expo-Go-only constraint before even evaluating it further.
+
+Consequences: `YouTubePlayer.tsx`'s public interface (`videoId`/`startTime`/`endTime`/`onReady`/`onSegmentEnded`/`onError`/`replay()` via ref) is unchanged, so `ListeningReviewScreen.tsx` needed no changes. The `Linking.openURL` fallback added just before this swap (opens the real video at the correct start time when playback fails) is kept regardless of whether this library resolves the underlying issue, since it satisfies the user's actual stated requirement (bounded-start playback via *some* mechanism) independent of embedded-playback working at all.
