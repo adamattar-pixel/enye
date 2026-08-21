@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm two follow-up fixes: captions-stay-off and correct-language transcripts.** Video playback itself is resolved (`react-native-youtube-iframe` swap, confirmed by the user). Two bugs found after that: (a) closed captions sometimes stayed on despite `showClosedCaptions: false` — likely a persisted cookie preference; fixed via `webViewProps={{ incognito: true }}`. (b) A Spanish song was imported with English lyrics, caused by `TranscriptFetcher.tsx` forcing `Accept-Language: en-US` for an unrelated reason (button-label predictability); switched to Spanish-first and made the stored `language` field reflect what was actually captured instead of a hardcoded `'es'`. Neither reconfirmed on device yet. See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the `unloadModule('captions')` fix — closed captions still won't turn off after two prior failed attempts.** Wrong-language transcripts are fixed and confirmed by the user. Captions-stay-on is not: neither `showClosedCaptions: false` nor `webViewProps={{ incognito: true }}` worked, and the iOS system accessibility setting was checked and ruled out. Current fix calls the IFrame API's real captions-control method (`player.unloadModule('captions')`) via an injected script, since `cc_load_policy` is documented to only avoid forcing captions on, never force them off. Not yet verified — don't assume this works given the track record on this specific bug. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

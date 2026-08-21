@@ -90,15 +90,19 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             // explicitement, l'utilisateur devait sinon les couper à la main).
             showClosedCaptions: false,
           }}
-          // `showClosedCaptions: false` (cc_load_policy=0) ne fait que ne
-          // pas FORCER l'affichage — la doc officielle de l'API YouTube
-          // indique que si une préférence "sous-titres activés" existe déjà
-          // (ex. cookie persistant après un CC activé manuellement une fois
-          // dans cette WebView), aucun paramètre ne peut la forcer à
-          // désactivé. `incognito` empêche cette persistance entre les
-          // sessions de lecture (signalé le 21/08/2026 : sous-titres actifs
-          // dès le lancement malgré `showClosedCaptions: false`).
-          webViewProps={{ incognito: true }}
+          // `showClosedCaptions: false` (cc_load_policy=0) ni `incognito`
+          // n'ont suffi (confirmé sur device le 21/08/2026, réglage iOS
+          // "Sous-titres et SDH" aussi vérifié désactivé — pas la cause).
+          // `cc_load_policy` ne fait par conception que ne pas FORCER
+          // l'affichage ; il ne peut jamais forcer l'extinction si YouTube
+          // décide d'activer les sous-titres pour une autre raison (ex.
+          // traduction automatique proposée par défaut sur ce type de
+          // contenu). La librairie déclare `var player` en portée globale
+          // dans la page (voir PlayerScripts.js sur GitHub) — on appelle
+          // directement la méthode réelle de l'API IFrame prévue pour ça,
+          // `unloadModule('captions')`, plus contraignante que le simple
+          // paramètre `cc_load_policy`.
+          webViewProps={{ incognito: true, injectedJavaScript: DISABLE_CAPTIONS_SCRIPT }}
           onReady={() => onReady?.()}
           onChangeState={handleChangeState}
           onError={handleError}
@@ -107,6 +111,34 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     </View>
   );
 });
+
+/** `cc_load_policy` (via `showClosedCaptions`) ne peut qu'éviter de FORCER
+ * l'affichage des sous-titres, jamais forcer leur extinction (documenté
+ * officiellement par YouTube) — insuffisant seul (confirmé sur device le
+ * 21/08/2026). `player` est une variable globale de la page (déclarée
+ * `var player` au niveau racine d'un `<script>` classique, pas un module
+ * — voir `react-native-youtube-iframe`'s `PlayerScripts.js`), donc
+ * accessible depuis ce script injecté séparément. `unloadModule('captions')`
+ * est la méthode réelle de l'API IFrame prévue pour désactiver
+ * effectivement le module sous-titres après coup, plus contraignante que
+ * le simple indice `cc_load_policy`. Sondage répété (le `player` n'existe
+ * qu'après le chargement asynchrone de `iframe_api`, pas immédiatement). */
+const DISABLE_CAPTIONS_SCRIPT = `
+(function () {
+  var attempts = 0;
+  var interval = setInterval(function () {
+    attempts++;
+    if (typeof player !== 'undefined' && player && typeof player.unloadModule === 'function') {
+      try { player.unloadModule('captions'); } catch (e) {}
+      try { player.setOption && player.setOption('captions', 'track', {}); } catch (e) {}
+      clearInterval(interval);
+    } else if (attempts > 20) {
+      clearInterval(interval);
+    }
+  }, 300);
+  true;
+})();
+`;
 
 const styles = StyleSheet.create({
   container: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 14, overflow: 'hidden' },
