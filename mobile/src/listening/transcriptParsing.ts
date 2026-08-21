@@ -12,6 +12,21 @@ import { decodeHtmlEntities, parseTimedTextXml, type CaptionCue } from './captio
  * `docs/CONVENTIONS.md`, "Pure logic separated from React components").
  */
 
+/** Extrait le paramètre `lang=` de l'URL `timedtext` interceptée — c'est
+ * la langue réellement servie par YouTube pour cette requête (peut être
+ * une piste manuelle, auto-générée, OU une traduction automatique vers
+ * une autre langue). Sert à ne plus étiqueter les résultats `language:
+ * 'es'` en dur sans vérifier ce qui a réellement été capturé (bug trouvé
+ * le 21/08/2026 : la chanson "Nuevayol" importée avec des paroles en
+ * anglais alors que la chanson est en espagnol — causé par un en-tête
+ * `Accept-Language: en-US` biaisant la piste par défaut proposée par
+ * YouTube ; corrigé séparément dans `TranscriptFetcher.tsx`, mais le
+ * champ `language` restait de toute façon faux même avant ce correctif). */
+export function extractLangFromUrl(url: string): string {
+  const match = url.match(/[?&]lang=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : 'es';
+}
+
 /** Le corps intercepté peut être du XML `timedtext` classique, du JSON
  * `fmt=json3` (confirmé le 21/08/2026 par un vrai payload intercepté en
  * conditions réelles — voir plus bas), ou du JSON `get_transcript` —

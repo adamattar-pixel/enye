@@ -1,4 +1,4 @@
-import { parseJson3Captions, parseInterceptedBody } from './transcriptParsing';
+import { parseJson3Captions, parseInterceptedBody, extractLangFromUrl } from './transcriptParsing';
 
 // Format `fmt=json3` confirmé réellement le 21/08/2026 par un corps
 // intercepté en conditions réelles (858 225 caractères pour une vraie
@@ -63,5 +63,31 @@ describe('parseInterceptedBody', () => {
     expect(parseInterceptedBody('')).toEqual([]);
     expect(parseInterceptedBody('   ')).toEqual([]);
     expect(parseInterceptedBody('{not json')).toEqual([]);
+  });
+});
+
+// Bug réel trouvé le 21/08/2026 : "Nuevayol" importée avec des paroles en
+// anglais alors que la chanson est en espagnol — `language` était étiqueté
+// 'es' en dur sans jamais vérifier ce qui avait réellement été capturé.
+describe('extractLangFromUrl', () => {
+  test('extracts the lang query param from a real timedtext URL', () => {
+    const url =
+      'https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&ei=abc&caps=asr&opi=1&lang=es&fmt=json3&potc=1';
+    expect(extractLangFromUrl(url)).toBe('es');
+  });
+
+  test('extracts an English lang value just as readily (the actual bug: capturing this unnoticed)', () => {
+    const url = 'https://www.youtube.com/api/timedtext?v=abc&lang=en&fmt=json3';
+    expect(extractLangFromUrl(url)).toBe('en');
+  });
+
+  test('decodes a URL-encoded lang value (e.g. es-419 or es%2D419)', () => {
+    const url = 'https://www.youtube.com/api/timedtext?v=abc&lang=es-419&fmt=json3';
+    expect(extractLangFromUrl(url)).toBe('es-419');
+  });
+
+  test('falls back to "es" when no lang param is present', () => {
+    const url = 'https://www.youtube.com/api/timedtext?v=abc&fmt=json3';
+    expect(extractLangFromUrl(url)).toBe('es');
   });
 });

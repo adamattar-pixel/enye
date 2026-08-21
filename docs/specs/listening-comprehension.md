@@ -1,6 +1,6 @@
 # Spec: Listening comprehension (Compréhension orale / Écoute tab)
 
-Status: **captions AND video playback both confirmed working end-to-end on real device (2026-08-21)** — the homegrown player was replaced with `react-native-youtube-iframe` after 18 failed fix iterations, then confirmed by the user ("parfait ca marche"). Closed captions explicitly disabled as a follow-up (they were sometimes revealing the dictation answer) — not yet reconfirmed. See `docs/AUDIT.md` Issues #1–#2, Decision 014. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
+Status: **captions AND video playback both confirmed working end-to-end on real device (2026-08-21)** — the homegrown player was replaced with `react-native-youtube-iframe` after 18 failed fix iterations, then confirmed by the user ("parfait ca marche"). Two follow-up bugs found and fixed, not yet reconfirmed: closed captions sometimes stayed on (fixed via `incognito` WebView mode), and a Spanish song was imported with English lyrics due to a stray `Accept-Language: en-US` header biasing YouTube's transcript panel toward an auto-translation (fixed, Spanish-first now, plus the stored `language` field is derived from the real captured URL instead of a hardcoded value). See `docs/AUDIT.md` Issues #1–#2, Decision 014. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
 
 ## Problem
 
@@ -113,7 +113,7 @@ Add video (URL or search result)
 - `mobile/src/listening/types.ts` — `ListeningVideo`, `ListeningSegment`, `CaptionStatus`.
 - `mobile/src/listening/{youtubeUrl,search,metadata,captions,selection}.ts` — pure/network helpers, see file headers for what's tested vs. live-verified vs. speculative.
 - `mobile/src/listening/TranscriptFetcher.tsx` — the WebView-based fallback (orchestration only), see above.
-- `mobile/src/listening/transcriptParsing.ts` — pure parsing of the intercepted caption body (json3/get_transcript/XML), unit-tested (`transcriptParsing.test.ts`). Kept separate from `TranscriptFetcher.tsx` because importing `react-native-webview` crashes at module load under Jest.
+- `mobile/src/listening/transcriptParsing.ts` — pure parsing of the intercepted caption body (json3/get_transcript/XML) plus `extractLangFromUrl` (reads the real `lang=` param from the captured URL, used to avoid mislabeling non-Spanish captures as `'es'`), unit-tested (`transcriptParsing.test.ts`). Kept separate from `TranscriptFetcher.tsx` because importing `react-native-webview` crashes at module load under Jest.
 - `mobile/src/data/database.ts` — `listening_videos`/`listening_segments`/`listening_cards`/`listening_reviews` tables and their CRUD (no test coverage, see `docs/CONVENTIONS.md`).
 - `mobile/src/data/settings.ts` — `listeningNewSegmentsPerDay`/`listeningReviewCapPerDay` (defaults 5/15, never tuned from real usage).
 

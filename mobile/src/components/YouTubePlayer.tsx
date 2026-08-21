@@ -90,6 +90,15 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             // explicitement, l'utilisateur devait sinon les couper à la main).
             showClosedCaptions: false,
           }}
+          // `showClosedCaptions: false` (cc_load_policy=0) ne fait que ne
+          // pas FORCER l'affichage — la doc officielle de l'API YouTube
+          // indique que si une préférence "sous-titres activés" existe déjà
+          // (ex. cookie persistant après un CC activé manuellement une fois
+          // dans cette WebView), aucun paramètre ne peut la forcer à
+          // désactivé. `incognito` empêche cette persistance entre les
+          // sessions de lecture (signalé le 21/08/2026 : sous-titres actifs
+          // dès le lancement malgré `showClosedCaptions: false`).
+          webViewProps={{ incognito: true }}
           onReady={() => onReady?.()}
           onChangeState={handleChangeState}
           onError={handleError}

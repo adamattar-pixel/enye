@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the closed-captions-disabled fix.** Video playback itself is resolved and confirmed by the user (`react-native-youtube-iframe` swap after 18 failed homegrown fixes). Follow-up: captions sometimes appeared during segments, revealing the dictation answer — `showClosedCaptions: false` added to `initialPlayerParams`. Not yet reconfirmed on device. See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm two follow-up fixes: captions-stay-off and correct-language transcripts.** Video playback itself is resolved (`react-native-youtube-iframe` swap, confirmed by the user). Two bugs found after that: (a) closed captions sometimes stayed on despite `showClosedCaptions: false` — likely a persisted cookie preference; fixed via `webViewProps={{ incognito: true }}`. (b) A Spanish song was imported with English lyrics, caused by `TranscriptFetcher.tsx` forcing `Accept-Language: en-US` for an unrelated reason (button-label predictability); switched to Spanish-first and made the stored `language` field reflect what was actually captured instead of a hardcoded `'es'`. Neither reconfirmed on device yet. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

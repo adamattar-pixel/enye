@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { CaptionCue } from './captions';
-import { parseInterceptedBody, pairDomSegments } from './transcriptParsing';
+import { extractLangFromUrl, parseInterceptedBody, pairDomSegments } from './transcriptParsing';
 import type { CaptionStatus } from './types';
 
 export interface TranscriptFetchResult {
@@ -52,12 +52,15 @@ const DESKTOP_USER_AGENT =
  * Séquence exacte : (1) patch de `fetch`/`XMLHttpRequest` installé AVANT
  * le chargement de la page (`injectedJavaScriptBeforeContentLoaded`) ;
  * (2) après le chargement + 2,5s de battement pour l'hydratation de la
- * page, recherche et clic du bouton "Show transcript" (page forcée en
- * anglais via l'en-tête `Accept-Language`, pour que ce libellé soit
- * prévisible) ; (3) si rien d'intercepté 5s après le clic, lecture du
- * DOM du panneau de transcription ouvert ; (4) délai global de sécurité
- * de 9s, au-delà duquel on renvoie `unavailable` plutôt que d'attendre
- * indéfiniment.
+ * page, recherche et clic du bouton "Show transcript"/"Mostrar
+ * transcripción" (page chargée en espagnol via l'en-tête
+ * `Accept-Language`, corrigé le 21/08/2026 — voir AUDIT.md, forcer
+ * l'anglais avait pour effet de bord de faire s'ouvrir le panneau sur une
+ * traduction automatique anglaise plutôt que la vraie piste espagnole ;
+ * `findShowTranscriptButton` reconnaît les libellés des deux langues) ;
+ * (3) si rien d'intercepté 5s après le clic, lecture du DOM du panneau
+ * de transcription ouvert ; (4) délai global de sécurité de 9s, au-delà
+ * duquel on renvoie `unavailable` plutôt que d'attendre indéfiniment.
  *
  * **Test réel sur device (21/08/2026) : le mécanisme d'interception
  * fonctionne.** `button_search` a trouvé et cliqué le bouton, `xhr_intercepted`
@@ -77,6 +80,7 @@ type WebViewMessage =
   | { type: 'debug'; step: string; [key: string]: unknown }
   | { type: 'network_capture'; url: string; body: string }
   | { type: 'dom_capture'; segments: { startTime: number; text: string }[] };
+
 
 /** Installé via `injectedJavaScriptBeforeContentLoaded` — doit être en
  * place avant que le moindre script de la page ne s'exécute, pour ne
@@ -183,7 +187,10 @@ const CLICK_SCRIPT = `
   });
 
   function tryDismissConsentBanner() {
-    var textSelectors = ['accept all', 'i agree', 'reject all', 'agree to all'];
+    var textSelectors = [
+      'accept all', 'i agree', 'reject all', 'agree to all',
+      'aceptar todo', 'acepto', 'rechazar todo', 'aceptar todas'
+    ];
     var candidates = document.querySelectorAll('button, tp-yt-paper-button, yt-button-shape, ytd-button-renderer, form button');
     for (var i = 0; i < candidates.length; i++) {
       var text = (candidates[i].innerText || candidates[i].textContent || '').trim().toLowerCase();
@@ -205,12 +212,15 @@ const CLICK_SCRIPT = `
   }
 
   function findShowTranscriptButton() {
-    var byAria = document.querySelector('button[aria-label="Show transcript"]');
-    if (byAria) return { el: byAria, selector: 'aria-label' };
+    var ariaLabels = ['Show transcript', 'Mostrar transcripción', 'Mostrar transcripcion'];
+    for (var a = 0; a < ariaLabels.length; a++) {
+      var byAria = document.querySelector('button[aria-label="' + ariaLabels[a] + '"]');
+      if (byAria) return { el: byAria, selector: 'aria-label' };
+    }
     var candidates = document.querySelectorAll('button, yt-button-shape, tp-yt-paper-button, a, ytd-button-renderer');
     for (var i = 0; i < candidates.length; i++) {
       var text = (candidates[i].innerText || candidates[i].textContent || '').trim();
-      if (/show transcript/i.test(text)) return { el: candidates[i], selector: 'text-match' };
+      if (/show transcript|mostrar transcripci[oó]n/i.test(text)) return { el: candidates[i], selector: 'text-match' };
     }
     return null;
   }
@@ -303,12 +313,24 @@ export function useTranscriptFetcher() {
 
   const finalizeFromDomOrNothing = useCallback(
     (domSegments: { startTime: number; text: string }[] | null) => {
-      for (const capture of networkCapturesRef.current) {
-        const segments = parseInterceptedBody(capture.body);
-        if (segments.length > 0) {
-          settle({ status: 'available', language: 'es', segments });
-          return;
+      // Préfère explicitement une capture espagnole parmi celles reçues —
+      // YouTube peut intercepter plusieurs requêtes timedtext (ex. une
+      // traduction automatique proposée avant la vraie piste espagnole),
+      // et prendre la toute première sans distinction avait causé des
+      // imports en anglais pour du contenu pourtant espagnol (21/08/2026).
+      const parsed = networkCapturesRef.current
+        .map((capture) => ({ language: extractLangFromUrl(capture.url), segments: parseInterceptedBody(capture.body) }))
+        .filter((c) => c.segments.length > 0);
+      const spanish = parsed.find((c) => c.language.toLowerCase().startsWith('es'));
+      const chosen = spanish ?? parsed[0];
+      if (chosen) {
+        if (!spanish && parsed.length > 0) {
+          console.log('[TranscriptFetcher] aucune capture espagnole, repli sur langue:', chosen.language);
+        } else {
+          console.log('[TranscriptFetcher] langue capturée:', chosen.language);
         }
+        settle({ status: 'available', language: chosen.language, segments: chosen.segments });
+        return;
       }
       if (domSegments && domSegments.length > 0) {
         settle({ status: 'available', language: 'es', segments: pairDomSegments(domSegments) });
@@ -366,8 +388,16 @@ export function useTranscriptFetcher() {
       if (data.type === 'network_capture') {
         networkCapturesRef.current.push({ url: data.url, body: data.body });
         const segments = parseInterceptedBody(data.body);
-        if (segments.length > 0) {
-          settle({ status: 'available', language: 'es', segments });
+        const language = extractLangFromUrl(data.url);
+        console.log('[TranscriptFetcher] capture réseau — langue:', language, 'segments:', segments.length, '—', data.url.slice(0, 200));
+        // Ne règle immédiatement que sur une capture espagnole (chemin
+        // rapide, le cas normal). Une capture dans une autre langue est
+        // gardée en mémoire (déjà poussée ci-dessus) mais ne conclut pas
+        // tout de suite — `finalizeFromDomOrNothing` (déclenché plus tard
+        // par les minuteurs) choisira parmi toutes les captures reçues,
+        // en préférant l'espagnol s'il en arrive une avant l'échéance.
+        if (segments.length > 0 && language.toLowerCase().startsWith('es')) {
+          settle({ status: 'available', language, segments });
         }
         return;
       }
@@ -392,7 +422,7 @@ export function useTranscriptFetcher() {
           ref={webviewRef}
           source={{
             uri: `https://www.youtube.com/watch?v=${pendingVideoId}`,
-            headers: { 'Accept-Language': 'en-US,en;q=0.9' },
+            headers: { 'Accept-Language': 'es-419,es;q=0.9,en;q=0.5' },
           }}
           userAgent={DESKTOP_USER_AGENT}
           injectedJavaScriptBeforeContentLoaded={NETWORK_PATCH_SCRIPT}
