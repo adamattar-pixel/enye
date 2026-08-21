@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm `react-native-webview`/IFrame Player actually renders on the user's Expo Go.** The captions pipeline (network interception → `fmt=json3` parsing → DB write) is now confirmed working end-to-end on device (2026-08-21, user confirmed segments > 0 in-app). What's left for the listening feature: the player itself has never been confirmed to display/play a video on device. Blocking risk if it fails.
+- [ ] **Fix video playback, confirmed broken on device (2026-08-21).** The captions pipeline is confirmed working end-to-end; the player itself now fails with "Cette vidéo n'a pas pu être chargée...". Diagnostic logging added (`mobile/src/components/YouTubePlayer.tsx`) plus a candidate fix (`baseUrl` on the WebView source, since a null origin is a documented cause of YouTube IFrame API embedding failures) — not yet reverified on device. What's left: retest a review session and, if it still fails, read the `[YouTubePlayer] ...` Metro logs for the real error code. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

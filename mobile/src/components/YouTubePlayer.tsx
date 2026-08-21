@@ -56,12 +56,13 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
-        const data = JSON.parse(event.nativeEvent.data) as { type: string };
+        const data = JSON.parse(event.nativeEvent.data) as { type: string; code?: number; message?: string };
+        console.log('[YouTubePlayer] message:', data);
         if (data.type === 'ready') onReady?.();
         else if (data.type === 'segmentEnded') onSegmentEnded?.();
         else if (data.type === 'error') onError?.();
-      } catch {
-        // Message inattendu, ignoré plutôt que de planter.
+      } catch (err) {
+        console.log('[YouTubePlayer] message JSON invalide:', event.nativeEvent.data, err);
       }
     },
     [onReady, onSegmentEnded, onError]
@@ -76,15 +77,19 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
       <WebView
         ref={webviewRef}
         style={styles.webview}
-        source={{ html: buildPlayerHtml(videoId, startTime, endTime) }}
+        source={{ html: buildPlayerHtml(videoId, startTime, endTime), baseUrl: 'https://www.youtube.com' }}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
         domStorageEnabled
         onMessage={handleMessage}
-        onError={() => {
+        onError={(event) => {
+          console.log('[YouTubePlayer] WebView onError:', event.nativeEvent);
           setWebviewError(true);
           onError?.();
+        }}
+        onHttpError={(event) => {
+          console.log('[YouTubePlayer] WebView onHttpError:', event.nativeEvent);
         }}
       />
     </View>
@@ -113,6 +118,11 @@ function buildPlayerHtml(videoId: string, startTime: number, endTime: number): s
   function post(msg) {
     window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
   }
+
+  post({ type: 'debug', step: 'script_start' });
+  setTimeout(function () {
+    if (!player) post({ type: 'debug', step: 'no_player_after_8s', hadApi: typeof YT !== 'undefined' });
+  }, 8000);
 
   function clearEndCheck() {
     if (endCheckInterval) { clearInterval(endCheckInterval); endCheckInterval = null; }
@@ -157,11 +167,15 @@ function buildPlayerHtml(videoId: string, startTime: number, endTime: number): s
             post({ type: 'segmentEnded' });
           }
         },
-        onError: function () {
-          post({ type: 'error' });
+        onError: function (e) {
+          post({ type: 'error', code: e.data });
         }
       }
     });
+  };
+
+  window.onerror = function (message, source, lineno, colno, error) {
+    post({ type: 'error', message: 'JS error: ' + message });
   };
 </script>
 </body>

@@ -1,6 +1,6 @@
 # Spec: Listening comprehension (Compréhension orale / Écoute tab)
 
-Status: **captions pipeline confirmed working end-to-end on device (2026-08-21)** — see `docs/AUDIT.md` Issues #1. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly. Remaining unknown: whether the YouTube IFrame Player itself (video playback) renders in the user's Expo Go — see Constraints.
+Status: **captions pipeline confirmed working end-to-end on device (2026-08-21); video playback confirmed BROKEN the same day** — see `docs/AUDIT.md` Issues #1–#2. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
 
 ## Problem
 
@@ -25,7 +25,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 - No backend/server of any kind (see `CLAUDE.md`) — everything runs from the Expo app itself, inside a `WebView` where a real browser engine is needed.
 - No official YouTube API covers caption *content* retrieval for arbitrary third-party videos (`captions.download` requires OAuth from the video's owner) — every mechanism here is unofficial and can break without notice if YouTube changes its page/API structure.
-- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly. Its JS-execution and network-request capability is now confirmed working on device (captions interception proves it); actual **video playback** specifically has not been directly observed yet.
+- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly. Its JS-execution and network-request capability is confirmed working on device (captions interception proves it); actual **video playback** is confirmed BROKEN on device (2026-08-21, "Cette vidéo n'a pas pu être chargée...") — under active diagnosis, see `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
 
 ## Selection algorithm (implemented, `mobile/src/listening/selection.ts` + `ListeningReviewContainer.tsx`)
 
