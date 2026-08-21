@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { addUserWord, deleteWord, getAllTags, getAllWords } from '../data/database';
+import { addUserWord, deleteWord, getAllTags, getAllWords, updateWord } from '../data/database';
 import type { Word } from '../data/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -41,16 +41,18 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const [allTags, setAllTags] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [userAddedOnly, setUserAddedOnly] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
+  const [editingWord, setEditingWord] = useState<Word | null>(null);
 
   const refresh = useCallback(async () => {
     const [rows, tags] = await Promise.all([
-      getAllWords(db, { level: levelFilter ?? undefined, tag: tagFilter ?? undefined }),
+      getAllWords(db, { level: levelFilter ?? undefined, tag: tagFilter ?? undefined, userAddedOnly }),
       getAllTags(db),
     ]);
     setWords(rows);
     setAllTags(tags);
-  }, [db, levelFilter, tagFilter]);
+  }, [db, levelFilter, tagFilter, userAddedOnly]);
 
   useEffect(() => {
     refresh();
@@ -80,7 +82,7 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   // fonction `renderItem` différente à chaque rendu.
   const renderItem = useCallback(
     ({ item, index }: { item: Word; index: number }) => (
-      <WordRow item={item} index={index} styles={styles} onDelete={handleDelete} />
+      <WordRow item={item} index={index} styles={styles} onDelete={handleDelete} onEdit={setEditingWord} />
     ),
     [styles, handleDelete]
   );
@@ -102,6 +104,15 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
           ))}
         </ScrollView>
       )}
+
+      <View style={[styles.filterRow, styles.filterRowContent, { flexDirection: 'row' }]}>
+        <FilterChip
+          styles={styles}
+          label="Mots ajoutés seulement"
+          active={userAddedOnly}
+          onPress={() => setUserAddedOnly((v) => !v)}
+        />
+      </View>
 
       <FlatList
         data={words}
@@ -127,6 +138,17 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
         db={db}
         styles={styles}
       />
+
+      <EditWordModal
+        word={editingWord}
+        onClose={() => setEditingWord(null)}
+        onSaved={async () => {
+          setEditingWord(null);
+          await refresh();
+        }}
+        db={db}
+        styles={styles}
+      />
     </View>
   );
 }
@@ -138,11 +160,13 @@ const WordRow = memo(function WordRow({
   index,
   styles,
   onDelete,
+  onEdit,
 }: {
   item: Word;
   index: number;
   styles: Styles;
   onDelete: (word: Word) => void;
+  onEdit: (word: Word) => void;
 }) {
   return (
     <FadeInView duration={250} direction="right" delay={Math.min(index, 12) * 25} style={styles.wordRow}>
@@ -152,11 +176,16 @@ const WordRow = memo(function WordRow({
           {item.english} · {item.level}
         </Text>
       </View>
-      {item.isUserAdded && (
-        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} onPress={() => onDelete(item)}>
-          <Text style={styles.deleteLink}>Supprimer</Text>
+      <View style={styles.wordRowActions}>
+        <AnimatedPressable haptic="none" onPress={() => onEdit(item)}>
+          <Text style={styles.editLink}>Éditer</Text>
         </AnimatedPressable>
-      )}
+        {item.isUserAdded && (
+          <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} onPress={() => onDelete(item)}>
+            <Text style={styles.deleteLink}>Supprimer</Text>
+          </AnimatedPressable>
+        )}
+      </View>
     </FadeInView>
   );
 });
@@ -262,6 +291,89 @@ function AddWordModal({
   );
 }
 
+// MARK: - Édition de mot
+
+/** Édite `english`/`exampleEn`/`tags`/`level` d'un mot existant, importé
+ * ou ajouté par l'utilisateur — demandé explicitement le 21/08/2026,
+ * portée volontairement limitée à ces quatre champs (voir `updateWord`
+ * dans `database.ts`). Le reste du mot (espagnol, catégorie grammaticale,
+ * exemple espagnol) n'est pas éditable ici. */
+function EditWordModal({
+  word,
+  onClose,
+  onSaved,
+  db,
+  styles,
+}: {
+  word: Word | null;
+  onClose: () => void;
+  onSaved: () => void;
+  db: SQLiteDatabase;
+  styles: Styles;
+}) {
+  const [english, setEnglish] = useState('');
+  const [exampleEn, setExampleEn] = useState('');
+  const [level, setLevel] = useState('');
+  const [tags, setTags] = useState('');
+
+  // Le modal reste monté en permanence (visible piloté par `word !== null`)
+  // — les champs doivent se réinitialiser à chaque nouveau mot édité, pas
+  // seulement au montage.
+  useEffect(() => {
+    if (!word) return;
+    setEnglish(word.english);
+    setExampleEn(word.exampleEn);
+    setLevel(word.level);
+    setTags(word.tags.join(', '));
+  }, [word]);
+
+  const handleSave = async () => {
+    if (!word) return;
+    if (!english.trim()) {
+      Alert.alert('Champ manquant', 'La traduction anglaise est obligatoire.');
+      return;
+    }
+
+    await updateWord(db, word.id, {
+      english: english.trim(),
+      exampleEn: exampleEn.trim(),
+      level: level.trim() || word.level,
+      tags: tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+    });
+
+    onSaved();
+  };
+
+  return (
+    <Modal visible={word !== null} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <ScrollView>
+            <Text style={styles.modalTitle}>Éditer « {word?.spanish} »</Text>
+
+            <FormField styles={styles} label="Traduction anglaise *" value={english} onChangeText={setEnglish} />
+            <FormField styles={styles} label="Phrase d'exemple (anglais)" value={exampleEn} onChangeText={setExampleEn} />
+            <FormField styles={styles} label="Niveau (A1, A2, B1, B2)" value={level} onChangeText={setLevel} />
+            <FormField styles={styles} label="Tags (séparés par des virgules)" value={tags} onChangeText={setTags} />
+
+            <View style={styles.modalButtonRow}>
+              <AnimatedPressable style={[styles.button, styles.buttonOutline]} haptic="none" onPress={onClose}>
+                <Text style={styles.buttonOutlineText}>Annuler</Text>
+              </AnimatedPressable>
+              <AnimatedPressable style={styles.button} haptic={Haptics.NotificationFeedbackType.Success} onPress={handleSave}>
+                <Text style={styles.buttonText}>Enregistrer</Text>
+              </AnimatedPressable>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function FormField({
   styles,
   label,
@@ -304,6 +416,8 @@ function createStyles(t: SolYSombraPalette) {
     },
     wordSpanish: { fontSize: 16, fontWeight: '600', color: t.wordText },
     wordEnglish: { fontSize: 13, color: t.metaText, marginTop: 2 },
+    wordRowActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+    editLink: { color: t.buttonOutline, fontSize: 12 },
     deleteLink: { color: t.dot, fontSize: 12 },
     empty: { color: t.metaText, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
 

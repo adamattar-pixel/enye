@@ -598,6 +598,11 @@ export async function getReviewCountSince(db: SQLiteDatabase, since: Date): Prom
 export interface WordFilter {
   level?: string;
   tag?: string;
+  /** N'affiche que les mots ajoutés depuis l'app (pas ceux importés de
+   * words.json) — filtre "Mots ajoutés" de Decks & mots, demandé
+   * explicitement le 21/08/2026. Réutilise la colonne `is_user_added`
+   * déjà utilisée pour restreindre la suppression au même sous-ensemble. */
+  userAddedOnly?: boolean;
 }
 
 /** Tous les mots, triés par fréquence, avec filtre optionnel par niveau
@@ -615,6 +620,9 @@ export async function getAllWords(db: SQLiteDatabase, filter: WordFilter = {}): 
     // à revoir (table de jointure dédiée) si ça devient un goulot.
     conditions.push('tags LIKE ?');
     params.push(`%"${filter.tag}"%`);
+  }
+  if (filter.userAddedOnly) {
+    conditions.push('is_user_added = 1');
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -691,6 +699,31 @@ export async function addUserWord(db: SQLiteDatabase, word: Omit<Word, 'isUserAd
     card.learningStepIndex,
     card.lifecycle,
     card.dueDate.toISOString()
+  );
+}
+
+export interface WordEditableFields {
+  english: string;
+  exampleEn: string;
+  tags: string[];
+  level: string;
+}
+
+/** Édite un mot existant, importé (`words.json`) ou ajouté par
+ * l'utilisateur — seuls les champs listés dans `WordEditableFields` sont
+ * modifiables (portée volontairement limitée à la demande explicite du
+ * 21/08/2026 : traduction, exemple anglais, tag/thème, niveau CECRL) ; le
+ * reste du mot (espagnol, catégorie grammaticale, exemple espagnol) n'est
+ * pas éditable depuis cet écran. Un simple `UPDATE`, comme `resyncWordTags`
+ * et `updateReviewGrade` ci-dessous — pas de nouvelle table. */
+export async function updateWord(db: SQLiteDatabase, wordId: string, fields: WordEditableFields): Promise<void> {
+  await db.runAsync(
+    'UPDATE words SET english = ?, example_en = ?, tags = ?, level = ? WHERE id = ?;',
+    fields.english,
+    fields.exampleEn,
+    JSON.stringify(fields.tags),
+    fields.level,
+    wordId
   );
 }
 

@@ -13,6 +13,7 @@ Verified directly from the code/tooling, not assumed:
 - `mobile/src/data/words.json` holds 6002 words; as of the latest tagging pass, all 6002 carry at least one theme tag (0 untagged) — see Issues below for what that coverage actually means.
 - `react-native-webview` is installed and resolves cleanly (`expo-doctor` 18/18), used for the listening-caption-fetch mechanism directly and as a peer dependency of `react-native-youtube-iframe` (2026-08-21) for video playback — both are pure-JS/WebView packages with no native config, Expo Go compatible.
 - Notifications' two-stage flow (word → "Ver traducción" → translation + grade buttons) **has been confirmed working on a real iPhone**, with one documented limit: after a user force-quits the app, no code runs in the background until the app is reopened manually (Apple platform behavior, not a bug).
+- Decks & mots (2026-08-21) now supports editing `english`/`exampleEn`/tags/level for any word via `updateWord` (plain SQLite `UPDATE`), plus a "Mots ajoutés seulement" filter — both implemented and compiled, **not yet verified on device**.
 
 ## Issues
 

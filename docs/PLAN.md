@@ -4,7 +4,7 @@ The current plan only — not history. Update this file whenever the plan change
 
 ## Current
 
-- [ ] **Word editing in Decks & mots** (requested 2026-08-21): edit `english`/`exampleEn`/tag/CECRL level for any word (imported or user-added), plain SQLite `UPDATE`, no new table. Deletion stays restricted to user-added words only (not extended). New "mots ajoutés" filter/segment to show only manually-added words, reusing the existing `is_user_added` distinction. In progress.
+- [x] **Word editing in Decks & mots** (requested 2026-08-21): `updateWord` (`database.ts`) — plain `UPDATE` on `english`/`example_en`/`tags`/`level`, works for any word (imported or user-added), no new table. `EditWordModal` in `DecksScreen.tsx`, opened via an "Éditer" link on every row. Deletion untouched — still restricted to user-added words only. "Mots ajoutés seulement" filter chip added, reusing the existing `is_user_added` column (also extended `WordFilter`/`getAllWords` with `userAddedOnly`). Implemented and compiled (`tsc`/`jest`/bundle boot-check all clean) — **not yet verified on device.**
 - [ ] **General code optimization pass** (requested 2026-08-21): `resyncWordTags` batched into `UPDATE...CASE` (was one round-trip per row, same class of fix as `insertInBatches`); `DecksScreen`/`ConjugationScreen` history `FlatList`s given memoized row components + `useCallback`'d `renderItem` (was recreating render closures — and therefore risking re-rendering all visible rows — on every unrelated state change, notable on `DecksScreen`'s up-to-6002-word list). `StatsScreen`/`ListeningScreen` FlatLists not yet done — same pattern, lower priority (bounded/small lists).
 
 ## Next
@@ -16,5 +16,5 @@ The current plan only — not history. Update this file whenever the plan change
 
 - [ ] Decide whether to keep chasing `"divers"` tag coverage down (currently ~52% of all words) or accept it as a documented limitation — needs a scoping conversation, not more unprompted keyword tuning (diminishing returns already observed: −13% for the last full pass).
 - [ ] "B2" CECRL level filter in Decks & mots is always empty (generation heuristic never outputs B2) — not fixed, no priority unless requested.
-- [ ] Verbose grammatical-word glosses (pronouns/determiners/prepositions) in generated vocabulary — no automatic fix planned, correctable case-by-case if a specific word is reported as a problem (no in-app word-edit UI exists yet, only add/delete).
+- [ ] Verbose grammatical-word glosses (pronouns/determiners/prepositions) in generated vocabulary — no automatic fix planned, correctable case-by-case if a specific word is reported as a problem (word editing exists now — Decks & mots — but only for `english`/`exampleEn`/tags/level, not `partOfSpeech`, which is where the verbose gloss actually lives).
 - [ ] Revisit the "no SQLite migration system" decision (Decision 011 in `docs/DECISIONS.md`) once the app has real on-device progress worth preserving — a silent-data-loss migration path won't be acceptable at that point.
