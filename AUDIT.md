@@ -402,6 +402,14 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : correctif appliqué et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** C'est la première fois dans ce chantier qu'une preuve directe et non ambiguë de la cause réelle est obtenue (pas une hypothèse déduite par élimination) — bon espoir que ce soit la bonne piste, mais reste à confirmer par un test réel avant de considérer la lecture vidéo fiable.
 
+### Dix-septième itération — le retrait du `Referer` a réglé la redirection, mais l'échec persiste sur la VRAIE page `/embed/` (21/08/2026)
+
+**Constat.** Retesté sur deux vidéos, dont `dQw4w9WgXcQ` (la référence universelle) : cette fois `href` montre bien `https://www.youtube.com/embed/{id}?start=...&end=...` — **la redirection est corrigée, on est enfin sur la bonne page.** Et la détection fonctionne désormais correctement, immédiatement (`type: 'error'`, `reason: 'error de configuración del reproductor'`) — plus de faux `ready`. Mais l'écran d'erreur natif YouTube apparaît quand même, cette fois confirmé sur la page `/embed/` elle-même, pas sur une redirection. **C'est la preuve la plus propre obtenue jusqu'ici : même la vidéo de référence universellement intégrable échoue sur la vraie page d'intégration, dans cet environnement précis.**
+
+**Dernière variable non isolée : le paramètre `origin` de l'URL, ajouté à l'itération 11 et jamais testé seul.** Retiré pour isoler son effet — c'est le seul ajout de configuration restant qui n'a pas encore été testé en isolation (le `Referer`, lui, avait été identifié et retiré à l'itération précédente).
+
+**Statut : `origin` retiré, compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** Si ce dernier retrait ne change rien, il faudra sérieusement considérer l'hypothèse d'une limitation de plateforme (WebView d'Expo Go incompatible avec les exigences du lecteur intégré moderne de YouTube — codecs/Media Source Extensions, restrictions sandbox iOS, etc.) plutôt qu'un problème de configuration corrigible par du code — auquel cas la piste à explorer avec l'utilisateur ne serait plus "corriger le lecteur intégré" mais "accepter le lien de secours 'Ver en Youtube' comme flux principal assumé", une décision produit à discuter, pas à prendre unilatéralement.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the redirect fix resolves video playback.** Root cause finally confirmed by direct evidence (not inferred): the `Referer` header was causing YouTube to silently redirect `/embed/{id}` to the full `/watch?v={id}` desktop page, which was crashing when squeezed into the small player component — hence the "player configuration error" every time. Removed the `Referer` header; added explicit detection if this redirect recurs. `tsc`/`jest` pass. **Not yet verified on device.** See `docs/AUDIT.md` Issue #2.
+- [ ] **Video playback — redirect confirmed fixed, but the embed itself still fails, even on the universal reference video.** Removing `Referer` fixed the redirect (confirmed: `href` now correctly shows `/embed/`), but the same native error still appears on the real embed page. Last untested variable (`origin` query param) removed as a final targeted test. **If this doesn't work, treat it as a likely platform limitation (Expo Go WebView vs. YouTube's embedded player) rather than keep guessing config fixes — raise with the user whether "Ver en YouTube" becomes the accepted primary flow instead of in-app playback.** See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

@@ -110,7 +110,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
 
   const uri = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}&end=${Math.ceil(
     endTime
-  )}&autoplay=1&playsinline=1&controls=1&rel=0&origin=https%3A%2F%2Fwww.youtube.com`;
+  )}&autoplay=1&playsinline=1&controls=1&rel=0`;
 
   return (
     <View style={styles.container}>
