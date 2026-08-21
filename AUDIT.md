@@ -366,6 +366,16 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : correctif de détection garanti correct, correctif de cause (Referer) candidat non confirmé — compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** Si l'erreur persiste malgré le `Referer`, au moins la détection sera désormais fiable pour objectiver précisément quel message s'affiche à chaque nouvel essai.
 
+### Treizième itération — le bug de détection persiste (timing, pas les marqueurs) ; l'hypothèse "problème systémique" elle-même remise en question (21/08/2026)
+
+**Constat.** Retesté avec `95oYTSICA30` : le log ne montre que `{"type":"ready"}` (×2/3, normal), aucune erreur détectée — **mais l'utilisateur rapporte avoir de nouveau vu l'écran "Ver en Youtube"**, et qu'en cliquant dessus la vidéo complète se lance côté YouTube réel (sous-titres actifs, pas de coupure à `endTime`) — comportement attendu du lien de secours en lui-même, mais confirmant que l'intégration échoue toujours malgré le `Referer`.
+
+**Le bug de détection n'était donc PAS résolu par le simple ajout des marqueurs manquants — un deuxième bug distinct, de timing.** Le contrôle ne s'exécutait qu'une seule fois, 1,8 s après le chargement — si YouTube rend son écran d'erreur de façon asynchrone (contrôle JS interne, ce qui est plausible), un contrôle ponctuel trop précoce peut le manquer complètement. **Corrigé : sondage répété** (toutes les 700 ms, jusqu'à 8 fois, ~5,6 s de fenêtre) au lieu d'un contrôle unique — dès qu'un marqueur d'erreur apparaît à n'importe quel sondage, `error` est posté immédiatement ; `ready` n'est posté qu'après épuisement de tous les sondages sans détection.
+
+**Remise en question méthodologique, pas juste un nouveau correctif : l'hypothèse "problème systémique, pas vidéo-spécifique" (itération 11) reposait sur une preuve plus faible que présenté à l'époque.** Les trois vidéos testées jusqu'ici (`lUHlckT8a44` Ibai, `PWkaQXXTMd8`, `95oYTSICA30`) sont toutes du contenu hispanophone de créateurs/labels — exactement le type de contenu où la désactivation d'intégration par Content ID est fréquente. "Deux vidéos différentes, même erreur" ne prouve pas un problème systémique si les DEUX vidéos ont individuellement l'intégration désactivée — ce que l'hypothèse d'origine n'avait pas exclu. **Demandé à l'utilisateur de tester avec une vidéo de contrôle dont l'intégration est garantie autorisée** (ex. une bande-annonce de studio officielle, ou la vidéo test universellement utilisée par les développeurs pour ce genre de vérification) pour trancher définitivement entre "l'intégration ne fonctionne pas du tout dans cet environnement" et "ce sont ces vidéos précises qui ont l'intégration désactivée".
+
+**Statut : correctif de timing appliqué et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device. Cause racine de l'échec de lecture toujours non confirmée.**
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

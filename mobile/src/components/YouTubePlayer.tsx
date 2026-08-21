@@ -140,25 +140,34 @@ const ERROR_CHECK_SCRIPT = `
   function post(msg) {
     window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
   }
-  setTimeout(function () {
+  var errorMarkers = [
+    'video unavailable', 'private video', "isn't available", 'unavailable in your country',
+    'sign in to confirm your age', 'this video is not available', 'video player configuration error',
+    'watch this video on youtube', 'watch on youtube',
+    'vidéo n\\'est pas disponible', 'vidéo indisponible', 'vidéo privée', 'n\\'est plus disponible',
+    'non disponible dans votre pays', 'confirmez votre âge', 'erreur de configuration du lecteur',
+    'regarder cette vidéo sur youtube', 'regarder sur youtube',
+    'vídeo no disponible', 'vídeo privado', 'ya no está disponible', 'error de configuración del reproductor',
+    'ver este video en youtube', 'ver en youtube'
+  ];
+  // La page d'erreur de YouTube se rend parfois de façon asynchrone (après
+  // un contrôle JS interne) -- un seul contrôle ponctuel peut la manquer si
+  // elle apparaît après coup (bug confirmé le 21/08/2026 : "ready" reçu
+  // alors que l'utilisateur voyait bien l'écran d'erreur). Sondage répété
+  // au lieu d'un contrôle unique.
+  var checksLeft = 8;
+  var interval = setInterval(function () {
+    checksLeft--;
     var text = ((document.body && document.body.innerText) || '').toLowerCase();
-    var errorMarkers = [
-      'video unavailable', 'private video', "isn't available", 'unavailable in your country',
-      'sign in to confirm your age', 'this video is not available', 'video player configuration error',
-      'watch this video on youtube', 'watch on youtube',
-      'vidéo n\\'est pas disponible', 'vidéo indisponible', 'vidéo privée', 'n\\'est plus disponible',
-      'non disponible dans votre pays', 'confirmez votre âge', 'erreur de configuration du lecteur',
-      'regarder cette vidéo sur youtube', 'regarder sur youtube',
-      'vídeo no disponible', 'vídeo privado', 'ya no está disponible', 'error de configuración del reproductor',
-      'ver este video en youtube', 'ver en youtube'
-    ];
     var matched = errorMarkers.find(function (m) { return text.indexOf(m) !== -1; });
     if (matched) {
+      clearInterval(interval);
       post({ type: 'error', reason: matched });
-    } else {
+    } else if (checksLeft <= 0) {
+      clearInterval(interval);
       post({ type: 'ready' });
     }
-  }, 1800);
+  }, 700);
   true;
 })();
 `;
