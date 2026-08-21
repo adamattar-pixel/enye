@@ -492,6 +492,18 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 103/107 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore vérifié sur device.**
 
+### Vingt-sixième itération — autoplay confirmé résolu, mais démarrage lent signalé ; retrait de `incognito` (21/08/2026)
+
+**Constat.** Retour utilisateur : "ok bah ca va juste la video prend du temps à se lancer" — confirme implicitement que le correctif d'autoplay (muet puis démuté) fonctionne (plus de mention du bouton rouge), mais signale un temps de chargement perçu comme long.
+
+**Cause identifiée, pas juste une piste parmi d'autres : `webViewProps={{ incognito: true }}` (ajouté à l'itération 21 pour tenter de régler les sous-titres) désactive toute mise en cache entre les chargements** — chaque nouveau segment retélécharge intégralement la page d'intégration distante (`lonelycpp.github.io/iframe.html`), le script `iframe_api` de YouTube, etc., au lieu de réutiliser ce qui a déjà été chargé lors du segment précédent dans la même session. Or `incognito` n'a jamais été la cause du contournement des sous-titres qui fonctionne réellement (c'est le clic DOM sur le bouton CC, ajouté deux itérations plus tard, qui ne dépend d'aucun état "propre"/non persistant) — c'était donc un coût sans bénéfice, à retirer.
+
+**Impact.** `incognito: true` retiré de `webViewProps`. Ne modifie ni le mécanisme de sous-titres (clic DOM, indépendant de la persistance des cookies) ni aucun autre correctif de ce chantier.
+
+**Autre facteur de lenteur identifié mais PAS corrigé cette fois, documenté pour référence future si le problème persiste malgré le retrait d'`incognito` :** [ListeningReviewContainer.tsx](mobile/src/screens/ListeningReviewContainer.tsx) remonte complètement `ListeningReviewScreen` (donc `YouTubePlayer`) à `key={current.cardId}` pour CHAQUE nouvel exercice, pas seulement pour "Réécouter" — ce qui force un rechargement complet de la WebView (nouvelle page, nouveaux scripts) à chaque segment. La librairie `react-native-youtube-iframe` a pourtant un mécanisme intégré plus léger pour charger une nouvelle vidéo dans un player déjà initialisé (`loadVideoById`, sans recharger la page), mais il n'est jamais utilisé puisque le composant est totalement redétruit/recréé à chaque fois. Non corrigé maintenant : `key={current.cardId}` sert aussi à réinitialiser le champ de saisie et l'animation d'entrée de `ListeningReviewScreen`, donc séparer le cycle de vie du lecteur de celui du reste de l'écran demanderait une restructuration plus large, pas un changement mineur — à envisager seulement si le retrait d'`incognito` ne suffit pas.
+
+**Statut : `incognito` retiré, compilé (`tsc --noEmit` propre, `npm test` 103/107 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore vérifié sur device.**
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

@@ -121,16 +121,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             // explicitement, l'utilisateur devait sinon les couper à la main).
             showClosedCaptions: false,
           }}
-          // `showClosedCaptions: false`, `incognito`, puis `unloadModule`
-          // seul ont tous les trois échoué sur device (21/08/2026, réglage
-          // iOS "Sous-titres et SDH" aussi vérifié désactivé). Filet de
-          // sécurité le plus robuste ajouté en dernier recours : simuler un
-          // vrai clic sur le bouton CC du lecteur si l'API le montre actif,
-          // en plus des méthodes d'API — voir `buildPlayerFixupScript` plus
-          // bas, qui gère aussi le bornage précis à la milliseconde du
-          // segment (demandé explicitement, `start`/`end` de l'API YouTube
-          // n'acceptent que des secondes entières).
-          webViewProps={{ incognito: true, injectedJavaScript: buildPlayerFixupScript(startTime, endTime) }}
+          // `showClosedCaptions: false` puis `incognito` ont tous deux
+          // échoué sur device (21/08/2026, réglage iOS "Sous-titres et
+          // SDH" aussi vérifié désactivé) avant de passer au clic DOM sur
+          // le bouton CC (voir `buildPlayerFixupScript` plus bas), qui ne
+          // dépend pas d'un état "propre"/non persistant — `incognito`
+          // n'a donc jamais été la cause du contournement actuellement en
+          // place, seulement un coût (aucune mise en cache entre les
+          // segments, chargement plus lent signalé explicitement par
+          // l'utilisateur) sans bénéfice réel. Retiré.
+          webViewProps={{ injectedJavaScript: buildPlayerFixupScript(startTime, endTime) }}
           onReady={() => onReady?.()}
           onChangeState={handleChangeState}
           onError={handleError}

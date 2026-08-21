@@ -8,7 +8,8 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 - [ ] **Confirm millisecond-precision segment bounds and the `replay()` fix.** YouTube's `start`/`end` params only support whole seconds; the player now self-corrects via `seekTo`/`getCurrentTime` polling. `replay()` now force-remounts the player instead of calling `seekTo` alone (which never resumes playback if paused).
 - [ ] **Confirm the strict Spanish-only transcript filter.** A prior "accept any language if no Spanish arrives" fallback was itself causing Arabic/English imports — removed; non-Spanish network captures are now always rejected (0 segments) rather than imported.
 - [ ] **Confirm the hidden-chrome player (`controls: false`)** shows only the video frame as requested — no native pause/seek now, only the app's "Réécouter" button.
-- [ ] **Confirm the mute-then-unmute autoplay fix.** User had to manually tap YouTube's own play button every segment — a known WebKit/iOS restriction (unmuted autoplay blocked without a user gesture, muted autoplay allowed). Fixed: starts muted, unmutes once `onChangeState` reports `'playing'`.
+- [x] Mute-then-unmute autoplay fix — confirmed working by the user, no more manual tap needed.
+- [ ] **Segment loading feels slow.** Removed `incognito: true` (was disabling all caching between loads, never actually the fix for captions). Not yet reconfirmed whether this alone is enough. A bigger, not-yet-attempted optimization is documented: the player fully remounts on every new exercise instead of using the library's lighter `loadVideoById` path — would need restructuring `ListeningReviewContainer.tsx`'s per-card remount boundary.
 
 See `docs/AUDIT.md` Issue #2.
 
