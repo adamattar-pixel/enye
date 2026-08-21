@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the rebuilt video player works on device.** Two targeted fixes (`baseUrl`, `origin`) and a "video-specific" hypothesis were all ruled out by evidence (error 152, undocumented, reproduced identically on two different videos). `YouTubePlayer.tsx` was rebuilt to load a real `https://www.youtube.com/embed/{id}` URL instead of a synthetic HTML page with YouTube's IFrame JS API — mirrors the pattern already confirmed working for captions. `tsc`/`jest`/bundle boot-check all pass. **Not yet tested on device.** What's left: start a review session and confirm the video actually plays. See `docs/AUDIT.md` Issue #2.
+- [ ] **Fix video playback — still broken after the embed-URL rebuild, narrower cause identified.** Retest showed a native YouTube error "Error de configuración del reproductor de video" ("Ver en YouTube" button) that the app's error-scanner failed to catch (confirmed bug, now fixed — the exact text is in the marker list). Leading hypothesis for the underlying failure: missing `Referer` header on the WebView request (a prior log showed `document.referrer` was empty) — added `headers: { Referer: 'https://www.youtube.com/' }` and an `origin` query param. **Not yet verified on device.** What's left: retest and confirm the video actually plays this time; the error-scan fix at least guarantees any remaining failure will now be correctly detected and reported. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

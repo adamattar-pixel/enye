@@ -354,6 +354,18 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore vérifié sur device.** C'est un changement plus important que les précédents correctifs ciblés (remplacement complet du mécanisme de chargement) — à retester en priorité, avec plusieurs vidéos différentes si possible pour confirmer que ce n'est pas juste une coïncidence sur un cas particulier.
 
+### Douzième itération — nouveau message d'erreur trouvé (referrer manquant probable), plus un vrai bug de détection découvert en même temps (21/08/2026)
+
+**Constat.** Retesté sur device avec une nouvelle vidéo (`PWkaQXXTMd8`) : les logs ne montrent QUE `{"type": "ready"}` (deux fois — normal, `injectedJavaScript` se réexécute à chaque re-navigation), aucune erreur détectée. **Mais la vidéo n'a toujours pas joué** — l'utilisateur rapporte avoir vu le message YouTube natif "Error de configuración del reproductor de video" avec un bouton "Ver en YouTube".
+
+**Deux problèmes distincts révélés par ce test, pas un seul.**
+
+1. **Bug de détection confirmé, pas une hypothèse.** Le texte exact affiché ("Error de configuración del reproductor de video" / "Ver en YouTube") ne correspondait à AUCUN des marqueurs multilingues de `ERROR_CHECK_SCRIPT` — donc le composant a signalé `ready` alors que la vidéo avait en fait échoué. Corrigé : marqueurs ajoutés dans les trois langues pour ce message précis ("video player configuration error"/"watch on youtube", "erreur de configuration du lecteur"/"regarder sur youtube", "error de configuración del reproductor"/"ver en youtube"). Ce correctif-là est garanti correct (basé sur le texte réel observé, pas une supposition) — la détection sera fiable au prochain test, indépendamment du reste.
+
+2. **Cause probable de l'échec lui-même (hypothèse, pas confirmée) : absence d'en-tête `Referer`.** "Error de configuración du reproductor de video" + bouton "Ver en YouTube" est le message standard de YouTube pour un embed jugé non autorisé (même famille que l'erreur 101/150 de l'API JS) — et il est apparu de façon identique sur plusieurs vidéos différentes, ce qui pointe vers quelque chose d'envoyé (ou pas envoyé) à chaque requête plutôt qu'une restriction propre à chaque vidéo. Un log précédent avait déjà montré `document.referrer: ""` (vide) — `source={{ uri }}` sans en-tête explicite ne fournit aucun `Referer` HTTP à la requête initiale, ce que la page d'embed de YouTube peut exiger pour autoriser la lecture. Ajouté : `headers: { Referer: 'https://www.youtube.com/' }` sur la source de la WebView, et `origin=https%3A%2F%2Fwww.youtube.com` en paramètre de l'URL d'embed elle-même (recommandé par la documentation YouTube pour ce endpoint aussi, pas seulement pour l'API JS).
+
+**Statut : correctif de détection garanti correct, correctif de cause (Referer) candidat non confirmé — compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** Si l'erreur persiste malgré le `Referer`, au moins la détection sera désormais fiable pour objectiver précisément quel message s'affiche à chaque nouvel essai.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

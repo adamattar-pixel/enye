@@ -99,7 +99,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
 
   const uri = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}&end=${Math.ceil(
     endTime
-  )}&autoplay=1&playsinline=1&controls=1&rel=0`;
+  )}&autoplay=1&playsinline=1&controls=1&rel=0&origin=https%3A%2F%2Fwww.youtube.com`;
 
   return (
     <View style={styles.container}>
@@ -107,7 +107,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
         key={reloadKey}
         ref={webviewRef}
         style={styles.webview}
-        source={{ uri }}
+        source={{ uri, headers: { Referer: 'https://www.youtube.com/' } }}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
@@ -144,10 +144,13 @@ const ERROR_CHECK_SCRIPT = `
     var text = ((document.body && document.body.innerText) || '').toLowerCase();
     var errorMarkers = [
       'video unavailable', 'private video', "isn't available", 'unavailable in your country',
-      'sign in to confirm your age', 'this video is not available',
+      'sign in to confirm your age', 'this video is not available', 'video player configuration error',
+      'watch this video on youtube', 'watch on youtube',
       'vidéo n\\'est pas disponible', 'vidéo indisponible', 'vidéo privée', 'n\\'est plus disponible',
-      'non disponible dans votre pays', 'confirmez votre âge',
-      'vídeo no disponible', 'vídeo privado', 'ya no está disponible'
+      'non disponible dans votre pays', 'confirmez votre âge', 'erreur de configuration du lecteur',
+      'regarder cette vidéo sur youtube', 'regarder sur youtube',
+      'vídeo no disponible', 'vídeo privado', 'ya no está disponible', 'error de configuración del reproductor',
+      'ver este video en youtube', 'ver en youtube'
     ];
     var matched = errorMarkers.find(function (m) { return text.indexOf(m) !== -1; });
     if (matched) {
