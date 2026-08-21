@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -212,6 +212,13 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     await refresh();
   };
 
+  const renderItem = useCallback(
+    ({ item, index }: { item: ReviewHistoryRow; index: number }) => (
+      <ReviewHistoryRowView item={item} index={index} styles={styles} onEdit={setEditing} />
+    ),
+    [styles]
+  );
+
   if (loading) return null;
 
   return (
@@ -222,26 +229,9 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       </Text>
       <FlatList
         data={rows}
-        keyExtractor={(r) => String(r.id)}
+        keyExtractor={reviewHistoryKeyExtractor}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item, index }) => (
-          <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.historyRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.wordSpanish}>{item.spanish}</Text>
-              <Text style={styles.wordEnglish}>{item.english}</Text>
-              <Text style={styles.historyDate}>
-                {item.reviewedAt.toLocaleDateString()} · {item.reviewedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
-            <AnimatedPressable
-              style={[styles.gradeBadge, styles[`gradeBadge_${item.grade}` as const]]}
-              haptic={Haptics.ImpactFeedbackStyle.Light}
-              onPress={() => setEditing(item)}
-            >
-              <Text style={styles.gradeBadgeText}>{GRADE_LABELS[item.grade]}</Text>
-            </AnimatedPressable>
-          </FadeInView>
-        )}
+        renderItem={renderItem}
         ListEmptyComponent={<Text style={styles.empty}>Aucune révision pour l'instant.</Text>}
       />
 
@@ -276,6 +266,39 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     </View>
   );
 }
+
+const reviewHistoryKeyExtractor = (r: ReviewHistoryRow) => String(r.id);
+
+const ReviewHistoryRowView = memo(function ReviewHistoryRowView({
+  item,
+  index,
+  styles,
+  onEdit,
+}: {
+  item: ReviewHistoryRow;
+  index: number;
+  styles: Styles;
+  onEdit: (row: ReviewHistoryRow) => void;
+}) {
+  return (
+    <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.historyRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.wordSpanish}>{item.spanish}</Text>
+        <Text style={styles.wordEnglish}>{item.english}</Text>
+        <Text style={styles.historyDate}>
+          {item.reviewedAt.toLocaleDateString()} · {item.reviewedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+      </View>
+      <AnimatedPressable
+        style={[styles.gradeBadge, styles[`gradeBadge_${item.grade}` as const]]}
+        haptic={Haptics.ImpactFeedbackStyle.Light}
+        onPress={() => onEdit(item)}
+      >
+        <Text style={styles.gradeBadgeText}>{GRADE_LABELS[item.grade]}</Text>
+      </AnimatedPressable>
+    </FadeInView>
+  );
+});
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({

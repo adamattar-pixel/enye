@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import {
@@ -248,19 +248,29 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     }
   };
 
-  const handleDelete = (video: ListeningVideoWithStats) => {
-    Alert.alert('Supprimer cette vidéo ?', video.title, [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteListeningVideo(db, video.id);
-          await refresh();
+  const handleDelete = useCallback(
+    (video: ListeningVideoWithStats) => {
+      Alert.alert('Supprimer cette vidéo ?', video.title, [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteListeningVideo(db, video.id);
+            await refresh();
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    },
+    [db, refresh]
+  );
+
+  const renderVideoItem = useCallback(
+    ({ item, index }: { item: ListeningVideoWithStats; index: number }) => (
+      <VideoRow item={item} index={index} styles={styles} onDelete={handleDelete} />
+    ),
+    [styles, handleDelete]
+  );
 
   if (loading) return null;
 
@@ -277,7 +287,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       {transcriptFetcherNode}
       <FlatList
         data={videos}
-        keyExtractor={(v) => v.id}
+        keyExtractor={videoKeyExtractor}
         contentContainerStyle={styles.libraryListContent}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
@@ -341,24 +351,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
             <Text style={styles.librarySectionTitle}>Ta bibliothèque</Text>
           </>
         }
-        renderItem={({ item, index }) => (
-          <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.videoRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.videoTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <Text style={styles.videoMeta}>
-                {item.channel} · {item.segmentCount} segment{item.segmentCount !== 1 ? 's' : ''}
-              </Text>
-              <View style={[styles.captionBadge, item.captionStatus === 'unavailable' && styles.captionBadgeUnavailable]}>
-                <Text style={styles.captionBadgeText}>{CAPTION_STATUS_LABELS[item.captionStatus]}</Text>
-              </View>
-            </View>
-            <AnimatedPressable style={styles.deleteButton} haptic="none" onPress={() => handleDelete(item)}>
-              <Text style={styles.deleteButtonText}>×</Text>
-            </AnimatedPressable>
-          </FadeInView>
-        )}
+        renderItem={renderVideoItem}
         ListEmptyComponent={
           <Text style={styles.trainingHint}>Aucune vidéo pour l'instant — recherche une vidéo ci-dessus pour commencer.</Text>
         }
@@ -366,6 +359,39 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     </View>
   );
 }
+
+const videoKeyExtractor = (v: ListeningVideoWithStats) => v.id;
+
+const VideoRow = memo(function VideoRow({
+  item,
+  index,
+  styles,
+  onDelete,
+}: {
+  item: ListeningVideoWithStats;
+  index: number;
+  styles: Styles;
+  onDelete: (video: ListeningVideoWithStats) => void;
+}) {
+  return (
+    <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.videoRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.videoTitle} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <Text style={styles.videoMeta}>
+          {item.channel} · {item.segmentCount} segment{item.segmentCount !== 1 ? 's' : ''}
+        </Text>
+        <View style={[styles.captionBadge, item.captionStatus === 'unavailable' && styles.captionBadgeUnavailable]}>
+          <Text style={styles.captionBadgeText}>{CAPTION_STATUS_LABELS[item.captionStatus]}</Text>
+        </View>
+      </View>
+      <AnimatedPressable style={styles.deleteButton} haptic="none" onPress={() => onDelete(item)}>
+        <Text style={styles.deleteButtonText}>×</Text>
+      </AnimatedPressable>
+    </FadeInView>
+  );
+});
 
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
