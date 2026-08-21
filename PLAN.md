@@ -538,6 +538,14 @@ Suite de la section de planification ci-dessus, codée après autorisation expli
 
 **Statut : logging de diagnostic ajouté, cause réelle PAS encore identifiée.** Prochaine étape : retester et lire le log `[ListeningScreen] échec ajout vidéo:` dans Metro.
 
+## Vraie cause trouvée : bug SQL, pas réseau — probablement le dernier obstacle (21/08/2026)
+
+**Le log a immédiatement montré la vraie cause** : `Error code 1: 5 values for 6 columns`, dans l'insertion par lots de `listening_segments` (`database.ts`) — `insertInBatches(..., 5, 'INSERT INTO listening_segments (id, video_id, segment_index, start_time, end_time, transcript)', ...)` : `columnCount` valait 5 pour une requête qui nomme 6 colonnes. Corrigé en une ligne (`5` → `6`).
+
+**Excellente nouvelle en creusant les logs juste avant cette erreur** : `xhr_intercepted` a capturé du contenu réel sur PLUSIEURS vidéos testées à la suite (jusqu'à 500 Ko) — le mécanisme d'interception ET le parseur `fmt=json3` (corrigé lors de l'itération précédente) ont donc fonctionné jusqu'au bout, assez pour produire des segments réels et atteindre l'écriture en base, où SEULEMENT LÀ ça a échoué. "Erreur réseau" était un message doublement trompeur — ni la cause affichée, ni même la bonne famille de problème.
+
+**Statut : correctif appliqué et compilé, PAS encore revérifié sur device — mais avec de bonnes raisons de penser que c'était le dernier obstacle.** Prochain test : ajouter une vidéo et vérifier que l'app affiche bien un nombre de segments > 0 (pas seulement dans les logs). Détail complet dans AUDIT.md.
+
 ## Prochaines actions
 
 - [ ] **Retester sur iPhone réel** — en particulier confirmer que les boutons de notation répondent au toucher, que les animations jouent, que l'historique s'affiche et se corrige correctement, que le padding est jugé suffisant, que le plafond nouvelles/révisions se ressent bien en session comme en notification, et que l'installation existante reçoit bien les ~5966 nouveaux mots via `importMissingWords` sans ralentissement excessif au démarrage.

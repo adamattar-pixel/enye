@@ -1134,7 +1134,7 @@ export async function addListeningVideo(
     await insertInBatches(
       db,
       segmentRows,
-      5,
+      6,
       'INSERT INTO listening_segments (id, video_id, segment_index, start_time, end_time, transcript)',
       (seg) => [seg.id, video.id, seg.index, seg.startTime, seg.endTime, seg.transcript]
     );

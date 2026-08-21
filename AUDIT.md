@@ -288,6 +288,23 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Statut : cause réelle non identifiée, logging de diagnostic ajouté pour la découvrir au prochain test — ne pas supposer qu'il s'agit véritablement d'un problème réseau tant que le log `[ListeningScreen] échec ajout vidéo:` n'a pas été lu.**
 
+### Septième itération — cause trouvée grâce au log : un vrai bug SQL, pas un problème réseau (21/08/2026)
+
+**Constat.** Le log ajouté ci-dessus a immédiatement donné la vraie cause :
+
+```
+[ListeningScreen] échec ajout vidéo: Error: Calling the 'prepareAsync' function has failed
+→ Caused by: Error code 1: 5 values for 6 columns
+```
+
+**Confirmé exactement comme prévu par ce que montrent les logs juste avant cette erreur — et c'est une excellente nouvelle pour le reste du chantier** : `[TranscriptFetcher] xhr_intercepted` a capturé un vrai corps sur PLUSIEURS vidéos différentes testées à la suite (395 114, 368 825, 504 109 et 130 149 caractères), donc l'interception réseau ET le nouveau parseur `parseJson3Captions` (corrigé lors de l'itération précédente) ont visiblement fonctionné jusqu'au bout — assez de segments réels ont été produits pour atteindre l'étape suivante, `addListeningVideo`, qui a échoué avec une erreur SQL, pas une erreur réseau. Le message "Erreur réseau" affiché à l'utilisateur était donc doublement trompeur.
+
+**Diagnostic.** Dans `addListeningVideo` ([database.ts](mobile/src/data/database.ts)), l'insertion par lots dans `listening_segments` appelait `insertInBatches(db, segmentRows, 5, 'INSERT INTO listening_segments (id, video_id, segment_index, start_time, end_time, transcript)', ...)` — le paramètre `columnCount` valait **5**, alors que la liste de colonnes de la requête en nomme **6** (`id, video_id, segment_index, start_time, end_time, transcript`), et la fonction `toParams` fournit bien 6 valeurs par ligne. `valuesPlaceholders(5, N)` générait donc des groupes `(?, ?, ?, ?, ?)` à 5 emplacements pour une liste de colonnes qui en attend 6 — exactement l'erreur SQLite observée. Une simple faute de frappe (le paramètre `9` de l'insertion suivante, `listening_cards`, était lui correct).
+
+**Impact / correctif appliqué.** `columnCount` corrigé de `5` à `6` pour l'insertion `listening_segments`. Correctif d'une ligne, mais avec un impact potentiellement décisif : c'était le dernier obstacle identifié dans toute la chaîne captions → segments → base de données.
+
+**Statut : correctif appliqué et compilé (`tsc --noEmit` propre, `npm test` 91/95 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore revérifié sur device.** Étant donné que les logs montrent déjà du contenu réel intercepté et parsé avec succès pour plusieurs vidéos, ce correctif a de bonnes chances d'être la dernière pièce manquante — mais ça reste à confirmer par un test réel montrant l'ajout réussi d'une vidéo avec un nombre de segments > 0 affiché dans l'app, pas seulement dans les logs.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.
