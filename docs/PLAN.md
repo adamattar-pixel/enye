@@ -4,7 +4,8 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the `unloadModule('captions')` fix — closed captions still won't turn off after two prior failed attempts.** Wrong-language transcripts are fixed and confirmed by the user. Captions-stay-on is not: neither `showClosedCaptions: false` nor `webViewProps={{ incognito: true }}` worked, and the iOS system accessibility setting was checked and ruled out. Current fix calls the IFrame API's real captions-control method (`player.unloadModule('captions')`) via an injected script, since `cc_load_policy` is documented to only avoid forcing captions on, never force them off. Not yet verified — don't assume this works given the track record on this specific bug. See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the DOM-click captions fix — three prior fixes to this bug have all failed.** `showClosedCaptions: false`, `incognito`, and `player.unloadModule('captions')` were each tried and each failed on device. Current fix clicks the player's own CC toggle button in the DOM directly (`.ytp-subtitles-button`) whenever found pressed, polled continuously — the most direct mechanism available, not dependent on an internal API method that might be silently failing (no diagnostic channel exists back from this injected script). Don't assume this works given the track record.
+- [ ] **Confirm millisecond-precision segment bounds and the `replay()` fix.** YouTube's `start`/`end` params only support whole seconds; the player now self-corrects via `seekTo`/`getCurrentTime` polling for real fractional bounds. `replay()` now force-remounts the player instead of calling `seekTo` alone, since that never resumes playback if paused (needed once end-of-segment pausing became reliable). See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

@@ -43,11 +43,17 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
 ) {
   const playerRef = useRef<YoutubeIframeRef>(null);
   const [width, setWidth] = useState(0);
+  const [replayKey, setReplayKey] = useState(0);
 
   useImperativeHandle(ref, () => ({
-    replay: () => {
-      playerRef.current?.seekTo(startTime, true);
-    },
+    // `seekTo` seul ne reprend jamais la lecture si le player est en
+    // pause (documenté officiellement par l'API YouTube) — maintenant que
+    // la coupure précise à `endTime` est fiable (voir plus bas), rejouer
+    // laisserait sinon la vidéo en pause après le retour au début. Un
+    // remontage complet (nouvelle `key`) redémarre proprement avec
+    // `play=true`, plutôt que de dépendre d'un appel `playVideo` que la
+    // librairie n'expose pas dans sa ref.
+    replay: () => setReplayKey((k) => k + 1),
   }));
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -74,6 +80,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     <View style={styles.container} onLayout={handleLayout}>
       {width > 0 && (
         <YoutubeIframe
+          key={replayKey}
           ref={playerRef}
           height={(width * 9) / 16}
           width={width}
@@ -90,19 +97,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             // explicitement, l'utilisateur devait sinon les couper à la main).
             showClosedCaptions: false,
           }}
-          // `showClosedCaptions: false` (cc_load_policy=0) ni `incognito`
-          // n'ont suffi (confirmé sur device le 21/08/2026, réglage iOS
-          // "Sous-titres et SDH" aussi vérifié désactivé — pas la cause).
-          // `cc_load_policy` ne fait par conception que ne pas FORCER
-          // l'affichage ; il ne peut jamais forcer l'extinction si YouTube
-          // décide d'activer les sous-titres pour une autre raison (ex.
-          // traduction automatique proposée par défaut sur ce type de
-          // contenu). La librairie déclare `var player` en portée globale
-          // dans la page (voir PlayerScripts.js sur GitHub) — on appelle
-          // directement la méthode réelle de l'API IFrame prévue pour ça,
-          // `unloadModule('captions')`, plus contraignante que le simple
-          // paramètre `cc_load_policy`.
-          webViewProps={{ incognito: true, injectedJavaScript: DISABLE_CAPTIONS_SCRIPT }}
+          // `showClosedCaptions: false`, `incognito`, puis `unloadModule`
+          // seul ont tous les trois échoué sur device (21/08/2026, réglage
+          // iOS "Sous-titres et SDH" aussi vérifié désactivé). Filet de
+          // sécurité le plus robuste ajouté en dernier recours : simuler un
+          // vrai clic sur le bouton CC du lecteur si l'API le montre actif,
+          // en plus des méthodes d'API — voir `buildPlayerFixupScript` plus
+          // bas, qui gère aussi le bornage précis à la milliseconde du
+          // segment (demandé explicitement, `start`/`end` de l'API YouTube
+          // n'acceptent que des secondes entières).
+          webViewProps={{ incognito: true, injectedJavaScript: buildPlayerFixupScript(startTime, endTime) }}
           onReady={() => onReady?.()}
           onChangeState={handleChangeState}
           onError={handleError}
@@ -112,33 +116,74 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
   );
 });
 
-/** `cc_load_policy` (via `showClosedCaptions`) ne peut qu'éviter de FORCER
- * l'affichage des sous-titres, jamais forcer leur extinction (documenté
- * officiellement par YouTube) — insuffisant seul (confirmé sur device le
- * 21/08/2026). `player` est une variable globale de la page (déclarée
- * `var player` au niveau racine d'un `<script>` classique, pas un module
- * — voir `react-native-youtube-iframe`'s `PlayerScripts.js`), donc
- * accessible depuis ce script injecté séparément. `unloadModule('captions')`
- * est la méthode réelle de l'API IFrame prévue pour désactiver
- * effectivement le module sous-titres après coup, plus contraignante que
- * le simple indice `cc_load_policy`. Sondage répété (le `player` n'existe
- * qu'après le chargement asynchrone de `iframe_api`, pas immédiatement). */
-const DISABLE_CAPTIONS_SCRIPT = `
+/** Script injecté dans la page du lecteur (`player` est une variable
+ * globale déclarée `var player` au niveau racine d'un `<script>` classique
+ * par `react-native-youtube-iframe`, pas un module — voir son
+ * `PlayerScripts.js` sur GitHub — donc accessible depuis n'importe quel
+ * script partageant la même WebView). Trois responsabilités, combinées en
+ * un seul sondage pour ne pas multiplier les `setInterval` :
+ *
+ * 1. **Désactivation des sous-titres.** `cc_load_policy` (via
+ *    `showClosedCaptions`), puis `incognito`, puis `unloadModule('captions')`
+ *    seul ont chacun échoué sur device (21/08/2026, itérations successives
+ *    — voir AUDIT.md). `cc_load_policy` ne peut par conception qu'éviter de
+ *    FORCER l'affichage, jamais forcer l'extinction. Filet de sécurité le
+ *    plus direct ajouté en dernier recours : simuler un vrai clic sur le
+ *    bouton CC du lecteur (`.ytp-subtitles-button`, classe stable de
+ *    l'habillage YouTube) chaque fois qu'il est trouvé actif
+ *    (`aria-pressed="true"`) — équivalent à ce que ferait un utilisateur
+ *    réel, sondé en continu au cas où l'état changerait après coup (ex.
+ *    activation tardive d'une traduction automatique).
+ * 2. **Bornage précis du segment, à la milliseconde.** Les paramètres
+ *    `start`/`end` de l'API YouTube (`initialPlayerParams`) n'acceptent que
+ *    des secondes entières — limitation documentée de l'API, pas un choix
+ *    de ce projet. `player.seekTo(secondes, true)` et
+ *    `player.getCurrentTime()`, eux, acceptent des flottants : on corrige
+ *    la position de départ précisément dès que le player existe, puis on
+ *    sonde `getCurrentTime()` pour couper à `endTime` au lieu de compter
+ *    uniquement sur le `end` grossier (demandé explicitement, 21/08/2026).
+ */
+function buildPlayerFixupScript(startTime: number, endTime: number): string {
+  return `
 (function () {
   var attempts = 0;
-  var interval = setInterval(function () {
-    attempts++;
-    if (typeof player !== 'undefined' && player && typeof player.unloadModule === 'function') {
-      try { player.unloadModule('captions'); } catch (e) {}
-      try { player.setOption && player.setOption('captions', 'track', {}); } catch (e) {}
-      clearInterval(interval);
-    } else if (attempts > 20) {
-      clearInterval(interval);
+  var seeked = false;
+
+  function disableCaptions(p) {
+    try { p.unloadModule && p.unloadModule('captions'); } catch (e) {}
+    try { p.setOption && p.setOption('captions', 'track', {}); } catch (e) {}
+    var btn = document.querySelector('.ytp-subtitles-button');
+    if (btn && btn.getAttribute('aria-pressed') === 'true') {
+      try { btn.click(); } catch (e) {}
     }
+  }
+
+  var initInterval = setInterval(function () {
+    attempts++;
+    if (typeof player === 'undefined' || !player) {
+      if (attempts > 20) clearInterval(initInterval);
+      return;
+    }
+    clearInterval(initInterval);
+
+    if (!seeked && player.seekTo) {
+      try { player.seekTo(${startTime}, true); } catch (e) {}
+      seeked = true;
+    }
+
+    disableCaptions(player);
+    setInterval(function () { disableCaptions(player); }, 1000);
+
+    setInterval(function () {
+      if (player.getCurrentTime && player.getCurrentTime() >= ${endTime}) {
+        try { player.pauseVideo(); } catch (e) {}
+      }
+    }, 200);
   }, 300);
   true;
 })();
 `;
+}
 
 const styles = StyleSheet.create({
   container: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 14, overflow: 'hidden' },
