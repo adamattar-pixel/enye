@@ -177,3 +177,20 @@ Decision: Keyword matching on the English gloss against curated per-theme word l
 Reasoning: Literal 100% coverage was requested; a keyword heuristic cannot achieve full *semantic* accuracy, so the catch-all is the honest way to guarantee coverage without pretending the tagging is more meaningful than it is.
 
 Consequences: ~3100 of 6002 words carry a tag only via the `"divers"` catch-all — not a real theme. Don't present tag coverage as semantically complete; it's a documented limitation, not a resolved gap.
+
+---
+
+# Decision 013 — YouTube video player: real `embed/{id}` URL, not a synthetic HTML page with the IFrame JS API
+
+Date: 2026-08-21
+Status: Accepted
+
+Context: `mobile/src/components/YouTubePlayer.tsx` originally loaded a custom HTML document (`source={{ html: ... }}`) embedding YouTube's official IFrame Player API (`YT.Player`) via a `<script>` tag, to get precise `onReady`/`onStateChange`/`onError` JS events. Confirmed broken on device 2026-08-21 with an undocumented error code 152 on every video tested. Two targeted fixes (`baseUrl` on the WebView source, `origin` in `playerVars` — both documented, standard remedies for exactly this class of failure) were applied and both individually confirmed *not* the cause via device logs (origin was provably correct, error persisted identically). A "maybe it's just this one video" hypothesis was also tested and ruled out — a second, unrelated video produced the identical error.
+
+Decision: Replace the synthetic-HTML + IFrame-JS-API approach entirely. `YouTubePlayer` now loads a real `https://www.youtube.com/embed/{videoId}` URL directly (`source.uri`), with `start`/`end`/`autoplay`/`playsinline`/`controls` as URL query params (all natively supported by the embed endpoint, no JS API needed for segment bounding).
+
+Reasoning: With the origin and video-specific hypotheses both eliminated by direct evidence, the remaining plausible cause is the fundamental approach — a WebView-hosted synthetic document trying to convince YouTube's IFrame API it has a legitimate origin, rather than actually being one. Loading YouTube's own real embed page by a real HTTPS URL sidesteps the whole class of problem, and mirrors `TranscriptFetcher.tsx`'s already-confirmed-working pattern of loading a real `youtube.com` page rather than fabricating one.
+
+Alternatives considered and rejected: continuing to patch the synthetic-HTML approach with further playerVars/config tweaks — rejected once two independent, well-documented candidate fixes both failed to change the outcome, since further tweaks in that direction would be unguided guessing rather than evidence-driven.
+
+Consequences: Precise JS player events (`onReady`, `onStateChange`) are no longer available without re-introducing the same origin problem via an injected IFrame-API script. `onReady`/`onError` are now inferred from a best-effort, multilingual text scan of the page 1.8s after load (not guaranteed exhaustive); `onSegmentEnded` is estimated by an RN-side timer (`endTime - startTime`), not a native event. Currently low-risk: `ListeningReviewScreen.tsx` only wires up `onError`, not the other two callbacks. If a future feature needs precise playback state, revisit this trade-off rather than silently degrading behavior.

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
@@ -13,7 +13,8 @@ type Props = {
   endTime: number;
   /** Appelé quand le player a fini de charger et est prêt à lire. */
   onReady?: () => void;
-  /** Appelé quand la lecture atteint `endTime` (segment terminé). */
+  /** Appelé quand la lecture atteint `endTime` (segment terminé) — estimation
+   * par minuteur RN, pas un événement natif du player (voir plus bas). */
   onSegmentEnded?: () => void;
   /** Appelé sur une erreur du player YouTube (voir la table de
    * résilience de PLAN.md — vidéo bloquée à l'intégration, région,
@@ -23,22 +24,34 @@ type Props = {
 };
 
 /**
- * Wrapper autour d'une page HTML minimale embarquant l'IFrame Player API
- * de YouTube (officielle) dans une WebView — pas de dépendance vidéo
- * tierce, la vidéo n'est jamais téléchargée (voir la mission :
- * "uniquement via le lecteur natif de YouTube").
+ * Wrapper autour d'une vraie page `youtube.com/embed/{id}` chargée par URL
+ * réelle dans une WebView — PAS une page HTML custom embarquant l'IFrame
+ * Player API JS (ancienne approche, abandonnée le 21/08/2026 après avoir
+ * échoué de façon systémique sur device réel : erreur non documentée
+ * "code 152" reproduite sur deux vidéos différentes, y compris après avoir
+ * confirmé que `baseUrl`/`origin` fonctionnaient correctement — voir
+ * AUDIT.md itérations 8 à 10). Cette nouvelle approche évite tout le
+ * problème d'origine synthétique en chargeant une vraie page YouTube par
+ * une vraie URL https, sur le même principe que `TranscriptFetcher.tsx`
+ * (confirmé fonctionnel sur device pour les captions).
  *
- * Compatibilité Expo Go réelle **non vérifiée dans cette session** (pas
- * de device disponible) — `expo-doctor` ne signale rien d'anormal après
- * `npx expo install react-native-webview`, mais c'était le point le plus
- * bloquant identifié en planification (voir PLAN.md, "Points à valider
- * avant implémentation", #1) et reste à confirmer sur l'iPhone réel de
- * l'utilisateur avant de considérer cette fonctionnalité fiable.
+ * Pas de dépendance vidéo tierce, la vidéo n'est jamais téléchargée (voir
+ * la mission : "uniquement via le lecteur natif de YouTube").
  *
- * Le paramètre `end` natif de l'IFrame API est utilisé pour arrêter la
- * lecture au bon moment ; en secours, la page injecte aussi un minuteur
- * JS qui appelle `pauseVideo()` si `end` s'avère peu fiable en pratique
- * (also non vérifié — voir même point ouvert du plan).
+ * **Compromis assumé** : sans script custom embarquant l'IFrame Player API
+ * (qui exigerait de re-attaquer le même problème d'origine), on perd les
+ * événements JS précis (`onReady`/`onStateChange`). `onReady` est déduit
+ * d'un script injecté qui vérifie, 1,8 s après chargement, l'absence de
+ * texte d'erreur connu dans la page (multilingue, best-effort — pas une
+ * détection garantie à 100%). `onSegmentEnded` est estimé par un minuteur
+ * côté RN (`endTime - startTime`), pas un événement natif — actuellement
+ * sans conséquence car [ListeningReviewScreen.tsx](../screens/ListeningReviewScreen.tsx)
+ * ne câble que `onError`, ni `onReady` ni `onSegmentEnded`. Le blocage de
+ * lecture au bon moment reste géré nativement par le paramètre `end` de
+ * l'URL d'intégration YouTube (documenté, indépendant de cette API JS).
+ *
+ * **Non encore revérifié sur device** — voir AUDIT.md, itérations 8 à 10
+ * pour l'historique complet du diagnostic qui a mené à ce changement.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function YouTubePlayer(
   { videoId, startTime, endTime, onReady, onSegmentEnded, onError },
@@ -46,42 +59,60 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
 ) {
   const webviewRef = useRef<WebView>(null);
   const [webviewError, setWebviewError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useImperativeHandle(ref, () => ({
-    replay: () => {
-      webviewRef.current?.injectJavaScript(`window.__lexisReplay && window.__lexisReplay(); true;`);
-    },
+    replay: () => setReloadKey((k) => k + 1),
   }));
+
+  useEffect(() => {
+    setWebviewError(false);
+  }, [videoId, reloadKey]);
+
+  // Filet de sécurité côté RN pour `onSegmentEnded` (voir docstring) —
+  // approximatif, part du principe que la lecture démarre peu après le
+  // montage grâce à `autoplay=1` dans l'URL.
+  useEffect(() => {
+    const durationMs = Math.max(0, (endTime - startTime) * 1000);
+    if (!durationMs) return;
+    const timer = setTimeout(() => onSegmentEnded?.(), durationMs + 500);
+    return () => clearTimeout(timer);
+  }, [videoId, startTime, endTime, reloadKey, onSegmentEnded]);
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
-        const data = JSON.parse(event.nativeEvent.data) as { type: string; code?: number; message?: string };
+        const data = JSON.parse(event.nativeEvent.data) as { type: string; reason?: string };
         console.log('[YouTubePlayer] message:', data);
         if (data.type === 'ready') onReady?.();
-        else if (data.type === 'segmentEnded') onSegmentEnded?.();
         else if (data.type === 'error') onError?.();
       } catch (err) {
         console.log('[YouTubePlayer] message JSON invalide:', event.nativeEvent.data, err);
       }
     },
-    [onReady, onSegmentEnded, onError]
+    [onReady, onError]
   );
 
   if (webviewError) {
     return <View style={styles.container} />;
   }
 
+  const uri = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}&end=${Math.ceil(
+    endTime
+  )}&autoplay=1&playsinline=1&controls=1&rel=0`;
+
   return (
     <View style={styles.container}>
       <WebView
+        key={reloadKey}
         ref={webviewRef}
         style={styles.webview}
-        source={{ html: buildPlayerHtml(videoId, startTime, endTime), baseUrl: 'https://www.youtube.com' }}
+        source={{ uri }}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled
         domStorageEnabled
+        injectedJavaScript={ERROR_CHECK_SCRIPT}
         onMessage={handleMessage}
         onError={(event) => {
           console.log('[YouTubePlayer] WebView onError:', event.nativeEvent);
@@ -90,103 +121,44 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
         }}
         onHttpError={(event) => {
           console.log('[YouTubePlayer] WebView onHttpError:', event.nativeEvent);
+          setWebviewError(true);
+          onError?.();
         }}
       />
     </View>
   );
 });
 
-function buildPlayerHtml(videoId: string, startTime: number, endTime: number): string {
-  // videoId vient de `youtubeUrl.ts` (regex stricte, 11 caractères
-  // alphanumériques/-/_) — jamais de texte libre utilisateur injecté
-  // directement ici sans validation préalable.
-  return `<!DOCTYPE html>
-<html>
-<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;background:#000;">
-<div id="player"></div>
-<script>
-  var tag = document.createElement('script');
-  tag.src = "https://www.youtube.com/iframe_api";
-  document.body.appendChild(tag);
-
-  var player;
-  var endTime = ${endTime};
-  var startTime = ${startTime};
-  var endCheckInterval = null;
-
+// La page `/embed/{id}` répond HTTP 200 même quand la vidéo est bloquée,
+// privée ou introuvable — elle affiche juste un message d'erreur dans la
+// page (pas d'erreur réseau détectable par `onError`/`onHttpError`).
+// Détection heuristique par texte, multilingue (device testé en français,
+// YouTube peut aussi répondre en anglais/espagnol selon l'Accept-Language
+// envoyé par la WebView) — best-effort, pas garanti exhaustif.
+const ERROR_CHECK_SCRIPT = `
+(function () {
   function post(msg) {
     window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg));
   }
-
-  post({ type: 'debug', step: 'script_start' });
   setTimeout(function () {
-    if (!player) post({ type: 'debug', step: 'no_player_after_8s', hadApi: typeof YT !== 'undefined' });
-  }, 8000);
-
-  function clearEndCheck() {
-    if (endCheckInterval) { clearInterval(endCheckInterval); endCheckInterval = null; }
-  }
-
-  // Filet de sécurité si le paramètre "end" natif de l'IFrame API ne
-  // déclenche pas de façon fiable (non vérifié en amont) : vérifie le
-  // temps courant toutes les 250ms et coupe manuellement au besoin.
-  function startEndCheck() {
-    clearEndCheck();
-    endCheckInterval = setInterval(function () {
-      if (player && player.getCurrentTime && player.getCurrentTime() >= endTime) {
-        player.pauseVideo();
-        clearEndCheck();
-        post({ type: 'segmentEnded' });
-      }
-    }, 250);
-  }
-
-  window.__lexisReplay = function () {
-    if (!player) return;
-    player.seekTo(startTime, true);
-    player.playVideo();
-    startEndCheck();
-  };
-
-  window.onYouTubeIframeAPIReady = function () {
-    player = new YT.Player('player', {
-      height: '100%',
-      width: '100%',
-      videoId: '${videoId}',
-      playerVars: {
-        start: Math.floor(startTime),
-        end: Math.ceil(endTime),
-        playsinline: 1,
-        controls: 1,
-        origin: 'https://www.youtube.com',
-      },
-      events: {
-        onReady: function () {
-          post({ type: 'ready', videoId: '${videoId}' });
-          player.playVideo();
-          startEndCheck();
-        },
-        onStateChange: function (e) {
-          if (e.data === YT.PlayerState.ENDED) {
-            clearEndCheck();
-            post({ type: 'segmentEnded' });
-          }
-        },
-        onError: function (e) {
-          post({ type: 'error', code: e.data, videoId: '${videoId}', href: location.href, referrer: document.referrer });
-        }
-      }
-    });
-  };
-
-  window.onerror = function (message, source, lineno, colno, error) {
-    post({ type: 'error', message: 'JS error: ' + message });
-  };
-</script>
-</body>
-</html>`;
-}
+    var text = ((document.body && document.body.innerText) || '').toLowerCase();
+    var errorMarkers = [
+      'video unavailable', 'private video', "isn't available", 'unavailable in your country',
+      'sign in to confirm your age', 'this video is not available',
+      'vidéo n\\'est pas disponible', 'vidéo indisponible', 'vidéo privée', 'n\\'est plus disponible',
+      'non disponible dans votre pays', 'confirmez votre âge',
+      'vídeo no disponible', 'vídeo privado', 'ya no está disponible'
+    ];
+    var matched = errorMarkers.find(function (m) { return text.indexOf(m) !== -1; });
+    if (matched) {
+      post({ type: 'error', reason: matched });
+    } else {
+      post({ type: 'ready' });
+    }
+  }, 1800);
+  true;
+})();
+`;
 
 const styles = StyleSheet.create({
   container: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 14, overflow: 'hidden' },

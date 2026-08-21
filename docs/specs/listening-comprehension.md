@@ -25,7 +25,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 - No backend/server of any kind (see `CLAUDE.md`) — everything runs from the Expo app itself, inside a `WebView` where a real browser engine is needed.
 - No official YouTube API covers caption *content* retrieval for arbitrary third-party videos (`captions.download` requires OAuth from the video's owner) — every mechanism here is unofficial and can break without notice if YouTube changes its page/API structure.
-- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly. Its JS-execution and network-request capability is confirmed working on device (captions interception proves it); actual **video playback** is confirmed BROKEN on device (2026-08-21, "Cette vidéo n'a pas pu être chargée...") — under active diagnosis, see `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
+- Must run in Expo Go, no dev build — `react-native-webview` is the only native dependency this feature added, confirmed to install/bundle cleanly. Its JS-execution and network-request capability is confirmed working on device (captions interception proves it); actual **video playback** was confirmed BROKEN on device (2026-08-21) with a synthetic-HTML + IFrame-JS-API player (undocumented error 152, reproduced on two different videos after ruling out origin and video-specific causes). Rebuilt to load a real `youtube.com/embed/{id}` URL instead (Decision 013) — **not yet reverified on device.** See `mobile/src/components/YouTubePlayer.tsx` and `docs/AUDIT.md` Issue #2.
 
 ## Selection algorithm (implemented, `mobile/src/listening/selection.ts` + `ListeningReviewContainer.tsx`)
 

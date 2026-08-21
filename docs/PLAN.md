@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Fix video playback, confirmed broken on device (2026-08-21).** Two candidate fixes (`baseUrl`, then `origin`) both ruled out by evidence — a log confirms the origin is correctly `https://www.youtube.com/` yet error 152 (undocumented code) still fires, on the same test video (`lUHlckT8a44`) every time. Leading hypothesis now: video-specific (embedding disabled by owner), not a systemic player bug. **Waiting on a test with a different, known-embeddable video before writing any more code** — that result decides whether to keep debugging the player wrapper or move to the bigger fallback (loading a real `youtube.com/embed/{id}` URL instead of a synthetic HTML page). See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the rebuilt video player works on device.** Two targeted fixes (`baseUrl`, `origin`) and a "video-specific" hypothesis were all ruled out by evidence (error 152, undocumented, reproduced identically on two different videos). `YouTubePlayer.tsx` was rebuilt to load a real `https://www.youtube.com/embed/{id}` URL instead of a synthetic HTML page with YouTube's IFrame JS API — mirrors the pattern already confirmed working for captions. `tsc`/`jest`/bundle boot-check all pass. **Not yet tested on device.** What's left: start a review session and confirm the video actually plays. See `docs/AUDIT.md` Issue #2.
 
 ## Next
 
