@@ -4,8 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the listening-captions fix works end-to-end.** Network interception (PoToken-authenticated request) and the `fmt=json3` parser are both confirmed working on device as of 2026-08-21 — real caption payloads up to ~500KB were captured and parsed across multiple videos. A second bug then surfaced downstream: `addListeningVideo` (`mobile/src/data/database.ts`) passed `columnCount: 5` to `insertInBatches` for a 6-column `listening_segments` INSERT, causing `Error code 1: 5 values for 6 columns` on every add attempt. Fixed (`5` → `6`), verified via `tsc`/`jest`/bundle boot-check — **not yet reconfirmed on device.** What's left: re-test adding a video and confirm the app itself shows `segments > 0`, not just the logs. Files: `mobile/src/listening/transcriptParsing.ts`, `mobile/src/listening/TranscriptFetcher.tsx`, `mobile/src/data/database.ts`. Dependency: real on-device testing (Claude has no WebView-capable environment). See `docs/specs/listening-comprehension.md` for full context.
-- [ ] **Confirm `react-native-webview`/IFrame Player actually renders on the user's Expo Go.** Independent of the captions problem — the player itself has never been confirmed to display/play a video on device. Blocking risk for the whole listening feature if it fails.
+- [ ] **Confirm `react-native-webview`/IFrame Player actually renders on the user's Expo Go.** The captions pipeline (network interception → `fmt=json3` parsing → DB write) is now confirmed working end-to-end on device (2026-08-21, user confirmed segments > 0 in-app). What's left for the listening feature: the player itself has never been confirmed to display/play a video on device. Blocking risk if it fails.
 
 ## Next
 

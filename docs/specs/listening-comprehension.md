@@ -1,6 +1,6 @@
 # Spec: Listening comprehension (Compréhension orale / Écoute tab)
 
-Status: **implemented, the hard problem (network interception) is confirmed working on device, last fix not yet reverified** — see `docs/AUDIT.md` Issues #1. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly.
+Status: **captions pipeline confirmed working end-to-end on device (2026-08-21)** — see `docs/AUDIT.md` Issues #1. This spec describes the intended and mostly-built behavior; where reality diverges, it's called out explicitly. Remaining unknown: whether the YouTube IFrame Player itself (video playback) renders in the user's Expo Go — see Constraints.
 
 ## Problem
 
@@ -46,7 +46,7 @@ A sixth app tab ("Écoute") where the user builds a personal library of YouTube 
 
 Verified by unit test (`selection.test.ts`, 12/12): cooldown enforcement, the 1/2/3/4-eligible-videos relaxation edge cases, and a statistical no-bias-by-segment-count check.
 
-## Captions pipeline (network interception confirmed working; parsing was the last bug found)
+## Captions pipeline (confirmed working end-to-end on device 2026-08-21)
 
 ```
 Add video (URL or search result)
@@ -79,21 +79,24 @@ Add video (URL or search result)
   -> intercepted body parsed by mobile/src/listening/transcriptParsing.ts
      (extracted from TranscriptFetcher.tsx specifically so it's testable
      -- importing react-native-webview crashes under Jest):
-       - CONFIRMED on device 2026-08-21: the real request was
-         `timedtext?...&pot=...&potc=1&fmt=json3` and its 858,225-char
-         body uses the shape { events: [{ tStartMs, dDurationMs,
-         segs: [{ utf8 }] }] } -- parseJson3Captions() handles this,
-         added and unit-tested (8 tests) against a fixture matching
-         that shape. NOT yet reverified against the real captured bytes.
+       - CONFIRMED on device 2026-08-21: real requests intercepted
+         across multiple videos (`timedtext?...&pot=...&potc=1&fmt=json3`,
+         bodies from ~130KB to ~858KB) use the shape { events: [{
+         tStartMs, dDurationMs, segs: [{ utf8 }] }] } -- parseJson3Captions()
+         handles this, unit-tested (8 tests) AND confirmed producing a
+         non-zero segment count in the app itself on a real device.
        - a speculative get_transcript-shaped fallback parser
          (extractJsonTranscriptSegments) is kept second-priority in
          case some request path returns that shape instead -- still
          unconfirmed, was never actually observed
   -> segments imported into SQLite (listening_videos/listening_segments/
      listening_cards), captionStatus = available | auto_generated | unavailable
+     -- an earlier columnCount mismatch (5 vs. 6) in the listening_segments
+        batch insert (database.ts) caused every add to fail with a SQLite
+        error at this step; fixed, confirmed on device 2026-08-21
 ```
 
-**Current status, from real device logs (2026-08-21):** the network-interception mechanism itself works end-to-end — button found/clicked, real caption content intercepted (858KB, with a PoToken param proving the approach is sound). The "0 segments" result traced to a parser bug (wrong JSON shape assumed), now fixed and unit-tested. **What's not yet confirmed:** that the fix produces segments > 0 when run against a real device's actual captured payload, not just a hand-built test fixture. This is the single remaining thing standing between "implemented" and "confirmed working."
+**Current status, from real device logs (2026-08-21):** the entire pipeline is confirmed working end-to-end — button found/clicked, real caption content intercepted across multiple videos (up to ~858KB, PoToken param proving the approach is sound), parsed by `parseJson3Captions`, written to SQLite, and the user explicitly confirmed the app shows a non-zero segment count for added videos. Not yet independently verified: that the transcript text itself reads as correct, natural Spanish rather than just non-empty (no reason to suspect otherwise, just not specifically checked).
 
 ## Edge cases (decided, see root `PLAN.md`'s original planning section for full reasoning)
 
@@ -116,9 +119,9 @@ Add video (URL or search result)
 
 ## Acceptance criteria
 
-- [ ] Adding a real Spanish-language YouTube video from the app produces `captionStatus !== 'unavailable'` and at least one segment, for a video independently confirmed to have Spanish captions on youtube.com.
-- [ ] At least one segment's transcript text is real, readable Spanish (not empty/garbled).
-- [ ] A review session plays the video segment, accepts a typed answer, and grades it — this part is implemented and not currently suspected broken, but has not been exercised end-to-end because no video has successfully produced a segment yet.
-- [ ] The same video does not repeat within 3 consecutive exercises when ≥4 videos have due segments (already covered by unit tests; real end-to-end confirmation still pending on the captions blocker above).
+- [x] Adding a real Spanish-language YouTube video from the app produces `captionStatus !== 'unavailable'` and at least one segment — confirmed 2026-08-21 across multiple videos, user-reported non-zero segment counts in the app.
+- [ ] At least one segment's transcript text is real, readable Spanish (not empty/garbled) — not empty is confirmed (real payloads up to ~858KB parsed), readability specifically not yet checked.
+- [ ] A review session plays the video segment, accepts a typed answer, and grades it — implemented and not currently suspected broken, but not yet exercised end-to-end now that segments exist to review.
+- [ ] The same video does not repeat within 3 consecutive exercises when ≥4 videos have due segments (already covered by unit tests; real end-to-end confirmation still pending — needs enough added videos with segments to actually test).
 
-None of these are checked yet. Don't mark this feature "done" until the first box is checked with a real device screenshot/log.
+The captions-retrieval blocker (the main open risk) is resolved. Don't mark the whole feature "done" until a review session has actually been run on device.

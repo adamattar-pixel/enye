@@ -137,8 +137,8 @@ Consequences: Selection logic lives client-side in `ListeningReviewContainer.tsx
 
 # Decision 010 — Listening captions: WebView-based fetch, not raw HTTP
 
-Date: 2026-08-20 (multiple iterations), mechanism confirmed working 2026-08-21
-Status: Accepted, confirmed correct — a downstream DB bug (unrelated to the fetch mechanism) is fixed but not yet reverified on device
+Date: 2026-08-20 (multiple iterations), confirmed working end-to-end on device 2026-08-21
+Status: Accepted, confirmed working end-to-end on a real device
 
 Context: Direct HTTP fetch to YouTube's `timedtext`/InnerTube endpoints fails 100% of the time from every network tested (datacenter and — per on-device logs — from the user's iPhone too), most likely YouTube's PoToken/BotGuard anti-bot requirement.
 
@@ -146,7 +146,7 @@ Decision: Load the real `youtube.com/watch` page in a hidden `WebView`, intercep
 
 Alternatives considered and rejected: issuing our own `fetch()` from inside the WebView's JS context (tried first, no better — a self-issued request doesn't inherit a valid PoToken just by running in a browser engine); a small local backend proxy (documented as a fallback, not built — no evidence it's necessary, and now less likely to be needed).
 
-Status detail: confirmed working on device 2026-08-21 — the button is found and clicked, and real caption payloads (up to ~858KB, `fmt=json3` shape) were intercepted across multiple videos, its URL carrying a `pot`/`potc` PoToken param (direct confirmation of the whole hypothesis). The `fmt=json3` shape wasn't initially recognized by the parser (fixed — see `mobile/src/listening/transcriptParsing.ts`) — once fixed, `xhr_intercepted` logs confirmed real segments were being produced. A second, unrelated bug then surfaced downstream in the DB write (`insertInBatches` column-count mismatch in `mobile/src/data/database.ts`, fixed). The local-backend-proxy fallback is no longer expected to be necessary given this result, but keep it documented until a device test confirms segments > 0 end-to-end.
+Status detail: confirmed working end-to-end on device 2026-08-21 — the button is found and clicked, real caption payloads (up to ~858KB, `fmt=json3` shape) were intercepted across multiple videos with a `pot`/`potc` PoToken param in the URL (direct confirmation of the whole hypothesis), the `fmt=json3` parser (`mobile/src/listening/transcriptParsing.ts`) correctly produces segments, and — after fixing an unrelated `insertInBatches` column-count mismatch in the DB write (`mobile/src/data/database.ts`) — the user confirmed the app itself shows a non-zero segment count for added videos, not just the logs. The local-backend-proxy fallback is not needed; this mechanism is the final, working implementation.
 
 ---
 

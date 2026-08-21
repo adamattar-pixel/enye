@@ -303,7 +303,7 @@ Deux observations utiles : (1) `fetchVideoCaptions()` (fetch HTTP nu) échoue ex
 
 **Impact / correctif appliqué.** `columnCount` corrigé de `5` à `6` pour l'insertion `listening_segments`. Correctif d'une ligne, mais avec un impact potentiellement décisif : c'était le dernier obstacle identifié dans toute la chaîne captions → segments → base de données.
 
-**Statut : correctif appliqué et compilé (`tsc --noEmit` propre, `npm test` 91/95 mêmes échecs préexistants, bundle Metro récupéré avec succès), PAS encore revérifié sur device.** Étant donné que les logs montrent déjà du contenu réel intercepté et parsé avec succès pour plusieurs vidéos, ce correctif a de bonnes chances d'être la dernière pièce manquante — mais ça reste à confirmer par un test réel montrant l'ajout réussi d'une vidéo avec un nombre de segments > 0 affiché dans l'app, pas seulement dans les logs.
+**Statut : CONFIRMÉ sur device (21/08/2026).** Correctif compilé (`tsc --noEmit` propre, `npm test` 91/95 mêmes échecs préexistants, bundle Metro récupéré avec succès) puis retesté par l'utilisateur : nouveaux logs montrant `xhr_intercepted` sur d'autres vidéos (ex. 504 109 caractères, vidéo `1rcaS1J12hs`) suivis d'une confirmation explicite ("the segments aren't 0") — l'ajout de vidéo fonctionne bien de bout en bout, pas seulement jusqu'à l'écriture SQLite. **C'était bien le dernier obstacle** de toute la chaîne page réelle → clic sur "Afficher la transcription" → interception réseau (token PoToken) → parsing `fmt=json3` → écriture en base → affichage du nombre de segments dans l'app.
 
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
