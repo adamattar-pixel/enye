@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Fix video playback, confirmed broken on device (2026-08-21).** First fix attempt (`baseUrl`) got the player to `onReady` but then an undocumented error code 152 fired. Second attempt applied: `origin: 'https://www.youtube.com'` in `playerVars` (per Google's own recommendation for pages with an unreliable origin) plus more diagnostic fields logged. Not yet reverified on device. What's left: retest, read `[YouTubePlayer] ...` Metro logs. If still broken, the next (bigger) fix is switching to a real `https://www.youtube.com/embed/{id}` URL instead of a synthetic HTML page — see `docs/AUDIT.md` Issue #2.
+- [ ] **Fix video playback, confirmed broken on device (2026-08-21).** Two candidate fixes (`baseUrl`, then `origin`) both ruled out by evidence — a log confirms the origin is correctly `https://www.youtube.com/` yet error 152 (undocumented code) still fires, on the same test video (`lUHlckT8a44`) every time. Leading hypothesis now: video-specific (embedding disabled by owner), not a systemic player bug. **Waiting on a test with a different, known-embeddable video before writing any more code** — that result decides whether to keep debugging the player wrapper or move to the bigger fallback (loading a real `youtube.com/embed/{id}` URL instead of a synthetic HTML page). See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

@@ -329,6 +329,21 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : nouveau correctif candidat appliqué et compilé (`tsc --noEmit` propre), PAS encore vérifié sur device.** Si l'erreur persiste malgré `origin`, l'hypothèse à examiner ensuite (pas encore engagée, changement d'architecture plus lourd) : WebKit traite parfois une page chargée via `loadHTMLString`/`baseURL` comme ayant une origine "opaque" pour certaines vérifications de sécurité malgré `baseURL` — dans ce cas, il faudrait charger une vraie page `https://www.youtube.com/embed/{id}` par URL réelle (`source.uri`) plutôt qu'un document HTML de repli, sur le même principe que la solution déjà confirmée fonctionnelle pour les captions (`TranscriptFetcher.tsx`, qui charge une vraie page `youtube.com`).
 
+### Dixième itération — l'hypothèse d'origine est écartée par la preuve, piste vidéo-spécifique retenue (21/08/2026)
+
+**Constat.** Log réel après le correctif `origin` ci-dessus :
+```
+[YouTubePlayer] message: {"step": "script_start", "type": "debug"}
+[YouTubePlayer] message: {"type": "ready", "videoId": "lUHlckT8a44"}
+[YouTubePlayer] message: {"code": 152, "href": "https://www.youtube.com/", "referrer": "", "type": "error", "videoId": "lUHlckT8a44"}
+```
+
+**L'hypothèse d'origine est maintenant écartée par la preuve, pas juste non confirmée.** `href` montre `https://www.youtube.com/` — donc `baseUrl` ET `origin` fonctionnent exactement comme prévu, l'origine vue par la page est correcte — et pourtant le code 152 persiste à l'identique. Continuer à chercher du côté de l'origine sans nouvelle preuve serait deviner à l'aveugle après que l'hypothèse a déjà été testée et invalidée.
+
+**Nouvelle piste, appuyée par un fait objectif du log : `videoId` est identique sur les deux derniers tests (`lUHlckT8a44`, la vidéo Ibai utilisée depuis le début de ce chantier pour les tests captions).** Impossible de savoir si les 3 cycles du test précédent portaient sur cette même vidéo ou non (`videoId` n'était pas encore loggé à ce moment). Il est donc possible que le code 152 soit **spécifique à cette vidéo précise** (restriction d'intégration par le propriétaire, contenu réservé aux abonnés/soumis à âge, ou restriction géographique) plutôt qu'un problème systémique du lecteur — les créateurs type Ibai désactivent fréquemment l'intégration sur leurs contenus.
+
+**Pas de nouveau correctif appliqué cette fois — la prochaine étape utile est un test, pas du code.** Demandé à l'utilisateur de retester avec une vidéo différente, dont l'intégration est connue pour fonctionner, afin de trancher entre "problème vidéo-spécifique" (le code 152 disparaît) et "problème systémique du lecteur" (le code 152 persiste sur une autre vidéo aussi) — sans cette distinction, tout nouveau correctif de code serait une supposition non guidée par une preuve.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.
