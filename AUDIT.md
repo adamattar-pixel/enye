@@ -376,6 +376,16 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : correctif de timing appliqué et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device. Cause racine de l'échec de lecture toujours non confirmée.**
 
+### Quatorzième itération — problème confirmé systémique par une vidéo de contrôle garantie, correctif appliqué : user-agent desktop (21/08/2026)
+
+**Constat.** Nouveau test avec `Ww7q0H0o05Y` (contenu hispanophone encore) : même échec identique. Vu le doute méthodologique soulevé à l'itération précédente, l'utilisateur a été invité à tester une URL précise connue pour être universellement intégrable — `https://www.youtube.com/watch?v=dQw4w9WgXcQ` (upload officiel Sony Music, la référence standard utilisée par les développeurs pour ce genre de vérification, collée directement plutôt que recherchée pour garantir l'upload officiel et non un re-upload tiers). **Retour : "meme chose" — échec identique même sur cette vidéo.** Le problème est donc bien confirmé systémique, cette fois par une preuve qui exclut vraiment l'hypothèse vidéo-spécifique (contrairement à l'itération 11 dont le raisonnement était insuffisant).
+
+**Cause retenue : absence de `userAgent` desktop sur la WebView — la seule différence notable restante avec `TranscriptFetcher.tsx`, qui charge fiablement de vraies pages `youtube.com` sur ce même device.** `TranscriptFetcher.tsx` force `userAgent={DESKTOP_USER_AGENT}` (`Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15`), confirmé fonctionnel sur device pour l'interception des sous-titres. `YouTubePlayer.tsx` n'avait jamais fixé de `userAgent` (WebView par défaut) — or l'endpoint `/embed/` de YouTube est connu pour traiter différemment les requêtes selon le user-agent, y compris pour refuser purement et simplement la lecture. Toutes les pistes précédentes (`baseUrl`, `origin`, `Referer`) avaient été testées et écartées individuellement ; celle-ci n'avait encore jamais été essayée alors qu'elle est directement inspirée d'un mécanisme déjà confirmé fonctionnel dans ce même projet, pas une nouvelle supposition en l'air.
+
+**Impact / correctif appliqué.** Même constante `DESKTOP_USER_AGENT` dupliquée localement dans `YouTubePlayer.tsx` (pas d'import partagé créé, pour rester simple), passée via `userAgent={DESKTOP_USER_AGENT}` sur la `WebView`.
+
+**Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** C'est la piste la mieux justifiée jusqu'ici (dérivée d'un mécanisme confirmé, pas devinée) — à retester en priorité.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.

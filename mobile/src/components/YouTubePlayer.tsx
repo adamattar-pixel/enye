@@ -2,6 +2,17 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
+/** Même user-agent desktop que `TranscriptFetcher.tsx` (confirmé fiable sur
+ * device pour charger de vraies pages `youtube.com`) — absent ici jusqu'au
+ * 21/08/2026, alors que c'est la seule différence notable entre les deux
+ * WebViews. Ajouté après que `baseUrl`/`origin`/`Referer` aient tous été
+ * testés et écartés individuellement, et que l'échec ait été confirmé
+ * systémique (même erreur sur une vidéo de contrôle garantie intégrable —
+ * voir AUDIT.md, itération 14) : le user-agent par défaut de la WebView
+ * peut être traité différemment par YouTube pour l'intégration `/embed/`. */
+const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+
 export type YouTubePlayerHandle = {
   /** Relance la lecture depuis `startTime` (voir `types.ts`). */
   replay: () => void;
@@ -108,6 +119,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
         ref={webviewRef}
         style={styles.webview}
         source={{ uri, headers: { Referer: 'https://www.youtube.com/' } }}
+        userAgent={DESKTOP_USER_AGENT}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled

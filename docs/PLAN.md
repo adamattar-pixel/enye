@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Fix video playback — still broken, waiting on a control-video test before more fixes.** `Referer` header didn't resolve it; a second detection bug (timing — a one-shot text check can miss an async error render) was found and fixed alongside the first. Before guessing another cause: need to test with a video known to always allow embedding (e.g. an official studio trailer) — every video tried so far has been Spanish creator/label content, which commonly has embedding disabled via Content ID, so "systemic vs. video-specific" isn't actually settled yet despite earlier notes suggesting it was. See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the user-agent fix resolves video playback.** Confirmed systemic (not video-specific) via the universal reference video `dQw4w9WgXcQ` failing identically. `YouTubePlayer.tsx` never set a `userAgent`, unlike `TranscriptFetcher.tsx` (which does, and works reliably) — added the same desktop UA. Best-justified fix so far (derived from a proven-working mechanism, not a new guess). `tsc`/`jest` pass. **Not yet verified on device.** See `docs/AUDIT.md` Issue #2.
 
 ## Next
 
