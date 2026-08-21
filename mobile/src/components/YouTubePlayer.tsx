@@ -89,7 +89,12 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
           initialPlayerParams={{
             start: Math.floor(startTime),
             end: Math.ceil(endTime),
-            controls: true,
+            // Habillage YouTube (barre de contrôle, titre, bouton plein
+            // écran) masqué — demandé explicitement : ne garder que
+            // l'image de la vidéo. Compromis assumé : plus de pause/
+            // avance manuelle native, seul "Réécouter" (côté app) reste
+            // disponible pour agir sur la lecture.
+            controls: false,
             rel: false,
             // Les sous-titres révéleraient la réponse avant que l'utilisateur
             // ait tapé ce qu'il a entendu — explicitement désactivés plutôt
@@ -152,6 +157,12 @@ function buildPlayerFixupScript(startTime: number, endTime: number): string {
   function disableCaptions(p) {
     try { p.unloadModule && p.unloadModule('captions'); } catch (e) {}
     try { p.setOption && p.setOption('captions', 'track', {}); } catch (e) {}
+    // .click() sur un élément déclare son gestionnaire d'événement même
+    // masqué par CSS (controls: false ci-dessus) tant qu'il reste dans le
+    // DOM — à surveiller si YouTube retire carrément le bouton du DOM
+    // plutôt que de le masquer visuellement quand controls=0, auquel cas
+    // ce repli deviendrait inopérant et il faudrait revenir à controls:
+    // true pour le garder fonctionnel.
     var btn = document.querySelector('.ytp-subtitles-button');
     if (btn && btn.getAttribute('aria-pressed') === 'true') {
       try { btn.click(); } catch (e) {}

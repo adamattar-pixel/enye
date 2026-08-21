@@ -313,25 +313,34 @@ export function useTranscriptFetcher() {
 
   const finalizeFromDomOrNothing = useCallback(
     (domSegments: { startTime: number; text: string }[] | null) => {
-      // Préfère explicitement une capture espagnole parmi celles reçues —
-      // YouTube peut intercepter plusieurs requêtes timedtext (ex. une
-      // traduction automatique proposée avant la vraie piste espagnole),
-      // et prendre la toute première sans distinction avait causé des
-      // imports en anglais pour du contenu pourtant espagnol (21/08/2026).
+      // Espagnol EXIGÉ, pas seulement préféré (demandé explicitement le
+      // 21/08/2026 après des imports en anglais ET en arabe — YouTube peut
+      // intercepter plusieurs requêtes timedtext, ex. une traduction
+      // automatique dans une langue quelconque proposée avant/à la place
+      // de la vraie piste espagnole). Une capture non-espagnole n'est plus
+      // acceptée en repli : mieux vaut 0 segments (vidéo marquée non
+      // exploitable) qu'une transcription dans la mauvaise langue.
       const parsed = networkCapturesRef.current
         .map((capture) => ({ language: extractLangFromUrl(capture.url), segments: parseInterceptedBody(capture.body) }))
         .filter((c) => c.segments.length > 0);
       const spanish = parsed.find((c) => c.language.toLowerCase().startsWith('es'));
-      const chosen = spanish ?? parsed[0];
-      if (chosen) {
-        if (!spanish && parsed.length > 0) {
-          console.log('[TranscriptFetcher] aucune capture espagnole, repli sur langue:', chosen.language);
-        } else {
-          console.log('[TranscriptFetcher] langue capturée:', chosen.language);
-        }
-        settle({ status: 'available', language: chosen.language, segments: chosen.segments });
+      if (spanish) {
+        console.log('[TranscriptFetcher] langue capturée:', spanish.language);
+        settle({ status: 'available', language: spanish.language, segments: spanish.segments });
         return;
       }
+      if (parsed.length > 0) {
+        console.log(
+          '[TranscriptFetcher] uniquement des captures non espagnoles reçues, rejetées:',
+          parsed.map((c) => c.language).join(', ')
+        );
+      }
+      // Repli DOM : aucun moyen de vérifier la langue de ce qui est
+      // affiché dans le panneau (pas d'URL à inspecter, juste du texte
+      // déjà rendu) — accepté quand même car la page est chargée avec une
+      // préférence espagnole (Accept-Language), donc le panneau s'ouvre
+      // normalement déjà en espagnol dans ce cas ; limite honnête, pas une
+      // garantie au même niveau que la vérification par URL ci-dessus.
       if (domSegments && domSegments.length > 0) {
         settle({ status: 'available', language: 'es', segments: pairDomSegments(domSegments) });
         return;

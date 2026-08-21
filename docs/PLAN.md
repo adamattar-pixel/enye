@@ -4,8 +4,12 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the DOM-click captions fix — three prior fixes to this bug have all failed.** `showClosedCaptions: false`, `incognito`, and `player.unloadModule('captions')` were each tried and each failed on device. Current fix clicks the player's own CC toggle button in the DOM directly (`.ytp-subtitles-button`) whenever found pressed, polled continuously — the most direct mechanism available, not dependent on an internal API method that might be silently failing (no diagnostic channel exists back from this injected script). Don't assume this works given the track record.
-- [ ] **Confirm millisecond-precision segment bounds and the `replay()` fix.** YouTube's `start`/`end` params only support whole seconds; the player now self-corrects via `seekTo`/`getCurrentTime` polling for real fractional bounds. `replay()` now force-remounts the player instead of calling `seekTo` alone, since that never resumes playback if paused (needed once end-of-segment pausing became reliable). See `docs/AUDIT.md` Issue #2.
+- [ ] **Confirm the DOM-click captions fix — three prior fixes to this bug have all failed.** Current fix clicks the player's own CC toggle button directly (`.ytp-subtitles-button`), polled continuously. Newly at risk: `controls: false` (added same session, see below) may remove this button from the DOM — if captions reappear, check that interaction first.
+- [ ] **Confirm millisecond-precision segment bounds and the `replay()` fix.** YouTube's `start`/`end` params only support whole seconds; the player now self-corrects via `seekTo`/`getCurrentTime` polling. `replay()` now force-remounts the player instead of calling `seekTo` alone (which never resumes playback if paused).
+- [ ] **Confirm the strict Spanish-only transcript filter.** A prior "accept any language if no Spanish arrives" fallback was itself causing Arabic/English imports — removed; non-Spanish network captures are now always rejected (0 segments) rather than imported.
+- [ ] **Confirm the hidden-chrome player (`controls: false`)** shows only the video frame as requested — no native pause/seek now, only the app's "Réécouter" button.
+
+See `docs/AUDIT.md` Issue #2.
 
 ## Next
 
