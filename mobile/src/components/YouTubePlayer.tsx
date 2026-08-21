@@ -125,6 +125,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
         javaScriptEnabled
         domStorageEnabled
         injectedJavaScript={ERROR_CHECK_SCRIPT}
+        injectedJavaScriptForMainFrameOnly={false}
         onMessage={handleMessage}
         onError={(event) => {
           console.log('[YouTubePlayer] WebView onError:', event.nativeEvent);
@@ -163,11 +164,16 @@ const ERROR_CHECK_SCRIPT = `
     'ver este video en youtube', 'ver en youtube'
   ];
   // La page d'erreur de YouTube se rend parfois de façon asynchrone (après
-  // un contrôle JS interne) -- un seul contrôle ponctuel peut la manquer si
-  // elle apparaît après coup (bug confirmé le 21/08/2026 : "ready" reçu
-  // alors que l'utilisateur voyait bien l'écran d'erreur). Sondage répété
-  // au lieu d'un contrôle unique.
-  var checksLeft = 8;
+  // un contrôle JS interne) -- un contrôle ponctuel peut la manquer si elle
+  // apparaît après coup (bug confirmé le 21/08/2026 : "ready" reçu alors
+  // que l'utilisateur voyait bien l'écran d'erreur, y compris avec un
+  // sondage répété sur 5,6 s -- donc soit la fenêtre était trop courte,
+  // soit le texte n'est pas dans le frame/document attendu). Fenêtre
+  // élargie (20 sondages, ~14 s), et le dernier sondage envoie un extrait
+  // brut du texte de la page (même sans marqueur reconnu) pour diagnostiquer
+  // précisément ce que voit le script, plutôt que de deviner encore à
+  // l'aveugle si ce correctif échoue aussi.
+  var checksLeft = 20;
   var interval = setInterval(function () {
     checksLeft--;
     var text = ((document.body && document.body.innerText) || '').toLowerCase();
@@ -177,7 +183,7 @@ const ERROR_CHECK_SCRIPT = `
       post({ type: 'error', reason: matched });
     } else if (checksLeft <= 0) {
       clearInterval(interval);
-      post({ type: 'ready' });
+      post({ type: 'ready', href: location.href, bodySample: text.slice(0, 300) });
     }
   }, 700);
   true;

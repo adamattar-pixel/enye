@@ -4,7 +4,7 @@ The current plan only — not history. For how we got here, see root `PLAN.md` (
 
 ## Current
 
-- [ ] **Confirm the user-agent fix resolves video playback.** Confirmed systemic (not video-specific) via the universal reference video `dQw4w9WgXcQ` failing identically. `YouTubePlayer.tsx` never set a `userAgent`, unlike `TranscriptFetcher.tsx` (which does, and works reliably) — added the same desktop UA. Best-justified fix so far (derived from a proven-working mechanism, not a new guess). `tsc`/`jest` pass. **Not yet verified on device.** See `docs/AUDIT.md` Issue #2.
+- [ ] **Video playback still broken after five candidate fixes (`baseUrl`, `origin`, `Referer`, real embed URL, desktop `userAgent`).** Confirmed systemic via a universal reference video. The app's own error detection has also never caught the failure live despite two rounds of fixes — diagnosis has shifted to instrumenting the script to report back raw page text/href on the next test, rather than guessing another root-cause fix blind. `tsc`/`jest` pass. **Waiting on the next device log with the raw diagnostic dump before further code changes.** See `docs/AUDIT.md` Issue #2.
 
 ## Next
 

@@ -386,6 +386,14 @@ Le player se construit et `onReady` se déclenche bien (donc `iframe_api` charge
 
 **Statut : implémenté et compilé (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device.** C'est la piste la mieux justifiée jusqu'ici (dérivée d'un mécanisme confirmé, pas devinée) — à retester en priorité.
 
+### Quinzième itération — `userAgent` desktop insuffisant seul, "pratiquement le même bug" (21/08/2026)
+
+**Constat.** Retesté (`ASL5hhgRMfQ`) : demandé explicitement à l'utilisateur si l'écran affiché était identique à avant plutôt que de supposer — confirmé "même écran qu'avant" (toujours "Error de configuración del reproductor de video" + "Ver en Youtube"). Le `userAgent` desktop, bien que bien justifié, n'a donc PAS résolu la cause racine. Le log ne montre toujours que `{"type":"ready"}` ×2 — **la détection reste en échec, même avec le sondage répété (5,6 s) ajouté à l'itération 13.**
+
+**Plutôt que deviner un sixième correctif à l'aveugle, transformation du script en outil de diagnostic réel.** Deux limites possibles du sondage actuel, non tranchées : (1) fenêtre encore trop courte si le rendu d'erreur est très tardif, (2) le texte d'erreur pourrait être rendu dans un frame différent du frame principal (`injectedJavaScript` ne s'exécute par défaut que dans le frame principal côté `react-native-webview`). Corrigé/ajouté : fenêtre de sondage élargie à ~14 s (20 sondages), `injectedJavaScriptForMainFrameOnly={false}` pour couvrir l'hypothèse de frame, et surtout — le dernier sondage envoie maintenant un extrait brut (`href` + 300 premiers caractères de `document.body.innerText`) même s'il ne matche aucun marqueur connu, pour objectiver au prochain test ce que le script voit réellement plutôt que de continuer à raisonner à l'aveugle sur des hypothèses non vérifiables depuis cette session (pas de device disponible).
+
+**Statut : instrumentation de diagnostic ajoutée et compilée (`tsc --noEmit` propre, `npm test` 99/103 mêmes échecs préexistants), PAS encore vérifié sur device. Cause racine de l'échec de lecture toujours non confirmée après cinq correctifs candidats (`baseUrl`, `origin`, `Referer`, URL réelle au lieu de HTML synthétique, `userAgent` desktop).** Le prochain log `bodySample` devrait enfin permettre de savoir si c'est un problème de timing, de frame, ou autre chose d'inattendu.
+
 ## Recherche YouTube par mots-clés, à la place du collage de lien (20/08/2026)
 
 **Constat.** Demande explicite : remplacer le champ "coller un lien" par une recherche par mots-clés dans la Bibliothèque de l'onglet Écoute.
