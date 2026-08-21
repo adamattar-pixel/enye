@@ -198,7 +198,7 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     try {
       // Essai n°1 : requête HTTP brute (gratuite, pas de WebView à
       // monter) — confirmé cassé à 100% depuis le réseau de
-      // développement (voir captions.ts, AUDIT.md), mais peut
+      // développement (voir captions.ts, docs/AUDIT.md), mais peut
       // fonctionner sur d'autres réseaux, donc gardé comme premier essai
       // plutôt que supprimé. Essai n°2 seulement si le premier ne
       // renvoie aucun segment : la même requête émise depuis une vraie

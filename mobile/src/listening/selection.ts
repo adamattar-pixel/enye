@@ -2,7 +2,7 @@ import { shuffle } from '../utils/shuffle';
 
 /** Une vidéo ne peut pas être choisie si elle a été utilisée dans les
  * 3 derniers exercices (au sens "notés", voir database.ts) — demandé
- * explicitement. Voir PLAN.md pour l'algorithme complet et AUDIT.md
+ * explicitement. Voir docs/PLAN.md pour l'algorithme complet et docs/AUDIT.md
  * pour la limite assumée (ne compte que les exercices terminés). */
 export const VIDEO_COOLDOWN = 3;
 
@@ -10,7 +10,7 @@ export const VIDEO_COOLDOWN = 3;
  * Détermine quelles vidéos, parmi celles ayant au moins un segment dû
  * maintenant, sont éligibles compte tenu du cooldown — avec
  * relâchement progressif si trop peu de vidéos sont disponibles pour
- * respecter le cooldown strictement (voir PLAN.md, "Cas limite").
+ * respecter le cooldown strictement (voir docs/PLAN.md, "Cas limite").
  *
  * Fonction pure : ne fait aucune requête, ne choisit rien elle-même —
  * `dueVideoIds` et `recentVideoIdsOrdered` sont déjà calculés par
@@ -42,7 +42,7 @@ export function selectEligibleVideoIds(
 
 /** Choisit une vidéo au hasard, uniformément, parmi les vidéos
  * éligibles — jamais pondéré par le nombre de segments dus de chaque
- * vidéo (voir PLAN.md : c'est précisément ce que la demande explicite
+ * vidéo (voir docs/PLAN.md : c'est précisément ce que la demande explicite
  * interdit). `null` si `eligibleVideoIds` est vide. */
 export function pickRandomVideo(eligibleVideoIds: string[]): string | null {
   if (eligibleVideoIds.length === 0) return null;

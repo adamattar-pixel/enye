@@ -46,7 +46,7 @@ function triggerHaptic(haptic: HapticOption) {
  * `TouchableOpacity` sur les interactions principales.
  *
  * Basé sur l'API `Animated` intégrée à React Native (pas
- * `react-native-reanimated`) — voir AUDIT.md, 20/08/2026 : suspecté (pas
+ * `react-native-reanimated`) — voir docs/AUDIT.md, 20/08/2026 : suspecté (pas
  * confirmé formellement) d'être la cause de boutons qui ne réagissaient
  * pas au toucher et d'animations invisibles sur device. `Animated` ne
  * dépend d'aucun module natif tiers, donc ne peut pas souffrir du même

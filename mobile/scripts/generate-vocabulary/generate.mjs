@@ -63,7 +63,7 @@ function loadFrequencyCsv() {
   const rows = [];
   // Pas de parseur CSV : vérifié qu'aucune ligne ne contient de guillemet
   // et que chaque ligne a exactement 5 champs séparés par des virgules
-  // (voir AUDIT.md) — un split() simple suffit.
+  // (voir docs/AUDIT.md) — un split() simple suffit.
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) continue;
@@ -198,7 +198,7 @@ function loadExampleSentences(targetLemmas) {
 
 // MARK: - Niveau CECRL — heuristique par position dans le classement de
 // sortie (pas de vraie donnée CECRL dans la source). À valider
-// manuellement, voir AUDIT.md.
+// manuellement, voir docs/AUDIT.md.
 
 function levelForIndex(index, total) {
   const ratio = index / total;

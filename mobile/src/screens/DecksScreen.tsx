@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -56,19 +56,34 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     refresh();
   }, [refresh]);
 
-  const handleDelete = (word: Word) => {
-    Alert.alert('Supprimer ce mot ?', `« ${word.spanish} » sera définitivement supprimé.`, [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteWord(db, word.id);
-          refresh();
+  const handleDelete = useCallback(
+    (word: Word) => {
+      Alert.alert('Supprimer ce mot ?', `« ${word.spanish} » sera définitivement supprimé.`, [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteWord(db, word.id);
+            refresh();
+          },
         },
-      },
-    ]);
-  };
+      ]);
+    },
+    [db, refresh]
+  );
+
+  // Jusqu'à 6002 mots (voir docs/AUDIT.md) — `renderItem` mémorisé et ligne
+  // extraite en composant `memo` pour que `FlatList` ne re-rende pas
+  // toutes les lignes visibles à chaque changement d'état sans rapport
+  // (ex. ouverture de la modale d'ajout), qui recréerait sinon une
+  // fonction `renderItem` différente à chaque rendu.
+  const renderItem = useCallback(
+    ({ item, index }: { item: Word; index: number }) => (
+      <WordRow item={item} index={index} styles={styles} onDelete={handleDelete} />
+    ),
+    [styles, handleDelete]
+  );
 
   return (
     <View style={{ flex: 1 }}>
@@ -90,23 +105,9 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
 
       <FlatList
         data={words}
-        keyExtractor={(w) => w.id}
+        keyExtractor={wordKeyExtractor}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item, index }) => (
-          <FadeInView duration={250} direction="right" delay={Math.min(index, 12) * 25} style={styles.wordRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.wordSpanish}>{item.spanish}</Text>
-              <Text style={styles.wordEnglish}>
-                {item.english} · {item.level}
-              </Text>
-            </View>
-            {item.isUserAdded && (
-              <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} onPress={() => handleDelete(item)}>
-                <Text style={styles.deleteLink}>Supprimer</Text>
-              </AnimatedPressable>
-            )}
-          </FadeInView>
-        )}
+        renderItem={renderItem}
         ListEmptyComponent={<Text style={styles.empty}>Aucun mot ne correspond à ce filtre.</Text>}
       />
 
@@ -129,6 +130,36 @@ function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     </View>
   );
 }
+
+const wordKeyExtractor = (w: Word) => w.id;
+
+const WordRow = memo(function WordRow({
+  item,
+  index,
+  styles,
+  onDelete,
+}: {
+  item: Word;
+  index: number;
+  styles: Styles;
+  onDelete: (word: Word) => void;
+}) {
+  return (
+    <FadeInView duration={250} direction="right" delay={Math.min(index, 12) * 25} style={styles.wordRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.wordSpanish}>{item.spanish}</Text>
+        <Text style={styles.wordEnglish}>
+          {item.english} · {item.level}
+        </Text>
+      </View>
+      {item.isUserAdded && (
+        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} onPress={() => onDelete(item)}>
+          <Text style={styles.deleteLink}>Supprimer</Text>
+        </AnimatedPressable>
+      )}
+    </FadeInView>
+  );
+});
 
 function FilterChip({ styles, label, active, onPress }: { styles: Styles; label: string; active: boolean; onPress: () => void }) {
   return (

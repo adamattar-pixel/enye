@@ -31,7 +31,7 @@ export default function App() {
       // lancement (tout est importé) comme mises à jour ultérieures du
       // bundle (complète juste ce qui manque, voir database.ts). Même
       // principe pour les 10 400 triplets de conjugaison (200 verbes ×
-      // 52 formes) — voir AUDIT.md pour le risque de premier lancement
+      // 52 formes) — voir docs/AUDIT.md pour le risque de premier lancement
       // plus lent avec ce volume combiné, pas mesuré sur device.
       const parsedWords = parseWords(wordsJson);
       await importMissingWords(database, parsedWords);
@@ -56,7 +56,7 @@ export default function App() {
       await Promise.all([setAudioModeAsync({ playsInSilentMode: true }), ensurePermissions(), registerCategories()]);
 
       // Deux chemins pour traiter les réponses aux notifications — pas
-      // un seul (voir AUDIT.md, tâche 0) :
+      // un seul (voir docs/AUDIT.md, tâche 0) :
       // 1) `getLastNotificationResponseAsync()` au démarrage : couvre le
       //    cas où l'app était totalement tuée et vient d'être relancée
       //    par le tap.

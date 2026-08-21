@@ -2,7 +2,7 @@
  * sélectionnée pour un exercice (dégradation silencieuse, demandé
  * explicitement) ; `available` = piste humaine ; `auto_generated` =
  * piste ASR (auto-générée), acceptée mais signalée dans l'UI (qualité
- * de transcription/segmentation moins fiable, voir AUDIT.md). */
+ * de transcription/segmentation moins fiable, voir docs/AUDIT.md). */
 export type CaptionStatus = 'available' | 'auto_generated' | 'unavailable';
 
 export interface ListeningVideo {

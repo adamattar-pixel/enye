@@ -33,7 +33,7 @@ type Props = {
  * **Notation automatique, pas 4 boutons** — contrairement au
  * vocabulaire/à la conjugaison : la maquette UX de la mission ne montre
  * que ✓/✗ suivi de "Réécouter"/"Exercice suivant", sans grille de 4
- * notes. Mappage retenu (option A du plan, PLAN.md point ouvert #3) :
+ * notes. Mappage retenu (option A du plan, docs/PLAN.md point ouvert #3) :
  * correct → "Bien", incorrect → "Otra vez". Assumé, pas confirmé
  * explicitement par l'utilisateur — à ajuster si jugé trop strict/laxiste
  * à l'usage (par exemple si une erreur mineure d'accent devrait plutôt
@@ -62,7 +62,7 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
     onGrade(grade);
   };
 
-  // Filet de secours tant que la lecture intégrée échoue (voir AUDIT.md,
+  // Filet de secours tant que la lecture intégrée échoue (voir docs/AUDIT.md,
   // itérations 8-17) : ouvre la vraie vidéo YouTube au bon timestamp de
   // départ (`&t=Xs`, paramètre standard reconnu par l'app/le navigateur
   // YouTube). Limite assumée : YouTube ne fournit aucun moyen fiable de

@@ -2,7 +2,7 @@
  * Comparaison de texte générique, tolérante aux accents espagnols et à
  * la ponctuation — extraite de `conjugation/validate.ts` pour être
  * réutilisée par la compréhension orale (dictée) plutôt que dupliquée,
- * voir PLAN.md/AUDIT.md, 20/08/2026.
+ * voir docs/PLAN.md/docs/AUDIT.md, 20/08/2026.
  */
 
 function stripAccents(s: string): string {

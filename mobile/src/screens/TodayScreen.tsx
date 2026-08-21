@@ -45,7 +45,7 @@ export function TodayScreen({ db, onStartSession }: Props) {
     const done = await getReviewCountSince(db, startOfToday());
     setDoneToday(done);
 
-    // Badge de série (voir AUDIT.md, 20/08/2026) : réutilise
+    // Badge de série (voir docs/AUDIT.md, 20/08/2026) : réutilise
     // `computeStreak` déjà utilisé par Statistiques, pas de nouvelle
     // logique de calcul de série dupliquée.
     const reviews = await getAllReviews(db);
@@ -120,7 +120,7 @@ export function TodayScreen({ db, onStartSession }: Props) {
  * Toujours visible, y compris à 0 (choisi explicitement plutôt que
  * masqué) : à 0 sans série antérieure, invite à commencer ; à 0 avec une
  * série interrompue, le rappelle explicitement plutôt que d'afficher un
- * simple "0 jour" neutre (choisi explicitement aussi) — voir AUDIT.md.
+ * simple "0 jour" neutre (choisi explicitement aussi) — voir docs/AUDIT.md.
  */
 function StreakBadge({ styles, streak, lostStreak }: { styles: Styles; streak: number; lostStreak: number }) {
   let emoji: string;

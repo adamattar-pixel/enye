@@ -3,7 +3,7 @@ import { normalizeAnswer as normalize } from '../validation/textAnswer';
 
 // La normalisation (accents/casse/ponctuation/espaces) vit désormais
 // dans `validation/textAnswer.ts`, partagée avec la compréhension orale
-// (20/08/2026) — voir PLAN.md/AUDIT.md. Réexportée ici sous son ancien
+// (20/08/2026) — voir docs/PLAN.md/docs/AUDIT.md. Réexportée ici sous son ancien
 // nom local pour ne changer aucune ligne plus bas dans ce fichier.
 
 /** Suffixes de la 6ème position (personIndex 0-5) du subjonctif
@@ -30,7 +30,7 @@ function deriveSeVariant(raForm: string, personIndex: number): string | null {
 /**
  * Compare la réponse tapée à la forme attendue. **Tolérant sur les
  * accents** (ignorés des deux côtés de la comparaison, ex. "hablo"
- * accepté pour "habló") — décision documentée dans AUDIT.md : la plus
+ * accepté pour "habló") — décision documentée dans docs/AUDIT.md : la plus
  * indulgente des trois options envisagées, pour ne jamais décourager
  * sur un accent manquant plutôt qu'une vraie erreur de conjugaison.
  * Correctible plus tard vers une règle plus stricte si l'usage montre

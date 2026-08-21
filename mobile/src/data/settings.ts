@@ -7,7 +7,7 @@ export interface AppSettings {
   windowStartMinute: number;
   windowEndHour: number;
   windowEndMinute: number;
-  /** Tags exclus de l'introduction de nouveaux mots (voir PLAN.md /
+  /** Tags exclus de l'introduction de nouveaux mots (voir docs/PLAN.md /
    * "activer ou désactiver des thèmes"). N'affecte pas les mots déjà en
    * apprentissage/révision — seulement quels mots deviennent "nouveaux"
    * à l'avenir, pour ne jamais faire disparaître une carte en cours. */
@@ -22,7 +22,7 @@ export interface AppSettings {
    * deux entraînements aient chacun leur propre budget quotidien sans
    * se disputer les mêmes créneaux. Valeurs par défaut identiques au
    * vocabulaire (8 + 22) faute de retour utilisateur spécifique — à
-   * ajuster séparément si besoin, voir AUDIT.md. */
+   * ajuster séparément si besoin, voir docs/AUDIT.md. */
   conjugationNewCardsPerDay: number;
   conjugationReviewCapPerDay: number;
   /** Rythme de l'onglet Compréhension orale — même logique de budget
@@ -30,12 +30,12 @@ export interface AppSettings {
    * volume de segments disponibles dépend entièrement des vidéos que
    * l'utilisateur ajoute lui-même (pas de contenu bundlé), donc un
    * budget aussi élevé que le vocabulaire n'aurait pas de sens tant que
-   * la bibliothèque est petite. Voir PLAN.md. */
+   * la bibliothèque est petite. Voir docs/PLAN.md. */
   listeningNewSegmentsPerDay: number;
   listeningReviewCapPerDay: number;
 }
 
-/** Réglages validés (voir PLAN.md, "Décisions validées avec l'utilisateur"). */
+/** Réglages validés (voir docs/PLAN.md, "Décisions validées avec l'utilisateur"). */
 export const defaultSettings: AppSettings = {
   newCardsPerDay: 8,
   reviewCapPerDay: 22,

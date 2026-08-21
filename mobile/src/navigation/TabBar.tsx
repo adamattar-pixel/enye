@@ -25,7 +25,7 @@ const DRAWER_WIDTH = Math.min(300, Dimensions.get('window').width * 0.7);
 // Hauteur de l'icône ☰/du bouton clair-sombre (`paddingTop: 6` +
 // `height: 38`, identique pour les deux) + un espace visible en
 // dessous. La mécanique de positionnement a changé le 21/08/2026 (voir
-// AUDIT.md) : le tiroir utilise désormais le même `SafeAreaView` pleine
+// docs/AUDIT.md) : le tiroir utilise désormais le même `SafeAreaView` pleine
 // largeur que l'icône, qui calcule probablement une marge de sécurité
 // automatique plus grande que l'ancien `SafeAreaView` étroit — l'espace
 // manuel de 48px, pensé pour l'ancienne mécanique, s'est avéré excessif

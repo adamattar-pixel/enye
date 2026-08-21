@@ -36,4 +36,4 @@ Lit et réécrit directement `mobile/src/data/words.json` en place (pas de fichi
 
 ## Correction manuelle
 
-Aucune UI d'édition de mot existant dans l'app pour l'instant (seulement ajout/suppression, voir PLAN.md) — un tag mal posé se corrige en éditant directement `words.json`, ou en relançant ce script après avoir vidé le tableau `tags` du mot concerné.
+Aucune UI d'édition de mot existant dans l'app pour l'instant (seulement ajout/suppression, voir docs/PLAN.md) — un tag mal posé se corrige en éditant directement `words.json`, ou en relançant ce script après avoir vidé le tableau `tags` du mot concerné.

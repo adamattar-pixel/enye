@@ -2,7 +2,7 @@ import type { CaptionStatus } from './types';
 
 /**
  * Récupération des sous-titres YouTube — méthode NON OFFICIELLE, voir
- * PLAN.md/AUDIT.md pour le détail complet. Deux étapes distinctes,
+ * docs/PLAN.md/docs/AUDIT.md pour le détail complet. Deux étapes distinctes,
  * documentées séparément parce qu'elles n'ont pas le même statut de
  * fiabilité vérifiée :
  *
@@ -40,7 +40,7 @@ import type { CaptionStatus } from './types';
  *    ce fichier. Utilisé en secours quand `fetchVideoCaptions`
  *    ci-dessous revient vide. **Non vérifié de bout en bout dans cette
  *    session** (aucun moteur de WebView disponible hors de l'app
- *    elle-même) — à tester en priorité sur device. Voir AUDIT.md pour le
+ *    elle-même) — à tester en priorité sur device. Voir docs/AUDIT.md pour le
  *    détail exact de chaque test.
  *
  * En cas d'échec à n'importe quelle étape, retourne un statut
@@ -94,7 +94,7 @@ async function fetchCaptionTrackList(videoId: string): Promise<CaptionTrack[]> {
 /** Préfère une piste espagnole humaine ; à défaut, la piste
  * auto-générée (`kind: 'asr'`) si c'est la seule disponible — accepter
  * les deux plutôt que rejeter l'ASR, avec `captionStatus` qui distingue
- * les deux pour l'UI (voir AUDIT.md, "Segmentation"). */
+ * les deux pour l'UI (voir docs/AUDIT.md, "Segmentation"). */
 function pickSpanishTrack(tracks: CaptionTrack[]): CaptionTrack | null {
   const spanish = tracks.filter((t) => t.languageCode.toLowerCase().startsWith('es'));
   if (spanish.length === 0) return null;
@@ -146,7 +146,7 @@ export function parseTimedTextXml(xml: string): CaptionCue[] {
  * exigence de "PoToken" (attestation générée par un vrai moteur de
  * navigateur) de plus en plus appliquée par YouTube contre les requêtes
  * non-navigateur, y compris pour cet endpoint historiquement public — voir
- * AUDIT.md pour le détail exact des tests. **Peut fonctionner ou non
+ * docs/AUDIT.md pour le détail exact des tests. **Peut fonctionner ou non
  * depuis un autre réseau (device réel)** — gardé comme premier essai
  * gratuit avant d'escalader vers `TranscriptFetcher.tsx` (WebView), pas
  * supprimé.

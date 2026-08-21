@@ -55,7 +55,7 @@ function parseLifecycle(value: string): SM2CardLifecycle {
 // un nouveau nom de fichier force une base fraîche plutôt qu'un crash
 // au premier import après mise à jour. Pas de données utilisateur
 // réelles à préserver à ce stade (aucun test n'a encore réussi de bout
-// en bout — voir AUDIT.md).
+// en bout — voir docs/AUDIT.md).
 export const DB_NAME = 'lexis-en.db';
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
@@ -102,7 +102,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     );
 
     -- Onglet Conjugaison (20/08/2026, planifié puis implémenté le même
-    -- jour — voir PLAN.md/AUDIT.md). Contrairement à words, le contenu
+    -- jour — voir docs/PLAN.md/docs/AUDIT.md). Contrairement à words, le contenu
     -- des verbes (infinitif, glose, formes conjuguées) n'est PAS
     -- dupliqué ici : conjugations.json est importé tel quel côté app et
     -- consulté par id, cette table ne garde que la progression SM-2 de
@@ -148,7 +148,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_fire_date ON scheduled_notifications(fire_date);
 
     -- Onglet Compréhension orale (20/08/2026, planifié puis implémenté le
-    -- même jour — voir PLAN.md/AUDIT.md). Contrairement à conjugation_cards,
+    -- même jour — voir docs/PLAN.md/docs/AUDIT.md). Contrairement à conjugation_cards,
     -- ici le contenu (titre, transcription des segments) N'EST PAS partagé
     -- via un fichier bundlé : chaque utilisateur ajoute ses propres vidéos
     -- à l'exécution (URL YouTube), donc video/segment vivent en base, pas
@@ -214,7 +214,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
  * cours de révision). Remplace l'ancien `seedIfEmpty`, qui ne faisait
  * rien du tout si la table `words` n'était pas totalement vide — ça
  * empêchait silencieusement tout enrichissement ultérieur du bundle
- * (ex. le passage de 36 à 6000 mots, voir AUDIT.md, ne serait jamais
+ * (ex. le passage de 36 à 6000 mots, voir docs/AUDIT.md, ne serait jamais
  * arrivé jusqu'aux installations déjà seedées sans ce changement).
  *
  * Insertions groupées par lots ([insertInBatches]) plutôt qu'un
@@ -223,7 +223,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
  *
  * Pas testé unitairement (pas de SQLite en mémoire disponible sous
  * Jest/jest-expo pour l'instant) — à vérifier sur device réel une fois
- * branché à un écran. Voir AUDIT.md. */
+ * branché à un écran. Voir docs/AUDIT.md. */
 export async function importMissingWords(db: SQLiteDatabase, words: Word[], now: Date = new Date()): Promise<number> {
   const existingRows = await db.getAllAsync<{ id: string }>('SELECT id FROM words;');
   const existingIds = new Set(existingRows.map((r) => r.id));
@@ -307,9 +307,27 @@ export async function resyncWordTags(db: SQLiteDatabase, words: Word[]): Promise
   }
   if (toUpdate.length === 0) return 0;
 
+  // Un UPDATE par ligne (un aller-retour au pont natif SQLite chacun) est
+  // le même défaut déjà corrigé pour les inserts en masse via
+  // `insertInBatches` — même volume potentiel ici (jusqu'à ~6000 mots,
+  // voir docs/AUDIT.md, coût de démarrage non mesuré). Regroupé en
+  // UPDATE ... CASE par lots de 80 (même taille que `insertInBatches`,
+  // même raison : marge sous la limite historique de paramètres liés
+  // SQLite) plutôt qu'`UPDATE ... FROM` (fonctionnalité SQLite plus
+  // récente, version exacte bundlée par expo-sqlite non confirmée).
+  const BATCH_SIZE = 80;
   await db.withTransactionAsync(async () => {
-    for (const { id, tags } of toUpdate) {
-      await db.runAsync('UPDATE words SET tags = ? WHERE id = ?;', tags, id);
+    for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+      const batch = toUpdate.slice(i, i + BATCH_SIZE);
+      const whenClauses = batch.map(() => 'WHEN ? THEN ?').join(' ');
+      const idPlaceholders = batch.map(() => '?').join(', ');
+      const caseParams = batch.flatMap(({ id, tags }) => [id, tags]);
+      const idParams = batch.map(({ id }) => id);
+      await db.runAsync(
+        `UPDATE words SET tags = CASE id ${whenClauses} END WHERE id IN (${idPlaceholders});`,
+        ...caseParams,
+        ...idParams
+      );
     }
   });
 
@@ -396,7 +414,7 @@ const WORD_CARD_SELECT = `SELECT w.*, c.ease_factor, c.interval_days, c.repetiti
  * global, sans distinction nouvelles/révisions. Utilisé par l'écran
  * Aujourd'hui pour le simple compteur "X cartes dues" ; la session de
  * révision elle-même utilise `getDueCardsSplit`, qui applique le
- * plafond 8 nouvelles + 22 révisions séparément (voir PLAN.md). */
+ * plafond 8 nouvelles + 22 révisions séparément (voir docs/PLAN.md). */
 export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number): Promise<DueCardRow[]> {
   const rows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
@@ -411,7 +429,7 @@ export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number):
 
 /** Cartes dues pour une session, avec les plafonds nouvelles/révisions
  * appliqués séparément (`settings.newCardsPerDay` / `settings.reviewCapPerDay`,
- * 8 + 22 par défaut — voir PLAN.md, "Le calcul des plafonds") plutôt
+ * 8 + 22 par défaut — voir docs/PLAN.md, "Le calcul des plafonds") plutôt
  * qu'un plafond combiné qui laissait les nouvelles cartes noyer les
  * révisions ou l'inverse selon l'ordre d'échéance. Les cartes en
  * révision passent d'abord (elles sont réellement en retard), les
@@ -847,7 +865,7 @@ function conjugationCardId(verbId: string, tense: ConjugationTense, person: numb
  * `conjugations.json` pas encore présent en base, avec une carte SM-2
  * neuve pour chacun — même principe que `importMissingWords` : tout au
  * premier lancement, seulement le delta ensuite. Avec le répertoire
- * élargi à ~1227 verbes (voir AUDIT.md, 20/08/2026), ça représente
+ * élargi à ~1227 verbes (voir docs/AUDIT.md, 20/08/2026), ça représente
  * jusqu'à ~63 800 cartes au premier import — insérées par lots
  * ([insertInBatches]), pas une par une (aurait ajouté une dizaine de
  * secondes ou plus au premier lancement à ce volume). */
@@ -901,7 +919,7 @@ export async function importMissingConjugationCards(
 
 /** Cartes de conjugaison dues, avec le même principe de plafond séparé
  * nouvelles/révisions que `getDueCardsSplit` (vocabulaire) — voir
- * PLAN.md. Pas de filtre par thème ici (la conjugaison n'a pas de
+ * docs/PLAN.md. Pas de filtre par thème ici (la conjugaison n'a pas de
  * réglage "thèmes actifs", contrairement au vocabulaire).
  *
  * **Ordre aléatoire, pas par fréquence/insertion** — retour explicite :
@@ -1032,7 +1050,7 @@ export async function updateConjugationReviewGrade(db: SQLiteDatabase, reviewId:
  * programmé les notifications, avec exactement les mêmes créneaux (pas
  * recalculés). Permet à `getNextScheduledNotificationTime` de LIRE
  * l'heure réelle plutôt que d'en réestimer une nouvelle à chaque
- * consultation (voir AUDIT.md, 20/08/2026). */
+ * consultation (voir docs/AUDIT.md, 20/08/2026). */
 export async function replaceScheduledNotifications(
   db: SQLiteDatabase,
   slots: { wordId: string; fireDate: Date }[]
@@ -1106,7 +1124,7 @@ function mapListeningVideoRow(r: ListeningVideoRow): ListeningVideo {
  * au milieu. `segments` peut être vide (sous-titres indisponibles, voir
  * `CaptionStatus`) : la vidéo est quand même enregistrée dans la
  * bibliothèque, juste non exploitable pour les exercices tant qu'elle n'a
- * aucun segment (voir PLAN.md, "dégradation gracieuse"). */
+ * aucun segment (voir docs/PLAN.md, "dégradation gracieuse"). */
 export async function addListeningVideo(
   db: SQLiteDatabase,
   video: ListeningVideo,
@@ -1257,7 +1275,7 @@ const LISTENING_CARD_SEGMENT_SELECT = `SELECT c.*, s.segment_index, s.start_time
 
 /** Segments dus, avec le même principe de plafond séparé nouveaux/révisions
  * que `getDueCardsSplit`/`getDueConjugationCardsSplit`. **Ne fait PAS la
- * sélection vidéo-puis-segment décrite dans PLAN.md** — ça reste le rôle de
+ * sélection vidéo-puis-segment décrite dans docs/PLAN.md** — ça reste le rôle de
  * `listening/selection.ts`, appelé côté écran à partir de ce pool de
  * lignes dues et de `getRecentListeningVideoIds` (le cooldown doit se
  * recalculer à chaque exercice AU FUR ET À MESURE de la session, pas

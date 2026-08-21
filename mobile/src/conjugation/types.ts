@@ -1,4 +1,4 @@
-/** Les 9 combinaisons temps/mode couvertes en v1 (voir PLAN.md) —
+/** Les 9 combinaisons temps/mode couvertes en v1 (voir docs/PLAN.md) —
  * indicatif (5), conditionnel (1), subjonctif (2), impératif (2). Les
  * clés correspondent exactement aux champs `forms` de
  * `mobile/src/data/conjugations.json` (voir

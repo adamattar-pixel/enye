@@ -98,7 +98,7 @@ Add video (URL or search result)
 
 **Current status, from real device logs (2026-08-21):** the entire pipeline is confirmed working end-to-end — button found/clicked, real caption content intercepted across multiple videos (up to ~858KB, PoToken param proving the approach is sound), parsed by `parseJson3Captions`, written to SQLite, and the user explicitly confirmed the app shows a non-zero segment count for added videos. Not yet independently verified: that the transcript text itself reads as correct, natural Spanish rather than just non-empty (no reason to suspect otherwise, just not specifically checked).
 
-## Edge cases (decided, see root `PLAN.md`'s original planning section for full reasoning)
+## Edge cases (decided)
 
 | Case | Behavior |
 |---|---|

@@ -47,12 +47,11 @@ SQLite (`expo-sqlite`) is the single source of truth for content + progress for 
 | Current known issues / unverified claims | `docs/AUDIT.md` |
 | Code style, naming, testing conventions | `docs/CONVENTIONS.md` |
 | Full requirements for a specific feature | `docs/specs/` |
-| **Full dated history of every change this project has ever had** (verbose, changelog-style, French) | root `PLAN.md` and `AUDIT.md` — these predate the `docs/` structure and remain the detailed journal; `docs/PLAN.md`/`docs/AUDIT.md` are current-state snapshots derived from them, not replacements |
 
 ## Working rules for this repo
 
 - **Confirm real bugs with a live test before fixing them**, and confirm fixes worked before calling them done — this project has a strong pattern (established across many sessions) of live-testing hypotheses (via `curl`/Node scripts for network behavior, asking the user to test on-device for anything UI/WebView-related) rather than guessing. Never write "fixed" or "resolved" for anything not actually confirmed working.
 - **Ask when genuinely ambiguous** rather than guessing on UI/UX requests — this user has repeatedly preferred a clarifying question (with concrete options/mockups) over a wrong guess.
-- Update `docs/` (and the relevant root `PLAN.md`/`AUDIT.md` entry, dated, French, with a `tsc`/`jest`/bundle verification line) after every significant change — see `docs/CONVENTIONS.md` for the exact pattern already in use.
+- Update `docs/PLAN.md` and `docs/AUDIT.md` (current-state snapshots, not changelogs — overwrite stale entries rather than appending history) after every significant change, with a `tsc`/`jest`/bundle verification line — see `docs/CONVENTIONS.md` for the exact pattern already in use.
 - Commit messages and in-repo documentation are in French (matches the user); code identifiers and comments in source files follow whatever that file already uses (mostly French comments explaining *why*, English identifiers).
 - Push after each meaningful step — this user has asked for that explicitly and repeatedly.

@@ -50,7 +50,7 @@ export function parseInterceptedBody(body: string): CaptionCue[] {
  * JSON de 858 225 caractères pour une vraie requête `timedtext` (avec un
  * paramètre `pot=...&potc=1` — le "PoToken" généré correctement par le
  * propre code de la page, exactement l'hypothèse retenue dans
- * AUDIT.md), mais 0 segments en sortaient : ce fichier ne reconnaissait
+ * docs/AUDIT.md), mais 0 segments en sortaient : ce fichier ne reconnaissait
  * que la forme `get_transcript` (`startMs`/`endMs`/`snippet`), pas cette
  * forme-ci (`events[].tStartMs`/`dDurationMs`/`segs[].utf8`) — d'où le
  * "0 segments" alors que le contenu était en réalité récupéré avec
@@ -87,7 +87,7 @@ export function parseJson3Captions(json: unknown): CaptionCue[] {
  * tout objet portant `startMs`/`endMs` — pas un chemin fixe dans
  * l'arborescence (structure interne non officielle, jamais observée
  * directement dans cette session puisque l'endpoint renvoyait
- * systématiquement une erreur depuis ce réseau, voir AUDIT.md) : une
+ * systématiquement une erreur depuis ce réseau, voir docs/AUDIT.md) : une
  * recherche en profondeur est la seule approche raisonnable sans avoir
  * pu inspecter un vrai payload. Repli seulement — `fmt=json3`
  * (`parseJson3Captions` ci-dessus) est la forme réellement observée. */

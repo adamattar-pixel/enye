@@ -1,6 +1,6 @@
 /** Métadonnées minimales via l'endpoint officiel oEmbed de YouTube — pas
  * de clé API requise, testé fonctionnel pendant cette session (voir
- * AUDIT.md, 20/08/2026). Ne fournit pas la durée de la vidéo (aucune
+ * docs/AUDIT.md, 20/08/2026). Ne fournit pas la durée de la vidéo (aucune
  * source officielle sans clé API — `durationSeconds` reste `null`,
  * voir `listening/types.ts`). */
 export interface VideoMetadata {

@@ -26,7 +26,7 @@ type Props = {
  * plutôt que `cards`/`reviews`. Pas de rechargement de file de
  * notifications ici : la conjugaison n'est pas encore intégrée aux
  * notifications verrouillées en v1 (entraînement dans l'app
- * uniquement), voir AUDIT.md pour la décision de périmètre. */
+ * uniquement), voir docs/AUDIT.md pour la décision de périmètre. */
 export function ConjugationReviewContainer({ db, onExit }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);

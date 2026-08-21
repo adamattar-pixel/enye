@@ -3,7 +3,7 @@
  * d'origine (36 mots).
  *
  * Pivot du 20/08/2026 : le couple cible est espagnol→anglais, pas
- * espagnol→français (décision définitive, voir PLAN.md/AUDIT.md) —
+ * espagnol→français (décision définitive, voir docs/PLAN.md/docs/AUDIT.md) —
  * `english`/`exampleEn` remplacent les anciens `french`/`exampleFr`. */
 export interface Word {
   id: string;

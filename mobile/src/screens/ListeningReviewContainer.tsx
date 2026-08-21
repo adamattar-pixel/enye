@@ -22,7 +22,7 @@ type Props = { db: SQLiteDatabase; onExit: () => void };
  * Écran de session pour l'onglet Écoute — même rôle que
  * [ConjugationReviewContainer.tsx](./ConjugationReviewContainer.tsx),
  * mais avec une sélection en deux temps (vidéo puis segment, voir
- * PLAN.md "Sélection aléatoire : cooldown vidéo puis segment") que ni le
+ * docs/PLAN.md "Sélection aléatoire : cooldown vidéo puis segment") que ni le
  * vocabulaire ni la conjugaison n'ont besoin de faire.
  *
  * `recentVideoIdsRef` porte l'historique "récemment utilisé" en mémoire

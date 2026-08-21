@@ -16,7 +16,7 @@ type Props = {
   /** Appelé quand la lecture atteint `endTime` (segment terminé). */
   onSegmentEnded?: () => void;
   /** Appelé sur une erreur du player YouTube (voir la table de
-   * résilience de PLAN.md — vidéo bloquée à l'intégration, région,
+   * résilience de docs/PLAN.md — vidéo bloquée à l'intégration, région,
    * etc.) — à afficher comme message simple côté appelant, pas de
    * tentative de contournement ici. */
   onError?: () => void;
@@ -28,14 +28,14 @@ type Props = {
  * l'API JS IFrame Player de YouTube) qui a échoué de façon systémique sur
  * device réel après 18 itérations de correctifs ciblés (`baseUrl`,
  * `origin`, `Referer`, URL d'embed réelle, `userAgent` desktop — voir
- * AUDIT.md, itérations 8 à 18). Cette librairie utilise EXACTEMENT la
+ * docs/AUDIT.md, itérations 8 à 18). Cette librairie utilise EXACTEMENT la
  * même technique de fond (page HTML embarquant `YT.Player`), mais la sert
  * par défaut depuis une vraie URL HTTPS tierce (`lonelycpp.github.io`,
  * `baseUrlOverride` par défaut) plutôt qu'une chaîne HTML synthétique
  * sans origine réelle — c'est très probablement la différence qui la
  * rend fiable là où l'implémentation maison ne l'était pas (~700 ⭐,
  * support Expo explicite, aucune dépendance native — compatible Expo Go
- * sans dev build). **Non encore vérifié sur device** — voir AUDIT.md.
+ * sans dev build). **Non encore vérifié sur device** — voir docs/AUDIT.md.
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function YouTubePlayer(
   { videoId, startTime, endTime, onReady, onSegmentEnded, onError },
@@ -150,7 +150,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
  * 1. **Désactivation des sous-titres.** `cc_load_policy` (via
  *    `showClosedCaptions`), puis `incognito`, puis `unloadModule('captions')`
  *    seul ont chacun échoué sur device (21/08/2026, itérations successives
- *    — voir AUDIT.md). `cc_load_policy` ne peut par conception qu'éviter de
+ *    — voir docs/AUDIT.md). `cc_load_policy` ne peut par conception qu'éviter de
  *    FORCER l'affichage, jamais forcer l'extinction. Filet de sécurité le
  *    plus direct ajouté en dernier recours : simuler un vrai clic sur le
  *    bouton CC du lecteur (`.ytp-subtitles-button`, classe stable de

@@ -34,7 +34,7 @@ Only what's actually enforced or consistently followed in this repo — not aspi
 
 ## Comments
 
-- French, and explain *why*, not *what* — identifiers are already named clearly enough to skip restating behavior. A comment earns its place by capturing a non-obvious constraint, a rejected alternative, or a dated decision (often with a one-line pointer to root `AUDIT.md`/`PLAN.md` for the full story).
+- French, and explain *why*, not *what* — identifiers are already named clearly enough to skip restating behavior. A comment earns its place by capturing a non-obvious constraint, a rejected alternative, or a dated decision (often with a one-line pointer to `docs/AUDIT.md`/`docs/PLAN.md` or `docs/DECISIONS.md` for the full story).
 - Don't add a docstring-style comment block to every function — most functions in this codebase have none.
 
 ## Git / commits
@@ -42,9 +42,9 @@ Only what's actually enforced or consistently followed in this repo — not aspi
 - Commit messages in English (documentation and in-app UI are French; commits are the one place this project has used English), ending with the `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` trailer.
 - Never amend a pushed commit, never force-push, never skip hooks.
 - Before calling any change done: `npx tsc --noEmit`, `npx jest --watchAll=false`, and a Metro bundle boot-check (`expo start` + `curl` the bundle URL) — all three, every time, not just the ones that seem relevant to the change.
-- Update the relevant root `PLAN.md`/`AUDIT.md` entry (dated, French, with the verification line above) for any behavior change — see `docs/CONVENTIONS.md`'s sibling files for the *why*; this is enforced by habit in this project, not tooling.
+- Update the relevant `docs/PLAN.md`/`docs/AUDIT.md` entry (French, with the verification line above) for any behavior change — these are current-state snapshots, so overwrite the stale entry rather than appending a history log; this is enforced by habit in this project, not tooling.
 
 ## Dependencies
 
-- Bias toward hand-rolled logic over a new npm package, especially for anything Expo-Go-compatibility-sensitive (`youtubeUrl.ts`'s regex-based parser instead of the `URL` global, `search.ts`'s `ytInitialData` scrape instead of a scraping library, `captions.ts`'s regex XML parser instead of an XML library). Live-test a candidate package before trusting it (see Decision 004 — `spanish-verbs` was tested and rejected before writing a line of generation code around it).
+- Bias toward hand-rolled logic over a new npm package, especially for anything Expo-Go-compatibility-sensitive (`youtubeUrl.ts`'s regex-based parser instead of the `URL` global, `search.ts`'s `ytInitialData` scrape instead of a scraping library, `captions.ts`'s regex XML parser instead of an XML library). Live-test a candidate package before trusting it (see Decision 004 — `spanish-verbs` was tested and rejected before writing a line of generation code around it). Not an absolute rule: `react-native-youtube-iframe` (Decision 014) replaced a hand-rolled WebView player after 18 failed fix iterations — confirm the package is genuinely native-dependency-free (check its `package.json`, not just its README) before adding it.
 - Before adding any native dependency, confirm it's Expo-Go-compatible (no custom native module requiring a dev build) — this is the project's hardest constraint, see `CLAUDE.md`.

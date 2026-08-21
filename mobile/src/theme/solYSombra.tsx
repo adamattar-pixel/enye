@@ -57,7 +57,7 @@ export const solYSombraLight: SolYSombraPalette = {
  * gardant la même famille de teintes (terre cuite / ocre / bordeaux)
  * inversée en luminosité plutôt qu'un simple noir-et-blanc. **Non
  * validée visuellement** — à eyeballer sur device réel avant de la
- * considérer définitive (voir AUDIT.md).
+ * considérer définitive (voir docs/AUDIT.md).
  */
 export const solYSombraDark: SolYSombraPalette = {
   cardBackground: '#241812',

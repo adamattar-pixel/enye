@@ -238,7 +238,7 @@ function createStyles(t: SolYSombraPalette) {
     pill: {
       flex: 1,
       // Agrandis une 2e fois (48 → 56 → 68) suite à un nouveau retour
-      // "toujours pas assez grands" — voir AUDIT.md, 20/08/2026.
+      // "toujours pas assez grands" — voir docs/AUDIT.md, 20/08/2026.
       height: 68,
       borderRadius: 24,
       alignItems: 'center',

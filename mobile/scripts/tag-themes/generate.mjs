@@ -1,6 +1,6 @@
 // Ajoute des tags thématiques aux mots de mobile/src/data/words.json qui
 // n'en ont pas encore (tags: []) — demandé explicitement le 20/08/2026,
-// voir AUDIT.md pour le détail de la méthode et ses limites.
+// voir docs/AUDIT.md pour le détail de la méthode et ses limites.
 //
 // Heuristique par mots-clés sur la glose anglaise (`word.english`),
 // PAS une vraie compréhension sémantique : chaque thème est une liste de
@@ -23,7 +23,7 @@ const WORDS_PATH = path.join(__dirname, '..', '..', 'src', 'data', 'words.json')
 // cohérent avec ce qu'avaient déjà les 36 mots écrits à la main.
 //
 // `verbAmbiguous` : mots-clés retirés spécifiquement pour les verbes —
-// détecté après un premier essai (voir AUDIT.md) : "hand"/"back"/"fall"
+// détecté après un premier essai (voir docs/AUDIT.md) : "hand"/"back"/"fall"
 // causaient de faux positifs sur des verbes à sens phrasal ("to hand"
 // = donner, "to get back" = revenir, "to fall" confondu avec la saison
 // "fall"/automne), alors qu'ils restent de bons indices pour un nom
@@ -189,7 +189,7 @@ const THEMES = {
     'next', 'previous', 'following', 'current', 'former', 'alive', 'dead', 'human', 'physical',
     'mental', 'emotional', 'spiritual', 'legal', 'illegal', 'moral', 'ethical', 'fair', 'unfair',
     // Ajoutés lors d'une deuxième passe (échantillon du "divers" trop
-    // gros, voir AUDIT.md) : adjectifs fréquents encore manqués.
+    // gros, voir docs/AUDIT.md) : adjectifs fréquents encore manqués.
     'economic', 'married', 'divorced', 'engaged', 'superior', 'inferior', 'external', 'internal',
     'commercial', 'original', 'plain', 'firm', 'recent', 'electoral', 'democratic', 'ideal',
     'disgusting', 'independent', 'collective', 'intellectual', 'continual', 'constant', 'urban',
@@ -311,7 +311,7 @@ function matchesKeyword(gloss, keyword) {
 }
 
 // Locutions repérées comme sources de faux positifs lors d'une première
-// passe (voir AUDIT.md) : si la glose contient la locution, le mot-clé
+// passe (voir docs/AUDIT.md) : si la glose contient la locution, le mot-clé
 // correspondant est ignoré pour cette glose précise, sans le retirer du
 // thème pour les autres mots où il est légitime.
 const PHRASE_EXCLUSIONS = [{ phrase: 'pay attention', excludeKeyword: 'pay' }];
@@ -390,7 +390,7 @@ function main() {
     // gloses très spécifiques ou composées peuvent n'y matcher aucun
     // mot-clé). `divers` garantit qu'AUCUN mot ne reste sans tag, mais ce
     // n'est PAS un vrai thème sémantique — juste un filet de sécurité,
-    // documenté comme tel plutôt que caché. Voir AUDIT.md pour le nombre
+    // documenté comme tel plutôt que caché. Voir docs/AUDIT.md pour le nombre
     // réel de mots concernés : si ce nombre est élevé, c'est un signal
     // qu'il faudrait élargir encore les listes de mots-clés plutôt que
     // s'appuyer sur ce filet.

@@ -21,7 +21,7 @@ async function computeQueueSlots(
   now: Date
 ): Promise<{ due: DueCardRow[]; slots: ScheduledNotification[] }> {
   // Respecte le plafond nouvelles/révisions du jour (8 + 22 par défaut,
-  // voir PLAN.md) plutôt que de piocher indistinctement jusqu'à
+  // voir docs/PLAN.md) plutôt que de piocher indistinctement jusqu'à
   // `QUEUE_SIZE` parmi toutes les cartes dues — sinon des révisions en
   // retard pouvaient être noyées par un afflux de nouvelles cartes, ou
   // l'inverse. `QUEUE_SIZE` reste un plafond de sécurité en dessous de la
@@ -52,7 +52,7 @@ async function computeQueueSlots(
  * capacité du jour), et programme une vraie notification par carte.
  *
  * À appeler à chaque ouverture de l'app et après chaque note, pour que
- * la file reste à jour (voir PLAN.md, "file glissante ~50"). */
+ * la file reste à jour (voir docs/PLAN.md, "file glissante ~50"). */
 export async function refillNotificationQueue(
   db: SQLiteDatabase,
   settings: AppSettings,
@@ -111,7 +111,7 @@ export async function refillNotificationQueue(
  * signalé explicitement (20/08/2026) : la version précédente rejouait
  * le calcul de planification à chaque consultation, et comme
  * l'espacement entre cartes dues simultanément est tiré aléatoirement
- * (15-30 min, voir PLAN.md) à chaque calcul, l'heure affichée pouvait
+ * (15-30 min, voir docs/PLAN.md) à chaque calcul, l'heure affichée pouvait
  * différer de celle réellement programmée par le dernier
  * `refillNotificationQueue`. Maintenant que `refillNotificationQueue`
  * persiste les créneaux réellement programmés dans ce miroir, cette

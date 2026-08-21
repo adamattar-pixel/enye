@@ -1,6 +1,6 @@
 # Decisions
 
-Architecturally significant decisions only — not every bugfix. Full reasoning and evidence for each lives in the dated root `AUDIT.md`/`PLAN.md` entries; this file is the index of *what was decided and why*, so a future session doesn't reopen a settled question. Consult this before proposing an architecture change.
+Architecturally significant decisions only — not every bugfix. Full reasoning and evidence for each is summarized in `docs/AUDIT.md`/`docs/PLAN.md`; this file is the index of *what was decided and why*, so a future session doesn't reopen a settled question. Consult this before proposing an architecture change.
 
 ---
 

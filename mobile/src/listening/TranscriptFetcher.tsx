@@ -26,7 +26,7 @@ const DESKTOP_USER_AGENT =
 /**
  * Deuxième méthode de récupération du CONTENU des sous-titres, en
  * secours de `captions.ts#fetchVideoCaptions` (requête HTTP nue) — voir
- * AUDIT.md, section "Débogage dédié de la récupération de captions"
+ * docs/AUDIT.md, section "Débogage dédié de la récupération de captions"
  * (20/08/2026), pour le diagnostic complet : `timedtext` et l'API
  * InnerTube renvoient systématiquement un échec (corps vide / 400
  * "Precondition check failed"), y compris depuis une requête émise avec
@@ -54,7 +54,7 @@ const DESKTOP_USER_AGENT =
  * (2) après le chargement + 2,5s de battement pour l'hydratation de la
  * page, recherche et clic du bouton "Show transcript"/"Mostrar
  * transcripción" (page chargée en espagnol via l'en-tête
- * `Accept-Language`, corrigé le 21/08/2026 — voir AUDIT.md, forcer
+ * `Accept-Language`, corrigé le 21/08/2026 — voir docs/AUDIT.md, forcer
  * l'anglais avait pour effet de bord de faire s'ouvrir le panneau sur une
  * traduction automatique anglaise plutôt que la vraie piste espagnole ;
  * `findShowTranscriptButton` reconnaît les libellés des deux langues) ;
@@ -169,7 +169,7 @@ const NETWORK_PATCH_SCRIPT = `
  * tentative de correction — capture `location.href` et le début du DOM
  * pour confirmer concrètement laquelle de ces hypothèses est la bonne,
  * plutôt que de corriger à l'aveugle. **Non revérifié sur device après
- * ce changement** — voir AUDIT.md.
+ * ce changement** — voir docs/AUDIT.md.
  */
 const CLICK_SCRIPT = `
 (function () {

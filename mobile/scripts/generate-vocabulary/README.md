@@ -12,7 +12,7 @@ Génère un candidat `mobile/src/data/words.generated.json` à partir de [doozan
 | `es-en.data` | Dictionnaire espagnol → anglais (définitions, genre) | [Wiktionary](https://wiktionary.org) | CC BY-SA |
 | `sentences.tsv` | Paires de phrases anglais/espagnol avec tags grammaticaux | [Tatoeba](https://tatoeba.org) | CC BY 2.0 FR |
 
-**Décision actée le 20/08/2026, définitive pour tout le projet : le couple cible est espagnol→anglais, pas espagnol→français.** Le schéma `Word` a été renommé en conséquence (`english`/`exampleEn` au lieu de `french`/`exampleFr`) — voir PLAN.md/AUDIT.md à la racine du dépôt.
+**Décision actée le 20/08/2026, définitive pour tout le projet : le couple cible est espagnol→anglais, pas espagnol→français.** Le schéma `Word` a été renommé en conséquence (`english`/`exampleEn` au lieu de `french`/`exampleFr`) — voir docs/PLAN.md/docs/AUDIT.md à la racine du dépôt.
 
 ## Utilisation
 
@@ -40,10 +40,10 @@ Le résultat est écrit dans `mobile/src/data/words.generated.json` — le scrip
 
 ## Intégration dans words.json (20/08/2026)
 
-**Fusionné directement dans `words.json`, sans relecture manuelle mot par mot** — décision actée avec l'utilisateur en amont (« gros volume direct, pas de relecture par petits lots », voir PLAN.md) et confirmée par la demande explicite d'intégrer "2000, voire plus" de mots.
+**Fusionné directement dans `words.json`, sans relecture manuelle mot par mot** — décision actée avec l'utilisateur en amont (« gros volume direct, pas de relecture par petits lots », voir docs/PLAN.md) et confirmée par la demande explicite d'intégrer "2000, voire plus" de mots.
 
 Regénéré avec `node generate.mjs 6000` (plutôt que le défaut 2000) pour couvrir davantage de vocabulaire d'un coup — 17420 lemmes candidats étaient disponibles après filtrage, donc 6000 restait large marge sous le plafond réel ; choisi comme un compromis raisonnable entre "plus de contenu" et une taille de bundle/durée de premier import qui reste correcte, pas comme la limite technique du script (`node generate.mjs 17420` fonctionnerait aussi).
 
 Fusion faite par un script one-off (pas conservé dans le dépôt) : les 36 mots écrits à la main dans `words.json` sont gardés tels quels (curation manuelle prioritaire sur la génération automatique) ; les entrées de `words.generated.json` dont l'id OU le texte espagnol coïncidait avec un des 36 mots à la main ont été exclues (34 coïncidences trouvées) ; le reste (5966 mots) a été ajouté. Résultat : **6002 mots au total**, 0 id dupliqué, 0 champ manquant, 0 glose anglaise vide (vérifié par script avant d'écrire le fichier final).
 
-Les limites listées ci-dessus (gloses verbeuses, niveaux CECRL approximatifs, tags vides, exemples "Tom") s'appliquent donc maintenant à l'ensemble du vocabulaire de l'app, pas seulement à un fichier candidat séparé — assumé, pas caché : reste correctible mot par mot depuis Decks & mots si un utilisateur tombe sur une glose vraiment mauvaise (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression — voir PLAN.md pour le backlog).
+Les limites listées ci-dessus (gloses verbeuses, niveaux CECRL approximatifs, tags vides, exemples "Tom") s'appliquent donc maintenant à l'ensemble du vocabulaire de l'app, pas seulement à un fichier candidat séparé — assumé, pas caché : reste correctible mot par mot depuis Decks & mots si un utilisateur tombe sur une glose vraiment mauvaise (pas d'édition de mot existant dans l'app pour l'instant, seulement ajout/suppression — voir docs/PLAN.md pour le backlog).

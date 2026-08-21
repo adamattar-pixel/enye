@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -36,7 +36,7 @@ const GRADES: SM2Grade[] = ['again', 'hard', 'good', 'easy'];
  * historique et référence statique des règles — trois sous-onglets d'un
  * même onglet, comme Réglages/Historique/Notifications le sont déjà
  * pour l'onglet Réglages, plutôt que des onglets séparés dans la barre
- * du bas (voir AUDIT.md). Historique séparé de celui du vocabulaire —
+ * du bas (voir docs/AUDIT.md). Historique séparé de celui du vocabulaire —
  * les notifications verrouillées, elles, restent vocabulaire uniquement
  * (demandé explicitement le 20/08/2026), donc pas de sous-onglet
  * Notifications ici. */
@@ -175,6 +175,13 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     await refresh();
   };
 
+  const renderItem = useCallback(
+    ({ item, index }: { item: ConjugationHistoryRow; index: number }) => (
+      <ConjugationHistoryRowView item={item} index={index} styles={styles} onEdit={setEditing} />
+    ),
+    [styles]
+  );
+
   if (loading) return null;
 
   return (
@@ -185,35 +192,9 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
       </Text>
       <FlatList
         data={rows}
-        keyExtractor={(r) => String(r.id)}
+        keyExtractor={conjugationHistoryKeyExtractor}
         contentContainerStyle={styles.historyListContent}
-        renderItem={({ item, index }) => {
-          const verb = getConjugationVerb(item.verbId);
-          if (!verb) return null;
-          const form = verb.forms[item.tense][item.person];
-          const personLabel = personLabelsForTense(item.tense)[item.person];
-          return (
-            <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.historyRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.wordSpanish}>{form}</Text>
-                <Text style={styles.wordEnglish}>
-                  {verb.infinitive} · {TENSE_LABELS[item.tense]} · {personLabel}
-                </Text>
-                <Text style={styles.historyDate}>
-                  {item.reviewedAt.toLocaleDateString()} ·{' '}
-                  {item.reviewedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-              <AnimatedPressable
-                style={[styles.gradeBadge, styles[`gradeBadge_${item.grade}` as const]]}
-                haptic={Haptics.ImpactFeedbackStyle.Light}
-                onPress={() => setEditing(item)}
-              >
-                <Text style={styles.gradeBadgeText}>{GRADE_LABELS[item.grade]}</Text>
-              </AnimatedPressable>
-            </FadeInView>
-          );
-        }}
+        renderItem={renderItem}
         ListEmptyComponent={<Text style={styles.rulesHint}>Aucune révision de conjugaison pour l'instant.</Text>}
       />
 
@@ -255,6 +236,46 @@ function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     </View>
   );
 }
+
+const conjugationHistoryKeyExtractor = (r: ConjugationHistoryRow) => String(r.id);
+
+const ConjugationHistoryRowView = memo(function ConjugationHistoryRowView({
+  item,
+  index,
+  styles,
+  onEdit,
+}: {
+  item: ConjugationHistoryRow;
+  index: number;
+  styles: Styles;
+  onEdit: (row: ConjugationHistoryRow) => void;
+}) {
+  const verb = getConjugationVerb(item.verbId);
+  if (!verb) return null;
+  const form = verb.forms[item.tense][item.person];
+  const personLabel = personLabelsForTense(item.tense)[item.person];
+  return (
+    <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.historyRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.wordSpanish}>{form}</Text>
+        <Text style={styles.wordEnglish}>
+          {verb.infinitive} · {TENSE_LABELS[item.tense]} · {personLabel}
+        </Text>
+        <Text style={styles.historyDate}>
+          {item.reviewedAt.toLocaleDateString()} ·{' '}
+          {item.reviewedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+      </View>
+      <AnimatedPressable
+        style={[styles.gradeBadge, styles[`gradeBadge_${item.grade}` as const]]}
+        haptic={Haptics.ImpactFeedbackStyle.Light}
+        onPress={() => onEdit(item)}
+      >
+        <Text style={styles.gradeBadgeText}>{GRADE_LABELS[item.grade]}</Text>
+      </AnimatedPressable>
+    </FadeInView>
+  );
+});
 
 // MARK: - Règles de conjugaison
 

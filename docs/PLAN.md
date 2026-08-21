@@ -1,22 +1,16 @@
 # Plan
 
-The current plan only — not history. For how we got here, see root `PLAN.md` (dated, chronological, French). Update this file whenever the plan changes; delete finished/obsolete items instead of leaving them to rot.
+The current plan only — not history. Update this file whenever the plan changes; delete finished/obsolete items instead of leaving them to rot. (A separate dated, chronological root `PLAN.md` existed earlier in the project but was merged away on 2026-08-21 to avoid maintaining two files per topic — this file is now the only one.)
 
 ## Current
 
-- [ ] **Confirm the DOM-click captions fix — three prior fixes to this bug have all failed.** Current fix clicks the player's own CC toggle button directly (`.ytp-subtitles-button`), polled continuously. Newly at risk: `controls: false` (added same session, see below) may remove this button from the DOM — if captions reappear, check that interaction first.
-- [ ] **Confirm millisecond-precision segment bounds and the `replay()` fix.** YouTube's `start`/`end` params only support whole seconds; the player now self-corrects via `seekTo`/`getCurrentTime` polling. `replay()` now force-remounts the player instead of calling `seekTo` alone (which never resumes playback if paused).
-- [ ] **Confirm the strict Spanish-only transcript filter.** A prior "accept any language if no Spanish arrives" fallback was itself causing Arabic/English imports — removed; non-Spanish network captures are now always rejected (0 segments) rather than imported.
-- [ ] **Confirm the hidden-chrome player (`controls: false`)** shows only the video frame as requested — no native pause/seek now, only the app's "Réécouter" button.
-- [x] Mute-then-unmute autoplay fix — confirmed working by the user, no more manual tap needed.
-- [ ] **Segment loading feels slow.** Removed `incognito: true` (was disabling all caching between loads, never actually the fix for captions). Not yet reconfirmed whether this alone is enough. A bigger, not-yet-attempted optimization is documented: the player fully remounts on every new exercise instead of using the library's lighter `loadVideoById` path — would need restructuring `ListeningReviewContainer.tsx`'s per-card remount boundary.
-
-See `docs/AUDIT.md` Issue #2.
+- [ ] **Word editing in Decks & mots** (requested 2026-08-21): edit `english`/`exampleEn`/tag/CECRL level for any word (imported or user-added), plain SQLite `UPDATE`, no new table. Deletion stays restricted to user-added words only (not extended). New "mots ajoutés" filter/segment to show only manually-added words, reusing the existing `is_user_added` distinction. In progress.
+- [ ] **General code optimization pass** (requested 2026-08-21): `resyncWordTags` batched into `UPDATE...CASE` (was one round-trip per row, same class of fix as `insertInBatches`); `DecksScreen`/`ConjugationScreen` history `FlatList`s given memoized row components + `useCallback`'d `renderItem` (was recreating render closures — and therefore risking re-rendering all visible rows — on every unrelated state change, notable on `DecksScreen`'s up-to-6002-word list). `StatsScreen`/`ListeningScreen` FlatLists not yet done — same pattern, lower priority (bounded/small lists).
 
 ## Next
 
 - [ ] Full on-device pass across everything built this session but never confirmed working live: notation buttons respond to touch on every screen (conjugation, listening, vocab), animations play, the ☰ drawer opens/closes comfortably and its gap above doesn't look wrong, Historique displays/corrects correctly in its new Statistiques location, dark keyboard actually renders dark, tag filters in Decks & mots show a sensible number of words per tag (post `resyncWordTags`).
-- [ ] Measure first-launch import time at current data volume (~6002 words + ~63,800 conjugation cards + the new per-row `resyncWordTags` UPDATE pass) — never measured on device, only reasoned about.
+- [ ] Measure first-launch import time at current data volume (~6002 words + ~63,800 conjugation cards + the batched `resyncWordTags` UPDATE pass) — never measured on device, only reasoned about.
 
 ## Later
 
