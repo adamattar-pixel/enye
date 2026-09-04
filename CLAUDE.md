@@ -4,11 +4,11 @@ Entry point for Claude Code sessions on this repo. Keep this file short — deta
 
 ## Project
 
-**Lexis** — a Spanish→English vocabulary/grammar learning app on the Anki/SM-2 model, meant to be driven mostly from lock-screen notifications rather than the app itself. French user, French-language docs and commit messages throughout.
+**Lexis** — a Spanish→English vocabulary/grammar learning app on the Anki/SM-2 model. French user, French-language docs and commit messages throughout. Originally meant to be driven mostly from lock-screen notifications; as of the desktop migration (2026-09-04, see `docs/DECISIONS.md` Decision 016) that's no longer the model — see below.
 
 ## Active stack
 
-**`mobile/`** (Expo/React Native/TypeScript) is the actively developed app. Started as native iOS (Swift/SwiftUI/SwiftData, see `Packages/`), pivoted to Expo because development happens on Windows without a Mac or paid Apple developer account. The native Swift packages (`Packages/SM2Engine`, `Packages/ReviewScheduler`) are not deleted — they're the reference spec the TypeScript port was tested against — but they are not where you add features.
+**`mobile/`** (Expo/React Native/TypeScript, packaged with Electron) is the actively developed app, targeting **Windows desktop, not iOS**. It started as native iOS (Swift/SwiftUI/SwiftData, see `Packages/`), pivoted to Expo/Expo Go because development happens on Windows without a Mac or paid Apple developer account, then pivoted again (2026-09-04) to a Windows desktop build (Electron wrapping an Expo Web export) because a permanent iOS install has no free path either way (no Mac, no $99/year account) — see Decision 016 for the full reasoning. **iOS/Expo Go is abandoned, not kept in parallel.** The native Swift packages (`Packages/SM2Engine`, `Packages/ReviewScheduler`) are still not deleted — they're the reference spec the TypeScript port was tested against — but they are not where you add features.
 
 **Do not work in `Packages/` unless explicitly asked.** All active work is in `mobile/`.
 
@@ -18,24 +18,26 @@ Entry point for Claude Code sessions on this repo. Keep this file short — deta
 
 Run from `mobile/`:
 ```
-npx expo start              # dev server; scan the QR code with Expo Go on the same Wi-Fi
+npm run desktop              # dev: Metro web dev server + Electron together
 npx jest --watchAll=false    # run tests once (npm test = watch mode)
-npx tsc --noEmit             # type-check
+npx tsc --noEmit             # type-check the app (excludes electron/)
+npx tsc -p electron/tsconfig.json   # type-check the Electron main process separately
+npm run desktop:package      # build a real Windows installer (release/)
 ```
-There is no CI/CD configured — these three commands are the only automated verification available. There is no lint script configured either.
+There is no CI/CD configured — these are the only automated verification available. There is no lint script configured either. Both `tsc` targets must stay green — the app and the Electron main process are two separate TypeScript projects (see `electron/tsconfig.json`, Node/CommonJS output, excluded from the app's own `tsconfig.json`).
 
 ## Critical constraints
 
-- **Everything must run offline, inside Expo Go — no development build.** No native dependency that would force `eas build`/Xcode. If a task seems to need one, stop and flag it before writing code.
-- Notifications are **local only** (`expo-notifications`) — no push, no server, no backend of any kind.
-- iOS caps pending local notifications at 64 — the app uses a sliding queue (~50), refilled on app open and after each grade.
-- The listening (Compréhension Orale) feature is the one deliberate exception to "fully offline": it needs network to fetch YouTube pages inside a `WebView`. See `docs/specs/listening-comprehension.md`.
-- No test coverage exists for `mobile/src/data/database.ts` or anything touching SQLite directly — `expo-sqlite` has no in-memory test double available under Jest. Verify DB-touching changes manually on device; don't claim they're tested.
-- Nothing in this repo has been verified on a real device by Claude directly — verification claims in this codebase mean `tsc`/`jest`/Metro-bundle-boots, never "confirmed working on iPhone" unless a human reports back with real logs.
+- **No native npm dependency requiring compilation** (the equivalent of the old "no `eas build`/Xcode" rule, carried into the desktop context) — `node:sqlite` was chosen specifically because it's a Node built-in, not an npm package, avoiding `electron-rebuild`/a C++ toolchain. If a task seems to need a compiled native module, stop and flag it before writing code.
+- **The renderer (React/Expo Web code under `src/`) has no Node/Electron access directly** — `contextIsolation: true`, `nodeIntegration: false` on the main window. Anything needing Node/network-without-CORS/filesystem access goes through `electron/main.ts` + `electron/preload.ts`'s `contextBridge`, called via `window.lexisDesktop.*` from the renderer (see `src/data/ipcDb.ts`, `src/services/translateIpc.ts`, `src/services/bookImportIpc.ts` for the existing pattern — mirror it for anything new).
+- Local OS notifications are gone (`expo-notifications` had no web/Electron support) — the due-card reminder is now an in-app check (Aujourd'hui tab, and Réglages → Rappel), not a push.
+- The listening (Compréhension Orale) feature's YouTube-scraping technique (captions interception, `electron/captionsFetcher.ts`) now runs in the Electron main process (a hidden `BrowserWindow` with `contextIsolation: false`, since the technique requires patching `fetch`/`XMLHttpRequest` in the same JS world the real page's scripts run in) — not in the renderer, not via `react-native-webview` (removed, no working react-native-web equivalent exists for this specific technique; a plain browser's same-origin policy blocks it in principle, regardless of library).
+- No test coverage exists for `mobile/src/data/database.ts` or anything touching SQLite directly — no in-memory test double available under Jest for `node:sqlite` either. Verify DB-touching changes manually by running the app; don't claim they're tested.
+- Nothing in this repo has been verified **visually on screen** by Claude directly (no screenshot/browser-automation tool available) — verification claims in this codebase mean `tsc`/`jest`/Metro-bundle-boots/direct `.db`-file inspection/process-liveness checks, never "confirmed working on screen" unless a human reports back with what they actually saw.
 
 ## Architecture, in one paragraph
 
-SQLite (`expo-sqlite`) is the single source of truth for content + progress for vocabulary and conjugation (words/verbs bundled as JSON, imported into SQLite on first run and incrementally topped up on updates); the listening feature has no bundled content — users add videos at runtime, so SQLite holds everything for it. A single generic SM-2 engine (`mobile/src/sm2/`) grades all three content types via different card-id schemes. Six screens live behind a hamburger-drawer nav (`mobile/src/navigation/`), each internally split into sub-tabs where relevant (Réglages, Conjugaison, Écoute, Statistiques). See `docs/ARCHITECTURE.md` for the real breakdown.
+SQLite (`node:sqlite`, in the Electron main process — see `electron/nodeSqliteAdapter.ts`) is the single source of truth for content + progress for vocabulary and conjugation (words/verbs bundled as JSON, imported on first run and incrementally topped up on updates, now done once at app boot in the main process rather than the renderer); the listening feature has no bundled content — users add videos at runtime, so SQLite holds everything for it. The renderer never talks to SQLite directly — it goes through an IPC bridge (`src/data/ipcDb.ts` implementing the `LexisDb` interface from `src/data/dbTypes.ts`) that every function in `src/data/database.ts` was already written against, so none of that business logic changed when the backend did. A single generic SM-2 engine (`mobile/src/sm2/`) grades all content types via different card-id schemes. Six screens live behind a hamburger-drawer nav (`mobile/src/navigation/`), each internally split into sub-tabs where relevant (Réglages, Conjugaison, Écoute, Statistiques). See `docs/ARCHITECTURE.md` for the real breakdown (not yet updated for the desktop migration as of this writing — cross-check against `docs/DECISIONS.md` Decision 016 and `docs/AUDIT.md` if it looks stale).
 
 ## Where to look
 
