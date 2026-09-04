@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getBook, getBookChapters, updateBookProgress, addBookmark, getBookmarks, deleteBookmark } from '../data/database';
 import { splitIntoSentences } from '../books/parsing';
-import { translateSentence, isTranslationAvailable } from '../services/translate';
+import { translateSentence, checkTranslationAvailable } from '../services/translateIpc';
 import type { Book, BookChapter, BookBookmark } from '../books/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; bookId: string; onExit: () => void };
+type Props = { db: LexisDb; bookId: string; onExit: () => void };
 type Styles = ReturnType<typeof createStyles>;
 
 /**
@@ -32,6 +32,15 @@ export function ReaderScreen({ db, bookId, onExit }: Props) {
   const [bookmarksVisible, setBookmarksVisible] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookBookmark[]>([]);
   const [translation, setTranslation] = useState<{ sentence: string; result: string | null; loading: boolean } | null>(null);
+  // La disponibilité (clé DeepL configurée ou non) n'est lisible que
+  // côté process principal Electron désormais (voir services/
+  // translateIpc.ts) — résolue une fois au montage plutôt qu'appelée
+  // en synchrone comme avant.
+  const [translationAvailable, setTranslationAvailable] = useState(false);
+
+  useEffect(() => {
+    checkTranslationAvailable().then(setTranslationAvailable);
+  }, []);
 
   const currentParagraphIndexRef = useRef(0);
   // Index de paragraphe où faire défiler dès que la liste a fini de se
@@ -121,16 +130,19 @@ export function ReaderScreen({ db, bookId, onExit }: Props) {
     [db, bookId]
   );
 
-  const handleTapSentence = useCallback((sentence: string) => {
-    if (!isTranslationAvailable()) {
-      setTranslation({ sentence, result: null, loading: false });
-      return;
-    }
-    setTranslation({ sentence, result: null, loading: true });
-    translateSentence(sentence).then((result) => {
-      setTranslation({ sentence, result, loading: false });
-    });
-  }, []);
+  const handleTapSentence = useCallback(
+    (sentence: string) => {
+      if (!translationAvailable) {
+        setTranslation({ sentence, result: null, loading: false });
+        return;
+      }
+      setTranslation({ sentence, result: null, loading: true });
+      translateSentence(sentence).then((result) => {
+        setTranslation({ sentence, result, loading: false });
+      });
+    },
+    [translationAvailable]
+  );
 
   const renderParagraph = useCallback(
     ({ item }: { item: string }) => (
@@ -280,7 +292,7 @@ export function ReaderScreen({ db, bookId, onExit }: Props) {
             <View style={styles.ticketDash} />
             {translation?.loading ? (
               <ActivityIndicator color={theme.buttonFilled} />
-            ) : !isTranslationAvailable() ? (
+            ) : !translationAvailable ? (
               <Text style={styles.translationUnavailable}>
                 Traduction non configurée — ajoute une clé DeepL dans .env (EXPO_PUBLIC_DEEPL_API_KEY, voir .env.example).
               </Text>

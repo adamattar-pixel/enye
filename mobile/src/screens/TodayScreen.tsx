@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getDueCardsSplit, getReviewCountSince, getAllReviews } from '../data/database';
 import { getSettings } from '../data/settings';
 import { computeStreak, computeLostStreakLength } from '../stats/statsEngine';
@@ -10,7 +10,7 @@ import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
-  db: SQLiteDatabase;
+  db: LexisDb;
   onStartSession: () => void;
 };
 type Styles = ReturnType<typeof createStyles>;

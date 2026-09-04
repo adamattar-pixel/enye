@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import {
   getAllReviews,
   getAllDueDates,
@@ -17,7 +17,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase };
+type Props = { db: LexisDb };
 type SubView = 'stats' | 'history';
 type Styles = ReturnType<typeof createStyles>;
 
@@ -76,7 +76,7 @@ function SubTabButton({ styles, label, active, onPress }: { styles: Styles; labe
 
 // MARK: - Statistiques
 
-function StatsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
+function StatsView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [streak, setStreak] = useState(0);
   const [successRate, setSuccessRate] = useState(0);
   const [learned, setLearned] = useState(0);
@@ -190,7 +190,7 @@ function ForecastBar({
 /** Historique des révisions — mot, traduction, note, avec correction
  * possible en cas de mauvais clic. Déplacé depuis Réglages (voir
  * commentaire en tête de fichier) sans changement de comportement. */
-function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
+function HistoryView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [rows, setRows] = useState<ReviewHistoryRow[]>([]);
   const [editing, setEditing] = useState<ReviewHistoryRow | null>(null);
   const [loading, setLoading] = useState(true);

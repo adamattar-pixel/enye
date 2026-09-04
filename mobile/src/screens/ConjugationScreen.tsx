@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import {
   getDueConjugationCardsSplit,
   getConjugationCounts,
@@ -18,7 +18,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onStartSession: () => void };
+type Props = { db: LexisDb; onStartSession: () => void };
 type SubView = 'training' | 'history' | 'rules';
 type Styles = ReturnType<typeof createStyles>;
 
@@ -89,7 +89,7 @@ function SubTabButton({
 
 // MARK: - Entraînement
 
-function TrainingView({ db, styles, onStartSession }: { db: SQLiteDatabase; styles: Styles; onStartSession: () => void }) {
+function TrainingView({ db, styles, onStartSession }: { db: LexisDb; styles: Styles; onStartSession: () => void }) {
   const [dueCount, setDueCount] = useState(0);
   const [learned, setLearned] = useState(0);
   const [total, setTotal] = useState(0);
@@ -153,7 +153,7 @@ function TrainingView({ db, styles, onStartSession }: { db: SQLiteDatabase; styl
  * Même principe et même limite assumée que l'historique du vocabulaire
  * (Réglages → Historique) : corrige les stats, pas l'échéance déjà
  * programmée de la carte. */
-function HistoryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
+function HistoryView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [rows, setRows] = useState<ConjugationHistoryRow[]>([]);
   const [editing, setEditing] = useState<ConjugationHistoryRow | null>(null);
   const [loading, setLoading] = useState(true);

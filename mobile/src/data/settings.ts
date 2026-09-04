@@ -1,4 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from './dbTypes';
 
 export interface AppSettings {
   newCardsPerDay: number;
@@ -66,7 +66,7 @@ export const defaultSettings: AppSettings = {
 
 const SETTINGS_KEY = 'app';
 
-export async function getSettings(db: SQLiteDatabase): Promise<AppSettings> {
+export async function getSettings(db: LexisDb): Promise<AppSettings> {
   const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?;', SETTINGS_KEY);
   if (!row) return defaultSettings;
 
@@ -81,7 +81,7 @@ export async function getSettings(db: SQLiteDatabase): Promise<AppSettings> {
   }
 }
 
-export async function saveSettings(db: SQLiteDatabase, settings: AppSettings): Promise<void> {
+export async function saveSettings(db: LexisDb, settings: AppSettings): Promise<void> {
   await db.runAsync(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;',
     SETTINGS_KEY,

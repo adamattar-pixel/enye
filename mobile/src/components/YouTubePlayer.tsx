@@ -1,6 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import YoutubeIframe, { type YoutubeIframeRef } from 'react-native-youtube-iframe';
 
 export type YouTubePlayerHandle = {
   /** Relance la lecture depuis `startTime` (voir `types.ts`). */
@@ -23,50 +22,51 @@ type Props = {
 };
 
 /**
- * Wrapper autour de `react-native-youtube-iframe` (LonelyCpp) — remplace
- * le 21/08/2026 une implémentation maison (page HTML custom embarquant
- * l'API JS IFrame Player de YouTube) qui a échoué de façon systémique sur
- * device réel après 18 itérations de correctifs ciblés (`baseUrl`,
- * `origin`, `Referer`, URL d'embed réelle, `userAgent` desktop — voir
- * docs/AUDIT.md, itérations 8 à 18). Cette librairie utilise EXACTEMENT la
- * même technique de fond (page HTML embarquant `YT.Player`), mais la sert
- * par défaut depuis une vraie URL HTTPS tierce (`lonelycpp.github.io`,
- * `baseUrlOverride` par défaut) plutôt qu'une chaîne HTML synthétique
- * sans origine réelle — c'est très probablement la différence qui la
- * rend fiable là où l'implémentation maison ne l'était pas (~700 ⭐,
- * support Expo explicite, aucune dépendance native — compatible Expo Go
- * sans dev build). **Non encore vérifié sur device** — voir docs/AUDIT.md.
+ * Remplace `react-native-youtube-iframe` (WebView, Decision 014) lors du
+ * passage à la cible desktop — voir docs/DECISIONS.md Decision 016 : sur
+ * un vrai navigateur/Electron, le renderer EST déjà un contexte web, donc
+ * l'API JS officielle "IFrame Player" de YouTube (`youtube.com/iframe_api`)
+ * s'utilise directement, sans wrapper WebView du tout — une vraie
+ * simplification par rapport au mobile, pas juste un portage à l'identique.
+ *
+ * Reprend la même technique de fond que l'ancien `buildPlayerFixupScript`
+ * (Decision 014) pour ce qui reste possible depuis un contexte cross-origin
+ * standard : `player.seekTo`/`getCurrentTime` (précision à la milliseconde,
+ * les paramètres `start`/`end` de l'API n'acceptant que des secondes
+ * entières) et `player.unloadModule('captions')`/`setOption('captions',
+ * 'track', {})` pour les sous-titres. Le repli par clic DOM sur le bouton
+ * CC (`.ytp-subtitles-button`) n'a PAS de portage possible ici : ce bouton
+ * vit dans le DOM d'un iframe cross-origin (`youtube.com`), inaccessible
+ * depuis la page hôte par la politique same-origin du navigateur — c'est
+ * exactement la même contrainte que celle qui a forcé la réécriture du
+ * mécanisme de sous-titres (voir `electron/captionsFetcher.ts`). Si les
+ * appels officiels ci-dessus s'avèrent insuffisants seuls (comme ils
+ * l'avaient été sur WebView iOS), il n'y a pas de filet de sécurité
+ * équivalent disponible sur cette cible — **non vérifié visuellement**,
+ * seul le fait que le composant compile et que le player se charge a été
+ * établi (voir docs/AUDIT.md).
  */
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function YouTubePlayer(
   { videoId, startTime, endTime, onReady, onSegmentEnded, onError },
   ref
 ) {
-  const playerRef = useRef<YoutubeIframeRef>(null);
+  const containerRef = useRef<View>(null);
+  const playerRef = useRef<YTPlayer | null>(null);
   const [width, setWidth] = useState(0);
   const [replayKey, setReplayKey] = useState(0);
-  // WebKit/iOS bloque l'autoplay avec son pour du contenu vidéo intégré
-  // (iframe cross-origin) sans geste utilisateur direct, mais autorise
-  // largement l'autoplay MUET — d'où le gros bouton rouge YouTube exigeant
-  // un tap manuel malgré `play` (demandé explicitement, 21/08/2026).
-  // Contournement standard : démarrer muet, démuter dès que la lecture a
-  // réellement commencé (pas juste "prête") plutôt qu'immédiatement, pour
-  // laisser le temps au navigateur d'accepter l'autoplay muet d'abord.
-  const [muted, setMuted] = useState(true);
+  // WebKit/Chromium bloque l'autoplay avec son sans geste utilisateur
+  // direct, mais autorise l'autoplay MUET — même contournement que côté
+  // mobile (Decision 014) : démarrer muet, démuter dès que la lecture a
+  // réellement commencé.
+  const mutedRef = useRef(true);
   const hasUnmutedRef = useRef(false);
 
   useEffect(() => {
-    setMuted(true);
     hasUnmutedRef.current = false;
+    mutedRef.current = true;
   }, [replayKey, videoId]);
 
   useImperativeHandle(ref, () => ({
-    // `seekTo` seul ne reprend jamais la lecture si le player est en
-    // pause (documenté officiellement par l'API YouTube) — maintenant que
-    // la coupure précise à `endTime` est fiable (voir plus bas), rejouer
-    // laisserait sinon la vidéo en pause après le retour au début. Un
-    // remontage complet (nouvelle `key`) redémarre proprement avec
-    // `play=true`, plutôt que de dépendre d'un appel `playVideo` que la
-    // librairie n'expose pas dans sa ref.
     replay: () => setReplayKey((k) => k + 1),
   }));
 
@@ -74,147 +74,167 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     setWidth(event.nativeEvent.layout.width);
   }, []);
 
-  const handleChangeState = useCallback(
-    (state: string) => {
-      console.log('[YouTubePlayer] state:', state);
-      if (state === 'playing' && !hasUnmutedRef.current) {
-        hasUnmutedRef.current = true;
-        setMuted(false);
-      }
-      if (state === 'ended') onSegmentEnded?.();
-    },
-    [onSegmentEnded]
-  );
+  useEffect(() => {
+    if (width <= 0) return;
+    let disposed = false;
+    let endCheckInterval: ReturnType<typeof setInterval> | null = null;
+    let captionsInterval: ReturnType<typeof setInterval> | null = null;
 
-  const handleError = useCallback(
-    (error: string) => {
-      console.log('[YouTubePlayer] error:', error);
-      onError?.();
-    },
-    [onError]
-  );
+    function disableCaptions(p: YTPlayer): void {
+      try {
+        p.unloadModule?.('captions');
+      } catch {
+        // ignore
+      }
+      try {
+        p.setOption?.('captions', 'track', {});
+      } catch {
+        // ignore
+      }
+    }
+
+    function createPlayer(): void {
+      if (disposed) return;
+      const node = containerRef.current as unknown as HTMLElement | null;
+      const YT = window.YT;
+      if (!node || !YT) return;
+
+      // eslint-disable-next-line new-cap
+      const player = new YT.Player(node, {
+        videoId,
+        width: '100%',
+        height: '100%',
+        playerVars: {
+          start: Math.floor(startTime),
+          end: Math.ceil(endTime),
+          controls: 0,
+          rel: 0,
+          cc_load_policy: 0,
+          autoplay: 1,
+          mute: 1,
+          playsinline: 1,
+        },
+        events: {
+          onReady: () => {
+            if (disposed) return;
+            try {
+              player.seekTo(startTime, true);
+            } catch {
+              // ignore
+            }
+            disableCaptions(player);
+            captionsInterval = setInterval(() => disableCaptions(player), 1000);
+            endCheckInterval = setInterval(() => {
+              try {
+                if (player.getCurrentTime() >= endTime) player.pauseVideo();
+              } catch {
+                // ignore
+              }
+            }, 200);
+            onReady?.();
+          },
+          onStateChange: (event: { data: number }) => {
+            // 1 = YT.PlayerState.PLAYING, 0 = ENDED (constantes officielles,
+            // pas de dépendance ajoutée juste pour ces deux entiers stables).
+            if (event.data === 1 && !hasUnmutedRef.current) {
+              hasUnmutedRef.current = true;
+              try {
+                player.unMute();
+              } catch {
+                // ignore
+              }
+            }
+            if (event.data === 0) onSegmentEnded?.();
+          },
+          onError: () => onError?.(),
+        },
+      });
+      playerRef.current = player;
+    }
+
+    loadYouTubeIframeApi().then(() => {
+      if (!disposed) createPlayer();
+    });
+
+    return () => {
+      disposed = true;
+      if (endCheckInterval) clearInterval(endCheckInterval);
+      if (captionsInterval) clearInterval(captionsInterval);
+      try {
+        playerRef.current?.destroy?.();
+      } catch {
+        // ignore
+      }
+      playerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, replayKey, videoId, startTime, endTime]);
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
-      {width > 0 && (
-        <YoutubeIframe
-          key={replayKey}
-          ref={playerRef}
-          height={(width * 9) / 16}
-          width={width}
-          videoId={videoId}
-          play
-          mute={muted}
-          initialPlayerParams={{
-            start: Math.floor(startTime),
-            end: Math.ceil(endTime),
-            // Habillage YouTube (barre de contrôle, titre, bouton plein
-            // écran) masqué — demandé explicitement : ne garder que
-            // l'image de la vidéo. Compromis assumé : plus de pause/
-            // avance manuelle native, seul "Réécouter" (côté app) reste
-            // disponible pour agir sur la lecture.
-            controls: false,
-            rel: false,
-            // Les sous-titres révéleraient la réponse avant que l'utilisateur
-            // ait tapé ce qu'il a entendu — explicitement désactivés plutôt
-            // que de compter sur le défaut de la librairie (demandé
-            // explicitement, l'utilisateur devait sinon les couper à la main).
-            showClosedCaptions: false,
-          }}
-          // `showClosedCaptions: false` puis `incognito` ont tous deux
-          // échoué sur device (21/08/2026, réglage iOS "Sous-titres et
-          // SDH" aussi vérifié désactivé) avant de passer au clic DOM sur
-          // le bouton CC (voir `buildPlayerFixupScript` plus bas), qui ne
-          // dépend pas d'un état "propre"/non persistant — `incognito`
-          // n'a donc jamais été la cause du contournement actuellement en
-          // place, seulement un coût (aucune mise en cache entre les
-          // segments, chargement plus lent signalé explicitement par
-          // l'utilisateur) sans bénéfice réel. Retiré.
-          webViewProps={{ injectedJavaScript: buildPlayerFixupScript(startTime, endTime) }}
-          onReady={() => onReady?.()}
-          onChangeState={handleChangeState}
-          onError={handleError}
-        />
-      )}
+      {width > 0 && <View key={replayKey} ref={containerRef} style={styles.playerNode} />}
     </View>
   );
 });
 
-/** Script injecté dans la page du lecteur (`player` est une variable
- * globale déclarée `var player` au niveau racine d'un `<script>` classique
- * par `react-native-youtube-iframe`, pas un module — voir son
- * `PlayerScripts.js` sur GitHub — donc accessible depuis n'importe quel
- * script partageant la même WebView). Trois responsabilités, combinées en
- * un seul sondage pour ne pas multiplier les `setInterval` :
- *
- * 1. **Désactivation des sous-titres.** `cc_load_policy` (via
- *    `showClosedCaptions`), puis `incognito`, puis `unloadModule('captions')`
- *    seul ont chacun échoué sur device (21/08/2026, itérations successives
- *    — voir docs/AUDIT.md). `cc_load_policy` ne peut par conception qu'éviter de
- *    FORCER l'affichage, jamais forcer l'extinction. Filet de sécurité le
- *    plus direct ajouté en dernier recours : simuler un vrai clic sur le
- *    bouton CC du lecteur (`.ytp-subtitles-button`, classe stable de
- *    l'habillage YouTube) chaque fois qu'il est trouvé actif
- *    (`aria-pressed="true"`) — équivalent à ce que ferait un utilisateur
- *    réel, sondé en continu au cas où l'état changerait après coup (ex.
- *    activation tardive d'une traduction automatique).
- * 2. **Bornage précis du segment, à la milliseconde.** Les paramètres
- *    `start`/`end` de l'API YouTube (`initialPlayerParams`) n'acceptent que
- *    des secondes entières — limitation documentée de l'API, pas un choix
- *    de ce projet. `player.seekTo(secondes, true)` et
- *    `player.getCurrentTime()`, eux, acceptent des flottants : on corrige
- *    la position de départ précisément dès que le player existe, puis on
- *    sonde `getCurrentTime()` pour couper à `endTime` au lieu de compter
- *    uniquement sur le `end` grossier (demandé explicitement, 21/08/2026).
- */
-function buildPlayerFixupScript(startTime: number, endTime: number): string {
-  return `
-(function () {
-  var attempts = 0;
-  var seeked = false;
+// MARK: - Chargement de l'API IFrame officielle
 
-  function disableCaptions(p) {
-    try { p.unloadModule && p.unloadModule('captions'); } catch (e) {}
-    try { p.setOption && p.setOption('captions', 'track', {}); } catch (e) {}
-    // .click() sur un élément déclare son gestionnaire d'événement même
-    // masqué par CSS (controls: false ci-dessus) tant qu'il reste dans le
-    // DOM — à surveiller si YouTube retire carrément le bouton du DOM
-    // plutôt que de le masquer visuellement quand controls=0, auquel cas
-    // ce repli deviendrait inopérant et il faudrait revenir à controls:
-    // true pour le garder fonctionnel.
-    var btn = document.querySelector('.ytp-subtitles-button');
-    if (btn && btn.getAttribute('aria-pressed') === 'true') {
-      try { btn.click(); } catch (e) {}
-    }
+type YTPlayer = {
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
+  getCurrentTime: () => number;
+  pauseVideo: () => void;
+  unMute: () => void;
+  unloadModule?: (module: string) => void;
+  setOption?: (module: string, option: string, value: unknown) => void;
+  destroy?: () => void;
+};
+
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (
+        element: HTMLElement,
+        options: {
+          videoId: string;
+          width?: string | number;
+          height?: string | number;
+          playerVars?: Record<string, unknown>;
+          events?: {
+            onReady?: () => void;
+            onStateChange?: (event: { data: number }) => void;
+            onError?: () => void;
+          };
+        }
+      ) => YTPlayer;
+    };
+    onYouTubeIframeAPIReady?: () => void;
   }
+}
 
-  var initInterval = setInterval(function () {
-    attempts++;
-    if (typeof player === 'undefined' || !player) {
-      if (attempts > 20) clearInterval(initInterval);
-      return;
-    }
-    clearInterval(initInterval);
+let iframeApiPromise: Promise<void> | null = null;
 
-    if (!seeked && player.seekTo) {
-      try { player.seekTo(${startTime}, true); } catch (e) {}
-      seeked = true;
-    }
+/** L'API IFrame s'appelle `window.onYouTubeIframeAPIReady` elle-même une
+ * fois chargée — mémoïsé en promesse partagée pour n'injecter le
+ * `<script>` qu'une seule fois même si plusieurs `YouTubePlayer` montent
+ * en même temps. */
+function loadYouTubeIframeApi(): Promise<void> {
+  if (window.YT?.Player) return Promise.resolve();
+  if (iframeApiPromise) return iframeApiPromise;
 
-    disableCaptions(player);
-    setInterval(function () { disableCaptions(player); }, 1000);
-
-    setInterval(function () {
-      if (player.getCurrentTime && player.getCurrentTime() >= ${endTime}) {
-        try { player.pauseVideo(); } catch (e) {}
-      }
-    }, 200);
-  }, 300);
-  true;
-})();
-`;
+  iframeApiPromise = new Promise((resolve) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve();
+    };
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(script);
+  });
+  return iframeApiPromise;
 }
 
 const styles = StyleSheet.create({
   container: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 14, overflow: 'hidden' },
+  playerNode: { width: '100%', height: '100%' },
 });

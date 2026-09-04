@@ -1,16 +1,16 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getBooks, createBook, deleteBook } from '../data/database';
-import { downloadAndParseBook, searchBooks, type BookSearchResult } from '../services/bookImport';
+import { downloadAndParseBook, searchBooks, type BookSearchResult } from '../services/bookImportIpc';
 import type { Book } from '../books/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onOpenBook: (bookId: string) => void };
+type Props = { db: LexisDb; onOpenBook: (bookId: string) => void };
 type Styles = ReturnType<typeof createStyles>;
 type AddMode = 'url' | 'search';
 
@@ -141,7 +141,7 @@ function AddBookModal({
   visible: boolean;
   onClose: () => void;
   onAdded: () => void;
-  db: SQLiteDatabase;
+  db: LexisDb;
   styles: Styles;
 }) {
   const [mode, setMode] = useState<AddMode>('url');

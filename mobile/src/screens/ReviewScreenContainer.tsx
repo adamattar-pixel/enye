@@ -1,25 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getDueCardsSplit, getMoreNewCards, updateCard, logReview, type DueCardRow } from '../data/database';
 import { getSettings } from '../data/settings';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
-import { refillNotificationQueue } from '../notifications/queue';
 import { ReviewScreen } from './ReviewScreen';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
-  db: SQLiteDatabase;
+  db: LexisDb;
   onExit: () => void;
 };
 
 /** L'écran de session, branché à SQLite + SM-2 : affiche la carte la
  * plus ancienne due, persiste le résultat de `SM2Engine.review()` à
- * chaque note, journalise pour les statistiques, et recharge la file de
- * notifications (même règle que côté notification : chaque note tient
- * la file à jour). */
+ * chaque note, journalise pour les statistiques. Le rechargement de la
+ * file de notifications OS a été retiré avec la cible desktop (voir
+ * docs/DECISIONS.md Decision 016) — le rappel de cartes dues vient
+ * maintenant de l'onglet Aujourd'hui, consulté à l'ouverture de l'app. */
 export function ReviewScreenContainer({ db, onExit }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -47,18 +47,7 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
       const nextState = review(current.card, grade, now);
       await updateCard(db, current.word.id, nextState);
       await logReview(db, current.word.id, grade, now);
-
-      // La carte suivante s'affiche tout de suite, sans attendre le
-      // rechargement de la file de notifications (jusqu'à 50 appels
-      // natifs) — sinon chaque note dans une session se sentirait aussi
-      // lente que le démarrage l'était avant correction. Le rechargement
-      // se fait quand même, juste pas sur le chemin critique de l'UI.
       await loadNext();
-
-      const settings = await getSettings(db);
-      refillNotificationQueue(db, settings, now).catch((error) => {
-        console.warn('Échec du rechargement de la file de notifications :', error);
-      });
     },
     [db, current, loadNext]
   );

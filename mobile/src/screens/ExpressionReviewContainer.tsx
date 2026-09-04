@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import {
   getDueExpressionCardsSplit,
   updateExpressionCard,
@@ -14,7 +14,7 @@ import type { SM2Grade } from '../sm2/types';
 import { ExpressionReviewScreen } from './ExpressionReviewScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onExit: () => void };
+type Props = { db: LexisDb; onExit: () => void };
 
 /** Écran de session pour l'onglet Expressions — même rôle que
  * [ConjugationReviewContainer.tsx](./ConjugationReviewContainer.tsx),

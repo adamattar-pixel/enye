@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
 
 /**
@@ -101,7 +101,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  * autour de `<RootTabs>` dans `App.tsx`, après l'ouverture de la base
  * (a besoin de `db` pour lire/écrire le réglage persisté).
  */
-export function ThemeProvider({ db, children }: { db: SQLiteDatabase; children: React.ReactNode }) {
+export function ThemeProvider({ db, children }: { db: LexisDb; children: React.ReactNode }) {
   const systemScheme = useColorScheme();
   const [override, setOverride] = useState<AppSettings['themeOverride']>('system');
 

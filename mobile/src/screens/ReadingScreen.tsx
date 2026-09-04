@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getDueReadingCardsSplit, getReadingCounts } from '../data/database';
 import { getSettings } from '../data/settings';
 import { readingTexts } from '../reading/data';
@@ -9,7 +9,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onStartSession: () => void };
+type Props = { db: LexisDb; onStartSession: () => void };
 
 /** Onglet Compréhension écrite — pas de sous-onglets (contrairement à
  * Expressions/Conjugaison) : uniquement un point d'entrée

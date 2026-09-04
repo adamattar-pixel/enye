@@ -1,4 +1,4 @@
-import type { SQLiteBindValue, SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb, SQLiteBindValue } from './dbTypes';
 import { createCard, type SM2CardLifecycle, type SM2CardState, type SM2Grade } from '../sm2/types';
 import type { Word } from './types';
 import { CONJUGATION_TENSES, personCountForTense, type ConjugationTense, type ConjugationVerb } from '../conjugation/types';
@@ -24,7 +24,7 @@ function valuesPlaceholders(columnCount: number, rowCount: number): string {
 }
 
 async function insertInBatches<T>(
-  db: SQLiteDatabase,
+  db: LexisDb,
   rows: T[],
   columnCount: number,
   sqlPrefix: string,
@@ -61,7 +61,7 @@ function parseLifecycle(value: string): SM2CardLifecycle {
 // en bout — voir docs/AUDIT.md).
 export const DB_NAME = 'lexis-en.db';
 
-export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
+export async function migrateDbIfNeeded(db: LexisDb): Promise<void> {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS words (
       id TEXT PRIMARY KEY NOT NULL,
@@ -134,21 +134,6 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
       grade TEXT NOT NULL,
       reviewed_at TEXT NOT NULL
     );
-
-    -- Miroir de ce que refillNotificationQueue programme réellement
-    -- côté OS (20/08/2026) — jusqu'ici, l'heure de la "prochaine
-    -- notification" affichée dans Réglages était RECALCULÉE à chaque
-    -- consultation plutôt que lue, et l'espacement entre cartes étant
-    -- tiré au hasard à chaque calcul (voir ReviewScheduler), l'heure
-    -- affichée pouvait différer de celle réellement programmée —
-    -- signalé comme pas assez exact. Cette table stocke les créneaux
-    -- réels au moment où ils sont programmés, pour que la lecture
-    -- ultérieure soit une lecture, pas une nouvelle estimation.
-    CREATE TABLE IF NOT EXISTS scheduled_notifications (
-      word_id TEXT PRIMARY KEY NOT NULL,
-      fire_date TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_fire_date ON scheduled_notifications(fire_date);
 
     -- Onglet Compréhension orale (20/08/2026, planifié puis implémenté le
     -- même jour — voir docs/PLAN.md/docs/AUDIT.md). Contrairement à conjugation_cards,
@@ -326,7 +311,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
  * Pas testé unitairement (pas de SQLite en mémoire disponible sous
  * Jest/jest-expo pour l'instant) — à vérifier sur device réel une fois
  * branché à un écran. Voir docs/AUDIT.md. */
-export async function importMissingWords(db: SQLiteDatabase, words: Word[], now: Date = new Date()): Promise<number> {
+export async function importMissingWords(db: LexisDb, words: Word[], now: Date = new Date()): Promise<number> {
   const existingRows = await db.getAllAsync<{ id: string }>('SELECT id FROM words;');
   const existingIds = new Set(existingRows.map((r) => r.id));
   const missing = words.filter((w) => !existingIds.has(w.id));
@@ -392,7 +377,7 @@ export async function importMissingWords(db: SQLiteDatabase, words: Word[], now:
  * ces mots n'existent pas dans `words.json`, rien à resynchroniser.
  * Ne compare/écrit QUE la colonne `tags`, pas le reste du mot (portée
  * volontairement limitée au bug signalé, pas un resync général). */
-export async function resyncWordTags(db: SQLiteDatabase, words: Word[]): Promise<number> {
+export async function resyncWordTags(db: LexisDb, words: Word[]): Promise<number> {
   const existingRows = await db.getAllAsync<{ id: string; tags: string; is_user_added: number }>(
     'SELECT id, tags, is_user_added FROM words;'
   );
@@ -443,7 +428,7 @@ export interface DueCardRow {
 
 /** Écrit l'état SM-2 recalculé après une note — `SM2Engine.review()` est
  * une fonction pure, c'est ici qu'on persiste son résultat. */
-export async function updateCard(db: SQLiteDatabase, wordId: string, card: SM2CardState): Promise<void> {
+export async function updateCard(db: LexisDb, wordId: string, card: SM2CardState): Promise<void> {
   await db.runAsync(
     `UPDATE cards
      SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
@@ -517,7 +502,7 @@ const WORD_CARD_SELECT = `SELECT w.*, c.ease_factor, c.interval_days, c.repetiti
  * Aujourd'hui pour le simple compteur "X cartes dues" ; la session de
  * révision elle-même utilise `getDueCardsSplit`, qui applique le
  * plafond 8 nouvelles + 22 révisions séparément (voir docs/PLAN.md). */
-export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number): Promise<DueCardRow[]> {
+export async function getDueCards(db: LexisDb, now: Date, limit: number): Promise<DueCardRow[]> {
   const rows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
      WHERE c.due_date <= ?
@@ -545,7 +530,7 @@ export async function getDueCards(db: SQLiteDatabase, now: Date, limit: number):
  * table de jointure) — acceptable au volume de mots actuel (des
  * milliers, pas des millions), à revoir si ça devient un goulot. */
 export async function getDueCardsSplit(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   settings: { newCardsPerDay: number; reviewCapPerDay: number; disabledTags: string[] }
 ): Promise<DueCardRow[]> {
@@ -571,7 +556,7 @@ export async function getDueCardsSplit(
 }
 
 async function fetchNewCardRows(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   disabledTags: string[],
   limit: number
@@ -604,7 +589,7 @@ async function fetchNewCardRows(
  * qui est exactement le comportement demandé ("si je finis celles
  * d'aujourd'hui, donne m'en d'autres"). */
 export async function getMoreNewCards(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   disabledTags: string[],
   limit: number
@@ -619,7 +604,7 @@ export async function getMoreNewCards(
  * cartes dues maintenant" (elle pourrait avoir été programmée pour dans
  * quelques minutes et notée en avance, ou en retard sur son horaire
  * prévu si l'app a été fermée). */
-export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promise<DueCardRow | null> {
+export async function getWordWithCard(db: LexisDb, wordId: string): Promise<DueCardRow | null> {
   const r = await db.getFirstAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
      WHERE w.id = ?;`,
@@ -631,7 +616,7 @@ export async function getWordWithCard(db: SQLiteDatabase, wordId: string): Promi
 /** Journalise une note donnée — sert de base aux statistiques (série de
  * jours, taux de réussite) ; distinct de `cards`, qui ne garde que
  * l'état courant, pas l'historique. */
-export async function logReview(db: SQLiteDatabase, wordId: string, grade: SM2Grade, at: Date = new Date()): Promise<void> {
+export async function logReview(db: LexisDb, wordId: string, grade: SM2Grade, at: Date = new Date()): Promise<void> {
   await db.runAsync(
     'INSERT INTO reviews (word_id, grade, reviewed_at) VALUES (?, ?, ?);',
     wordId,
@@ -655,7 +640,7 @@ function parseGrade(value: string): SM2Grade {
 /** Tout l'historique de révisions — utilisé par `statsEngine` pour
  * calculer série de jours et taux de réussite. Pas de pagination pour
  * l'instant ; à revoir si l'historique devient volumineux. */
-export async function getAllReviews(db: SQLiteDatabase): Promise<ReviewLogRow[]> {
+export async function getAllReviews(db: LexisDb): Promise<ReviewLogRow[]> {
   const rows = await db.getAllAsync<{ grade: string; reviewed_at: string }>(
     'SELECT grade, reviewed_at FROM reviews ORDER BY reviewed_at ASC;'
   );
@@ -665,7 +650,7 @@ export async function getAllReviews(db: SQLiteDatabase): Promise<ReviewLogRow[]>
 /** Dates d'échéance de toutes les cartes non nouvelles (pour la
  * prévision de charge) — les cartes `new` n'ont pas encore de vraie date
  * d'échéance significative tant qu'elles n'ont pas été vues une fois. */
-export async function getAllDueDates(db: SQLiteDatabase): Promise<Date[]> {
+export async function getAllDueDates(db: LexisDb): Promise<Date[]> {
   const rows = await db.getAllAsync<{ due_date: string }>(
     "SELECT due_date FROM cards WHERE lifecycle != 'new';"
   );
@@ -679,7 +664,7 @@ export interface WordCounts {
 
 /** "Appris" = a été vu au moins une fois (au-delà de l'état `new`) —
  * définition simple, pas de seuil sur l'intervalle ou l'ease factor. */
-export async function getWordCounts(db: SQLiteDatabase): Promise<WordCounts> {
+export async function getWordCounts(db: LexisDb): Promise<WordCounts> {
   const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM words;');
   const learned = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM cards WHERE lifecycle != 'new';"
@@ -689,7 +674,7 @@ export async function getWordCounts(db: SQLiteDatabase): Promise<WordCounts> {
 
 /** Nombre de révisions déjà faites depuis le début d'un jour donné —
  * sert à afficher la progression du jour sur l'écran Aujourd'hui. */
-export async function getReviewCountSince(db: SQLiteDatabase, since: Date): Promise<number> {
+export async function getReviewCountSince(db: LexisDb, since: Date): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM reviews WHERE reviewed_at >= ?;',
     since.toISOString()
@@ -709,7 +694,7 @@ export interface WordFilter {
 
 /** Tous les mots, triés par fréquence, avec filtre optionnel par niveau
  * et/ou tag — utilisé par l'écran Decks/mots. */
-export async function getAllWords(db: SQLiteDatabase, filter: WordFilter = {}): Promise<Word[]> {
+export async function getAllWords(db: LexisDb, filter: WordFilter = {}): Promise<Word[]> {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
@@ -760,7 +745,7 @@ export async function getAllWords(db: SQLiteDatabase, filter: WordFilter = {}): 
 
 /** Liste de tous les tags distincts présents dans `words` — sert à
  * construire les filtres/thèmes de l'écran Decks/mots. */
-export async function getAllTags(db: SQLiteDatabase): Promise<string[]> {
+export async function getAllTags(db: LexisDb): Promise<string[]> {
   const rows = await db.getAllAsync<{ tags: string }>('SELECT DISTINCT tags FROM words;');
   const tagSet = new Set<string>();
   for (const row of rows) {
@@ -773,7 +758,7 @@ export async function getAllTags(db: SQLiteDatabase): Promise<string[]> {
 /** Ajoute un mot créé depuis l'app, avec une carte SM-2 neuve — même
  * mécanique que les mots du bundle (voir `seedIfEmpty`), en marquant
  * `isUserAdded`. */
-export async function addUserWord(db: SQLiteDatabase, word: Omit<Word, 'isUserAdded'>, now: Date = new Date()): Promise<void> {
+export async function addUserWord(db: LexisDb, word: Omit<Word, 'isUserAdded'>, now: Date = new Date()): Promise<void> {
   await db.runAsync(
     `INSERT INTO words (id, spanish, english, part_of_speech, gender, example_es, example_en, level, tags, frequency_rank, is_user_added)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1);`,
@@ -818,7 +803,7 @@ export interface WordEditableFields {
  * reste du mot (espagnol, catégorie grammaticale, exemple espagnol) n'est
  * pas éditable depuis cet écran. Un simple `UPDATE`, comme `resyncWordTags`
  * et `updateReviewGrade` ci-dessous — pas de nouvelle table. */
-export async function updateWord(db: SQLiteDatabase, wordId: string, fields: WordEditableFields): Promise<void> {
+export async function updateWord(db: LexisDb, wordId: string, fields: WordEditableFields): Promise<void> {
   await db.runAsync(
     'UPDATE words SET english = ?, example_en = ?, tags = ?, level = ? WHERE id = ?;',
     fields.english,
@@ -843,7 +828,7 @@ export interface ReviewHistoryRow {
  * une note mal cliquée. Distinct de `getAllReviews`, qui ne renvoie que
  * grade/date (suffisant pour les stats agrégées, pas assez pour afficher
  * une liste consultable). */
-export async function getReviewHistory(db: SQLiteDatabase, limit = 200): Promise<ReviewHistoryRow[]> {
+export async function getReviewHistory(db: LexisDb, limit = 200): Promise<ReviewHistoryRow[]> {
   type Row = { id: number; word_id: string; spanish: string; english: string; grade: string; reviewed_at: string };
   const rows = await db.getAllAsync<Row>(
     `SELECT r.id, r.word_id, w.spanish, w.english, r.grade, r.reviewed_at
@@ -870,11 +855,11 @@ export async function getReviewHistory(db: SQLiteDatabase, limit = 200): Promise
  * en fonction de la note d'origine. Corriger ici change donc l'historique
  * affiché et les stats de réussite, mais pas la prochaine date de
  * révision de la carte — limite assumée, à faire savoir dans l'UI. */
-export async function updateReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+export async function updateReviewGrade(db: LexisDb, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
 
-export async function deleteWord(db: SQLiteDatabase, wordId: string): Promise<void> {
+export async function deleteWord(db: LexisDb, wordId: string): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM cards WHERE word_id = ?;', wordId);
     await db.runAsync('DELETE FROM reviews WHERE word_id = ?;', wordId);
@@ -889,7 +874,7 @@ export async function deleteWord(db: SQLiteDatabase, wordId: string): Promise<vo
  * retester le flux complet sans attendre que les échéances SM-2
  * reviennent naturellement. Irréversible : l'appelant doit confirmer
  * avant d'appeler cette fonction. */
-export async function resetProgress(db: SQLiteDatabase, now: Date = new Date()): Promise<void> {
+export async function resetProgress(db: LexisDb, now: Date = new Date()): Promise<void> {
   const card = createCard({ dueDate: now });
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM reviews;');
@@ -1035,7 +1020,7 @@ function conjugationCardId(verbId: string, tense: ConjugationTense, person: numb
  * ([insertInBatches]), pas une par une (aurait ajouté une dizaine de
  * secondes ou plus au premier lancement à ce volume). */
 export async function importMissingConjugationCards(
-  db: SQLiteDatabase,
+  db: LexisDb,
   verbs: ConjugationVerb[],
   now: Date = new Date()
 ): Promise<number> {
@@ -1096,7 +1081,7 @@ export async function importMissingConjugationCards(
  * ([shuffle]) avant d'être renvoyé, pour que l'ordre de présentation ne
  * soit pas non plus figé par "toutes les révisions d'abord". */
 export async function getDueConjugationCardsSplit(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   settings: { conjugationNewCardsPerDay: number; conjugationReviewCapPerDay: number }
 ): Promise<DueConjugationCardRow[]> {
@@ -1126,7 +1111,7 @@ export interface ConjugationCounts {
  * place du nombre de conjugaisons dues (demandé explicitement,
  * 20/08/2026) — le nombre dû reste utilisé en interne pour activer/
  * désactiver le bouton de session, juste plus affiché en gros. */
-export async function getConjugationCounts(db: SQLiteDatabase): Promise<ConjugationCounts> {
+export async function getConjugationCounts(db: LexisDb): Promise<ConjugationCounts> {
   const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM conjugation_cards;');
   const learned = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM conjugation_cards WHERE lifecycle != 'new';"
@@ -1134,7 +1119,7 @@ export async function getConjugationCounts(db: SQLiteDatabase): Promise<Conjugat
   return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
 }
 
-export async function updateConjugationCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+export async function updateConjugationCard(db: LexisDb, cardId: string, card: SM2CardState): Promise<void> {
   await db.runAsync(
     `UPDATE conjugation_cards
      SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
@@ -1151,7 +1136,7 @@ export async function updateConjugationCard(db: SQLiteDatabase, cardId: string, 
 }
 
 export async function logConjugationReview(
-  db: SQLiteDatabase,
+  db: LexisDb,
   cardId: string,
   grade: SM2Grade,
   at: Date = new Date()
@@ -1180,7 +1165,7 @@ export interface ConjugationHistoryRow {
  * verbes n'est pas dupliqué en base (voir plus haut) — c'est à
  * l'appelant de faire la jointure avec `conjugation/data.ts`
  * (`getConjugationVerb`) pour afficher l'infinitif et la forme. */
-export async function getConjugationHistory(db: SQLiteDatabase, limit = 200): Promise<ConjugationHistoryRow[]> {
+export async function getConjugationHistory(db: LexisDb, limit = 200): Promise<ConjugationHistoryRow[]> {
   type Row = { id: number; verb_id: string; tense: string; person: number; grade: string; reviewed_at: string };
   const rows = await db.getAllAsync<Row>(
     `SELECT r.id, c.verb_id, c.tense, c.person, r.grade, r.reviewed_at
@@ -1204,7 +1189,7 @@ export async function getConjugationHistory(db: SQLiteDatabase, limit = 200): Pr
  * limite assumée que `updateReviewGrade` côté vocabulaire : ne change
  * que le journal `conjugation_reviews`, ne recalcule pas rétroactivement
  * l'échéance déjà programmée de la carte. */
-export async function updateConjugationReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+export async function updateConjugationReviewGrade(db: LexisDb, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE conjugation_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
 
@@ -1246,7 +1231,7 @@ function mapExpressionCardRow(r: ExpressionCardRow): DueExpressionCardRow {
  * même principe que `importMissingConjugationCards`, en plus simple
  * (id = id de l'expression directement, pas de triplet à construire). */
 export async function importMissingExpressionCards(
-  db: SQLiteDatabase,
+  db: LexisDb,
   expressionsList: Expression[],
   now: Date = new Date()
 ): Promise<number> {
@@ -1285,7 +1270,7 @@ export async function importMissingExpressionCards(
  * détail du raisonnement (ordre aléatoire côté SQL pour les nouvelles,
  * `shuffle` côté JS sur l'ensemble avant renvoi). */
 export async function getDueExpressionCardsSplit(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   settings: { expressionNewCardsPerDay: number; expressionReviewCapPerDay: number }
 ): Promise<DueExpressionCardRow[]> {
@@ -1307,7 +1292,7 @@ export interface ExpressionCounts {
   learned: number;
 }
 
-export async function getExpressionCounts(db: SQLiteDatabase): Promise<ExpressionCounts> {
+export async function getExpressionCounts(db: LexisDb): Promise<ExpressionCounts> {
   const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM expression_cards;');
   const learned = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM expression_cards WHERE lifecycle != 'new';"
@@ -1315,7 +1300,7 @@ export async function getExpressionCounts(db: SQLiteDatabase): Promise<Expressio
   return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
 }
 
-export async function updateExpressionCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+export async function updateExpressionCard(db: LexisDb, cardId: string, card: SM2CardState): Promise<void> {
   await db.runAsync(
     `UPDATE expression_cards
      SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
@@ -1332,7 +1317,7 @@ export async function updateExpressionCard(db: SQLiteDatabase, cardId: string, c
 }
 
 export async function logExpressionReview(
-  db: SQLiteDatabase,
+  db: LexisDb,
   cardId: string,
   grade: SM2Grade,
   at: Date = new Date()
@@ -1357,7 +1342,7 @@ export interface ExpressionHistoryRow {
  * pas dupliqué en base, voir `expressions/data.ts` (`getExpression`)
  * pour la jointure côté appelant, même principe que
  * `getConjugationHistory`. */
-export async function getExpressionHistory(db: SQLiteDatabase, limit = 200): Promise<ExpressionHistoryRow[]> {
+export async function getExpressionHistory(db: LexisDb, limit = 200): Promise<ExpressionHistoryRow[]> {
   type Row = { id: number; card_id: string; grade: string; reviewed_at: string };
   const rows = await db.getAllAsync<Row>(
     `SELECT id, card_id, grade, reviewed_at FROM expression_reviews ORDER BY reviewed_at DESC LIMIT ?;`,
@@ -1371,7 +1356,7 @@ export async function getExpressionHistory(db: SQLiteDatabase, limit = 200): Pro
   }));
 }
 
-export async function updateExpressionReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+export async function updateExpressionReviewGrade(db: LexisDb, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE expression_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
 
@@ -1413,7 +1398,7 @@ function mapReadingCardRow(r: ReadingCardRow): DueReadingCardRow {
  * entier (questions comprises), pas par question (demandé explicitement
  * le 21/08/2026). */
 export async function importMissingReadingCards(
-  db: SQLiteDatabase,
+  db: LexisDb,
   texts: ReadingText[],
   now: Date = new Date()
 ): Promise<number> {
@@ -1448,7 +1433,7 @@ export async function importMissingReadingCards(
 }
 
 export async function getDueReadingCardsSplit(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   settings: { readingNewCardsPerDay: number; readingReviewCapPerDay: number }
 ): Promise<DueReadingCardRow[]> {
@@ -1470,7 +1455,7 @@ export interface ReadingCounts {
   learned: number;
 }
 
-export async function getReadingCounts(db: SQLiteDatabase): Promise<ReadingCounts> {
+export async function getReadingCounts(db: LexisDb): Promise<ReadingCounts> {
   const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM reading_cards;');
   const learned = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM reading_cards WHERE lifecycle != 'new';"
@@ -1478,7 +1463,7 @@ export async function getReadingCounts(db: SQLiteDatabase): Promise<ReadingCount
   return { total: total?.count ?? 0, learned: learned?.count ?? 0 };
 }
 
-export async function updateReadingCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+export async function updateReadingCard(db: LexisDb, cardId: string, card: SM2CardState): Promise<void> {
   await db.runAsync(
     `UPDATE reading_cards
      SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
@@ -1495,7 +1480,7 @@ export async function updateReadingCard(db: SQLiteDatabase, cardId: string, card
 }
 
 export async function logReadingReview(
-  db: SQLiteDatabase,
+  db: LexisDb,
   cardId: string,
   grade: SM2Grade,
   at: Date = new Date()
@@ -1518,7 +1503,7 @@ export interface ReadingHistoryRow {
 /** Historique de révisions de compréhension écrite, le plus récent
  * d'abord — ne renvoie que l'id du texte (pas son contenu), même
  * principe que `getExpressionHistory`/`getConjugationHistory`. */
-export async function getReadingHistory(db: SQLiteDatabase, limit = 200): Promise<ReadingHistoryRow[]> {
+export async function getReadingHistory(db: LexisDb, limit = 200): Promise<ReadingHistoryRow[]> {
   type Row = { id: number; card_id: string; grade: string; reviewed_at: string };
   const rows = await db.getAllAsync<Row>(
     `SELECT id, card_id, grade, reviewed_at FROM reading_reviews ORDER BY reviewed_at DESC LIMIT ?;`,
@@ -1532,7 +1517,7 @@ export async function getReadingHistory(db: SQLiteDatabase, limit = 200): Promis
   }));
 }
 
-export async function updateReadingReviewGrade(db: SQLiteDatabase, reviewId: number, grade: SM2Grade): Promise<void> {
+export async function updateReadingReviewGrade(db: LexisDb, reviewId: number, grade: SM2Grade): Promise<void> {
   await db.runAsync('UPDATE reading_reviews SET grade = ? WHERE id = ?;', grade, reviewId);
 }
 
@@ -1575,7 +1560,7 @@ function mapBookRow(r: BookRow): Book {
  * `conjugationCardId`) plutôt qu'un identifiant aléatoire, pour rester
  * simple et lisible en base. */
 export async function createBook(
-  db: SQLiteDatabase,
+  db: LexisDb,
   book: { id: string; title: string; author: string | null; sourceUrl: string; format: BookFormat },
   chapters: { title: string; content: string }[],
   now: Date = new Date()
@@ -1609,23 +1594,23 @@ export async function createBook(
   });
 }
 
-export async function getBooks(db: SQLiteDatabase): Promise<Book[]> {
+export async function getBooks(db: LexisDb): Promise<Book[]> {
   const rows = await db.getAllAsync<BookRow>('SELECT * FROM books ORDER BY added_at DESC;');
   return rows.map(mapBookRow);
 }
 
-export async function getBook(db: SQLiteDatabase, bookId: string): Promise<Book | null> {
+export async function getBook(db: LexisDb, bookId: string): Promise<Book | null> {
   const row = await db.getFirstAsync<BookRow>('SELECT * FROM books WHERE id = ?;', bookId);
   return row ? mapBookRow(row) : null;
 }
 
-export async function getBookChapters(db: SQLiteDatabase, bookId: string): Promise<BookChapter[]> {
+export async function getBookChapters(db: LexisDb, bookId: string): Promise<BookChapter[]> {
   type Row = { id: string; book_id: string; order_index: number; title: string; content: string };
   const rows = await db.getAllAsync<Row>('SELECT * FROM book_chapters WHERE book_id = ? ORDER BY order_index ASC;', bookId);
   return rows.map((r) => ({ id: r.id, bookId: r.book_id, orderIndex: r.order_index, title: r.title, content: r.content }));
 }
 
-export async function getBookChapter(db: SQLiteDatabase, chapterId: string): Promise<BookChapter | null> {
+export async function getBookChapter(db: LexisDb, chapterId: string): Promise<BookChapter | null> {
   type Row = { id: string; book_id: string; order_index: number; title: string; content: string };
   const row = await db.getFirstAsync<Row>('SELECT * FROM book_chapters WHERE id = ?;', chapterId);
   return row ? { id: row.id, bookId: row.book_id, orderIndex: row.order_index, title: row.title, content: row.content } : null;
@@ -1636,11 +1621,11 @@ export async function getBookChapter(db: SQLiteDatabase, chapterId: string): Pro
  * ci-dessous. `position` est un index de PARAGRAPHE dans le chapitre,
  * pas un offset de caractères (voir docs/DECISIONS.md pour le choix de
  * granularité). */
-export async function updateBookProgress(db: SQLiteDatabase, bookId: string, chapterId: string, position: number): Promise<void> {
+export async function updateBookProgress(db: LexisDb, bookId: string, chapterId: string, position: number): Promise<void> {
   await db.runAsync('UPDATE books SET last_chapter_id = ?, last_position = ? WHERE id = ?;', chapterId, position, bookId);
 }
 
-export async function deleteBook(db: SQLiteDatabase, bookId: string): Promise<void> {
+export async function deleteBook(db: LexisDb, bookId: string): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM book_bookmarks WHERE book_id = ?;', bookId);
     await db.runAsync('DELETE FROM book_chapters WHERE book_id = ?;', bookId);
@@ -1653,7 +1638,7 @@ export async function deleteBook(db: SQLiteDatabase, bookId: string): Promise<vo
  * exister pour la même position au fil de sessions différentes, pas de
  * clé métier naturelle. */
 export async function addBookmark(
-  db: SQLiteDatabase,
+  db: LexisDb,
   bookmark: { bookId: string; chapterId: string; position: number; note: string | null },
   now: Date = new Date()
 ): Promise<string> {
@@ -1670,7 +1655,7 @@ export async function addBookmark(
   return id;
 }
 
-export async function getBookmarks(db: SQLiteDatabase, bookId: string): Promise<BookBookmark[]> {
+export async function getBookmarks(db: LexisDb, bookId: string): Promise<BookBookmark[]> {
   type Row = { id: string; book_id: string; chapter_id: string; position: number; note: string | null; created_at: string };
   const rows = await db.getAllAsync<Row>(
     'SELECT * FROM book_bookmarks WHERE book_id = ? ORDER BY created_at DESC;',
@@ -1686,47 +1671,8 @@ export async function getBookmarks(db: SQLiteDatabase, bookId: string): Promise<
   }));
 }
 
-export async function deleteBookmark(db: SQLiteDatabase, bookmarkId: string): Promise<void> {
+export async function deleteBookmark(db: LexisDb, bookmarkId: string): Promise<void> {
   await db.runAsync('DELETE FROM book_bookmarks WHERE id = ?;', bookmarkId);
-}
-
-// MARK: - Miroir de la file de notifications programmée
-
-/** Remplace le miroir local de ce qui vient d'être programmé côté OS —
- * appelée par `refillNotificationQueue` juste après avoir vraiment
- * programmé les notifications, avec exactement les mêmes créneaux (pas
- * recalculés). Permet à `getNextScheduledNotificationTime` de LIRE
- * l'heure réelle plutôt que d'en réestimer une nouvelle à chaque
- * consultation (voir docs/AUDIT.md, 20/08/2026). */
-export async function replaceScheduledNotifications(
-  db: SQLiteDatabase,
-  slots: { wordId: string; fireDate: Date }[]
-): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM scheduled_notifications;');
-    if (slots.length === 0) return;
-    await insertInBatches(
-      db,
-      slots,
-      2,
-      'INSERT INTO scheduled_notifications (word_id, fire_date)',
-      (slot) => [slot.wordId, slot.fireDate.toISOString()]
-    );
-  });
-}
-
-/** Heure exacte de la prochaine notification déjà programmée, lue depuis
- * le miroir local plutôt que recalculée — voir `replaceScheduledNotifications`.
- * `null` si rien n'est programmé ou si tout ce qui l'est déjà est passé
- * (ne devrait pas arriver en pratique : `refillNotificationQueue` est
- * appelé à l'ouverture de l'app et après chaque note, donc le miroir
- * reste à jour). */
-export async function getNextScheduledNotificationTime(db: SQLiteDatabase, now: Date = new Date()): Promise<Date | null> {
-  const row = await db.getFirstAsync<{ fire_date: string }>(
-    'SELECT fire_date FROM scheduled_notifications WHERE fire_date > ? ORDER BY fire_date ASC LIMIT 1;',
-    now.toISOString()
-  );
-  return row ? new Date(row.fire_date) : null;
 }
 
 // MARK: - Compréhension orale
@@ -1773,7 +1719,7 @@ function mapListeningVideoRow(r: ListeningVideoRow): ListeningVideo {
  * bibliothèque, juste non exploitable pour les exercices tant qu'elle n'a
  * aucun segment (voir docs/PLAN.md, "dégradation gracieuse"). */
 export async function addListeningVideo(
-  db: SQLiteDatabase,
+  db: LexisDb,
   video: ListeningVideo,
   segments: Omit<ListeningSegment, 'id' | 'videoId' | 'index'>[],
   now: Date = new Date()
@@ -1829,7 +1775,7 @@ export async function addListeningVideo(
 
 /** Toutes les vidéos de la bibliothèque, la plus récemment ajoutée
  * d'abord — utilisé par l'écran Bibliothèque. */
-export async function getListeningVideos(db: SQLiteDatabase): Promise<ListeningVideo[]> {
+export async function getListeningVideos(db: LexisDb): Promise<ListeningVideo[]> {
   const rows = await db.getAllAsync<ListeningVideoRow>('SELECT * FROM listening_videos ORDER BY added_at DESC;');
   return rows.map(mapListeningVideoRow);
 }
@@ -1845,7 +1791,7 @@ export interface ListeningVideoWithStats extends ListeningVideo {
  * segment). Sous-requête plutôt qu'une jointure + GROUP BY : plus simple
  * à lire pour un volume de vidéos qui reste petit (bibliothèque
  * personnelle, pas un catalogue). */
-export async function getListeningVideosWithStats(db: SQLiteDatabase): Promise<ListeningVideoWithStats[]> {
+export async function getListeningVideosWithStats(db: LexisDb): Promise<ListeningVideoWithStats[]> {
   type Row = ListeningVideoRow & { segment_count: number };
   const rows = await db.getAllAsync<Row>(
     `SELECT v.*, (SELECT COUNT(*) FROM listening_segments s WHERE s.video_id = v.id) as segment_count
@@ -1858,7 +1804,7 @@ export async function getListeningVideosWithStats(db: SQLiteDatabase): Promise<L
 /** Supprime une vidéo et tout ce qui en dépend (segments, cartes,
  * historique de révisions) — irréversible, l'appelant doit confirmer
  * avant d'appeler cette fonction (voir l'écran Bibliothèque). */
-export async function deleteListeningVideo(db: SQLiteDatabase, videoId: string): Promise<void> {
+export async function deleteListeningVideo(db: LexisDb, videoId: string): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `DELETE FROM listening_reviews WHERE card_id IN (SELECT id FROM listening_cards WHERE video_id = ?);`,
@@ -1930,7 +1876,7 @@ const LISTENING_CARD_SEGMENT_SELECT = `SELECT c.*, s.segment_index, s.start_time
  * requête SQL peut exprimer). Cette fonction ne fait que fournir le pool
  * de candidats, mélangé (pas d'ordre par vidéo). */
 export async function getDueListeningCardsSplit(
-  db: SQLiteDatabase,
+  db: LexisDb,
   now: Date,
   settings: { listeningNewSegmentsPerDay: number; listeningReviewCapPerDay: number }
 ): Promise<DueListeningCardRow[]> {
@@ -1962,7 +1908,7 @@ export async function getDueListeningCardsSplit(
  * DÉBUT d'une session ; pendant la session elle-même, l'écran doit
  * continuer à faire évoluer sa propre copie en mémoire au fur et à mesure
  * (voir plus haut), sans rappeler cette fonction à chaque exercice. */
-export async function getRecentListeningVideoIds(db: SQLiteDatabase, limit: number): Promise<string[]> {
+export async function getRecentListeningVideoIds(db: LexisDb, limit: number): Promise<string[]> {
   const rows = await db.getAllAsync<{ video_id: string }>(
     `SELECT c.video_id as video_id, MAX(r.reviewed_at) as last_at
      FROM listening_reviews r
@@ -1975,7 +1921,7 @@ export async function getRecentListeningVideoIds(db: SQLiteDatabase, limit: numb
   return rows.map((r) => r.video_id);
 }
 
-export async function updateListeningCard(db: SQLiteDatabase, cardId: string, card: SM2CardState): Promise<void> {
+export async function updateListeningCard(db: LexisDb, cardId: string, card: SM2CardState): Promise<void> {
   await db.runAsync(
     `UPDATE listening_cards
      SET ease_factor = ?, interval_days = ?, repetitions = ?, lapses = ?, learning_step_index = ?, lifecycle = ?, due_date = ?
@@ -1992,7 +1938,7 @@ export async function updateListeningCard(db: SQLiteDatabase, cardId: string, ca
 }
 
 export async function logListeningReview(
-  db: SQLiteDatabase,
+  db: LexisDb,
   cardId: string,
   grade: SM2Grade,
   at: Date = new Date()
@@ -2012,7 +1958,7 @@ export interface ListeningCounts {
 
 /** Même définition d'"acquis" que `getWordCounts`/`getConjugationCounts` —
  * a été vu au moins une fois au-delà de l'état `new`. */
-export async function getListeningCounts(db: SQLiteDatabase): Promise<ListeningCounts> {
+export async function getListeningCounts(db: LexisDb): Promise<ListeningCounts> {
   const total = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM listening_cards;');
   const learned = await db.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM listening_cards WHERE lifecycle != 'new';"
@@ -2031,7 +1977,7 @@ export interface ListeningHistoryRow {
 
 /** Historique de révisions de compréhension orale, le plus récent
  * d'abord — même principe que `getReviewHistory`/`getConjugationHistory`. */
-export async function getListeningHistory(db: SQLiteDatabase, limit = 200): Promise<ListeningHistoryRow[]> {
+export async function getListeningHistory(db: LexisDb, limit = 200): Promise<ListeningHistoryRow[]> {
   type Row = { id: number; video_id: string; title: string; transcript: string; grade: string; reviewed_at: string };
   const rows = await db.getAllAsync<Row>(
     `SELECT r.id, s.video_id, v.title, s.transcript, r.grade, r.reviewed_at

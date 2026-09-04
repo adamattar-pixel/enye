@@ -1,26 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { SQLiteDatabase } from 'expo-sqlite';
-import { getAllTags, resetProgress } from '../data/database';
+import type { LexisDb } from '../data/dbTypes';
+import { getAllTags, getDueCardsSplit, resetProgress } from '../data/database';
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
-import { getNextNotificationTime } from '../notifications/queue';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { CreditsScreen } from './CreditsScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase };
-type SubView = 'settings' | 'notifications';
+type Props = { db: LexisDb };
+type SubView = 'settings' | 'reminder';
 type Styles = ReturnType<typeof createStyles>;
 
-/** Réglages et prochaine notification — regroupés dans un onglet à part
+/** Réglages et rappel de cartes dues — regroupés dans un onglet à part
  * (sous-onglets internes), séparé de « Decks & mots » qui ne garde que
  * la liste de mots. L'historique des révisions, qui vivait ici aussi,
  * a été déplacé dans l'onglet Statistiques le 20/08/2026 (demandé
  * explicitement — voir StatsScreen.tsx) : les deux parlent de ce qui
- * s'est passé pendant les révisions, pas de configuration de l'app. */
+ * s'est passé pendant les révisions, pas de configuration de l'app.
+ *
+ * Le sous-onglet "Notifications" (heure de la prochaine notification OS
+ * programmée) a été remplacé par "Rappel" (nombre de cartes dues, lu
+ * directement en base) lors du passage à la cible desktop — plus de
+ * notifications programmées à l'avance sur ce format, remplacées par un
+ * contrôle affiché à l'ouverture de l'app (voir docs/DECISIONS.md
+ * Decision 016 ; l'onglet Aujourd'hui, premier onglet ouvert, affiche
+ * déjà ce même nombre — ce sous-onglet reste pour qui veut le consulter
+ * depuis Réglages sans repasser par Aujourd'hui). */
 export function SettingsScreen({ db }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -33,12 +41,12 @@ export function SettingsScreen({ db }: Props) {
         <Text style={styles.title}>Réglages</Text>
         <View style={styles.subTabs}>
           <SubTabButton styles={styles} label="Réglages" active={subView === 'settings'} onPress={() => setSubView('settings')} />
-          <SubTabButton styles={styles} label="Notifications" active={subView === 'notifications'} onPress={() => setSubView('notifications')} />
+          <SubTabButton styles={styles} label="Rappel" active={subView === 'reminder'} onPress={() => setSubView('reminder')} />
         </View>
       </View>
 
       {subView === 'settings' && <SettingsView db={db} styles={styles} />}
-      {subView === 'notifications' && <NotificationsView db={db} styles={styles} theme={theme} />}
+      {subView === 'reminder' && <ReminderView db={db} styles={styles} />}
     </ScreenContainer>
   );
 }
@@ -68,7 +76,7 @@ function SubTabButton({
 
 // MARK: - Réglages
 
-function SettingsView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
+function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [creditsVisible, setCreditsVisible] = useState(false);
@@ -227,26 +235,24 @@ function NumberField({
   );
 }
 
-// MARK: - Prochaine notification
+// MARK: - Rappel de cartes dues
 
-/** Affiche quand la prochaine notification de révision arrivera —
- * demandé explicitement ("un onglet où quand je clique, il me dit quand
- * la prochaine notification aura lieu"). Lit l'heure exacte depuis le
- * miroir persisté par `refillNotificationQueue` (`getNextNotificationTime`,
- * voir queue.ts) plutôt que de la recalculer — corrigé le 20/08/2026
- * suite à un retour explicite ("l'heure n'est pas exacte") : la version
- * précédente rejouait le calcul de planification à chaque consultation,
- * et l'espacement aléatoire entre cartes (15-30 min) faisait diverger
- * l'estimation de l'heure réellement programmée. */
-function NotificationsView({ db, styles, theme }: { db: SQLiteDatabase; styles: Styles; theme: SolYSombraPalette }) {
+/** Remplace l'ancien "prochaine notification" (heure d'une notification OS
+ * programmée à l'avance) — sur desktop, il n'y a plus de notification
+ * programmée du tout, le rappel est un contrôle direct du nombre de
+ * cartes dues, à consulter à l'ouverture de l'app (voir docs/DECISIONS.md
+ * Decision 016). Réutilise `getDueCardsSplit`, la même requête que
+ * l'onglet Aujourd'hui — pas de nouvelle logique de calcul. */
+function ReminderView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [state, setState] = useState<'loading' | 'none' | 'found'>('loading');
-  const [nextTime, setNextTime] = useState<Date | null>(null);
+  const [count, setCount] = useState(0);
 
   const refresh = useCallback(async () => {
     setState('loading');
-    const next = await getNextNotificationTime(db);
-    setNextTime(next);
-    setState(next ? 'found' : 'none');
+    const settings = await getSettings(db);
+    const due = await getDueCardsSplit(db, new Date(), settings);
+    setCount(due.length);
+    setState(due.length > 0 ? 'found' : 'none');
   }, [db]);
 
   useEffect(() => {
@@ -260,25 +266,23 @@ function NotificationsView({ db, styles, theme }: { db: SQLiteDatabase; styles: 
 
         {state === 'none' && (
           <>
-            <Text style={styles.notificationBig}>Aucune pour l'instant</Text>
-            <Text style={styles.notificationCaption}>Pas de carte due — rien à notifier tant que ça reste le cas.</Text>
+            <Text style={styles.notificationBig}>Rien à réviser</Text>
+            <Text style={styles.notificationCaption}>Pas de carte due pour l'instant.</Text>
           </>
         )}
 
-        {state === 'found' && nextTime && (
+        {state === 'found' && (
           <>
-            <Text style={styles.notificationBig}>{formatRelative(nextTime)}</Text>
-            <Text style={styles.notificationCaption}>
-              Vers {nextTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} le{' '}
-              {nextTime.toLocaleDateString()}
+            <Text style={styles.notificationBig}>
+              {count} carte{count !== 1 ? 's' : ''} due{count !== 1 ? 's' : ''}
             </Text>
+            <Text style={styles.notificationCaption}>À réviser dès que tu ouvres l'app.</Text>
           </>
         )}
       </FadeInView>
 
       <Text style={styles.notificationHint}>
-        Heure exacte de la notification réellement programmée — se met à jour à chaque ouverture de l'app et après
-        chaque révision.
+        Compte lu directement en base, pas une estimation — se met à jour à chaque ouverture de cet onglet.
       </Text>
 
       <AnimatedPressable style={[styles.button, styles.buttonOutline]} haptic="selection" onPress={refresh}>
@@ -286,21 +290,6 @@ function NotificationsView({ db, styles, theme }: { db: SQLiteDatabase; styles: 
       </AnimatedPressable>
     </ScrollView>
   );
-}
-
-function formatRelative(date: Date): string {
-  const diffMs = date.getTime() - Date.now();
-  if (diffMs <= 0) return "D'un instant à l'autre";
-
-  const minutes = Math.round(diffMs / 60_000);
-  if (minutes < 1) return "D'un instant à l'autre";
-  if (minutes < 60) return `Dans environ ${minutes} min`;
-
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Dans environ ${hours} h`;
-
-  const days = Math.round(hours / 24);
-  return `Dans environ ${days} j`;
 }
 
 function createStyles(t: SolYSombraPalette) {

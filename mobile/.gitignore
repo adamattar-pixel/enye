@@ -40,6 +40,15 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Electron — sortie compilée de `electron/*.ts` (voir `npm run electron:build`
+# / docs/DECISIONS.md Decision 016), régénérée à chaque build, jamais commit.
+/electron-dist/
+# Electron — paquet Windows produit par `npm run desktop:package`
+# (electron-builder), potentiellement volumineux, jamais commit.
+# (`dist/`, la sortie de l'export web statique, est déjà ignorée plus
+# haut par la règle Expo générique.)
+/release/
+
 # generated native folders
 /ios
 /android

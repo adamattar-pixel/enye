@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { TodayScreen } from '../screens/TodayScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { DecksScreen } from '../screens/DecksScreen';
@@ -38,7 +38,7 @@ type ActiveSession = 'none' | 'vocab' | 'conjugation' | 'listening' | 'expressio
  * liste de mots) ; Session (révision vocabulaire, conjugaison, écoute,
  * expressions OU compréhension écrite, plein écran) masque la barre,
  * lancée depuis l'onglet correspondant et y ramène en sortant. */
-export function RootTabs({ db }: { db: SQLiteDatabase }) {
+export function RootTabs({ db }: { db: LexisDb }) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [tab, setTab] = useState<TabKey>('today');

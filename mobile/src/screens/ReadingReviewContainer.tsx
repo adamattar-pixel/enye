@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getDueReadingCardsSplit, updateReadingCard, logReadingReview, type DueReadingCardRow } from '../data/database';
 import { getSettings } from '../data/settings';
 import { getReadingText } from '../reading/data';
@@ -9,7 +9,7 @@ import type { SM2Grade } from '../sm2/types';
 import { ReadingReviewScreen } from './ReadingReviewScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onExit: () => void };
+type Props = { db: LexisDb; onExit: () => void };
 
 /** Écran de session pour l'onglet Compréhension écrite — même rôle que
  * [ExpressionReviewContainer.tsx](./ExpressionReviewContainer.tsx),

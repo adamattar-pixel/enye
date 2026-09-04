@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { getDueExpressionCardsSplit, getExpressionCounts } from '../data/database';
 import { getSettings } from '../data/settings';
 import { expressions } from '../expressions/data';
@@ -10,7 +10,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onStartSession: () => void };
+type Props = { db: LexisDb; onStartSession: () => void };
 type SubView = 'training' | 'repertoire';
 type Styles = ReturnType<typeof createStyles>;
 
@@ -52,7 +52,7 @@ function SubTabButton({ styles, label, active, onPress }: { styles: Styles; labe
 
 // MARK: - Entraînement
 
-function TrainingView({ db, styles, onStartSession }: { db: SQLiteDatabase; styles: Styles; onStartSession: () => void }) {
+function TrainingView({ db, styles, onStartSession }: { db: LexisDb; styles: Styles; onStartSession: () => void }) {
   const [dueCount, setDueCount] = useState(0);
   const [learned, setLearned] = useState(0);
   const [total, setTotal] = useState(0);

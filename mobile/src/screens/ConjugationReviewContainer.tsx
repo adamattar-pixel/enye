@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import {
   getDueConjugationCardsSplit,
   updateConjugationCard,
@@ -15,7 +15,7 @@ import { ConjugationReviewScreen } from './ConjugationReviewScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
-  db: SQLiteDatabase;
+  db: LexisDb;
   onExit: () => void;
 };
 

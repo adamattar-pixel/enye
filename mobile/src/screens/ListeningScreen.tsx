@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import {
   getDueListeningCardsSplit,
   getListeningCounts,
@@ -13,7 +13,7 @@ import { getSettings } from '../data/settings';
 import { extractVideoId } from '../listening/youtubeUrl';
 import { fetchVideoMetadata } from '../listening/metadata';
 import { fetchVideoCaptions } from '../listening/captions';
-import { useTranscriptFetcher } from '../listening/TranscriptFetcher';
+import { fetchTranscriptViaDesktop } from '../listening/desktopTranscriptFetcher';
 import { searchYoutubeVideos, type YoutubeSearchResult } from '../listening/search';
 import type { CaptionStatus, ListeningVideo } from '../listening/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
@@ -21,7 +21,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase; onStartSession: () => void };
+type Props = { db: LexisDb; onStartSession: () => void };
 type SubView = 'training' | 'library';
 type Styles = ReturnType<typeof createStyles>;
 
@@ -67,7 +67,7 @@ function SubTabButton({ styles, label, active, onPress }: { styles: Styles; labe
 
 // MARK: - Entraînement
 
-function TrainingView({ db, styles, onStartSession }: { db: SQLiteDatabase; styles: Styles; onStartSession: () => void }) {
+function TrainingView({ db, styles, onStartSession }: { db: LexisDb; styles: Styles; onStartSession: () => void }) {
   const [dueCount, setDueCount] = useState(0);
   const [learned, setLearned] = useState(0);
   const [total, setTotal] = useState(0);
@@ -134,7 +134,7 @@ const CAPTION_STATUS_LABELS: Record<CaptionStatus, string> = {
   unavailable: 'Sous-titres indisponibles',
 };
 
-function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
+function LibraryView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [videos, setVideos] = useState<ListeningVideoWithStats[]>([]);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -143,7 +143,6 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   const [addingId, setAddingId] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { node: transcriptFetcherNode, fetchTranscript } = useTranscriptFetcher();
 
   const refresh = useCallback(async () => {
     setVideos(await getListeningVideosWithStats(db));
@@ -196,18 +195,18 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
     setAddingId(result.videoId);
     setAddError(null);
     try {
-      // Essai n°1 : requête HTTP brute (gratuite, pas de WebView à
-      // monter) — confirmé cassé à 100% depuis le réseau de
+      // Essai n°1 : requête HTTP brute (gratuite, pas de fenêtre cachée à
+      // ouvrir) — confirmé cassé à 100% depuis le réseau de
       // développement (voir captions.ts, docs/AUDIT.md), mais peut
       // fonctionner sur d'autres réseaux, donc gardé comme premier essai
       // plutôt que supprimé. Essai n°2 seulement si le premier ne
       // renvoie aucun segment : la même requête émise depuis une vraie
-      // page youtube.com chargée dans une WebView (voir
-      // `TranscriptFetcher.tsx`), plus lente à monter mais qui contourne
-      // le blocage anti-bot identifié.
+      // page youtube.com chargée dans une fenêtre Electron cachée (voir
+      // `electron/captionsFetcher.ts`), plus lente à monter mais qui
+      // contourne le blocage anti-bot identifié.
       let captions = await fetchVideoCaptions(result.videoId);
       if (captions.segments.length === 0) {
-        captions = await fetchTranscript(result.videoId);
+        captions = await fetchTranscriptViaDesktop(result.videoId);
       }
       const video: ListeningVideo = {
         id: result.videoId,
@@ -284,7 +283,6 @@ function LibraryView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
   // défile avec le reste dans le même `FlatList` natif.
   return (
     <View style={{ flex: 1 }}>
-      {transcriptFetcherNode}
       <FlatList
         data={videos}
         keyExtractor={videoKeyExtractor}

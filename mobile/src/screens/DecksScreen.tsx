@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { LexisDb } from '../data/dbTypes';
 import { addUserWord, deleteWord, getAllTags, getAllWords, updateWord } from '../data/database';
 import type { Word } from '../data/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
@@ -9,7 +9,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: SQLiteDatabase };
+type Props = { db: LexisDb };
 type Styles = ReturnType<typeof createStyles>;
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2'];
@@ -36,7 +36,7 @@ export function DecksScreen({ db }: Props) {
 
 // MARK: - Liste des mots
 
-function WordListView({ db, styles }: { db: SQLiteDatabase; styles: Styles }) {
+function WordListView({ db, styles }: { db: LexisDb; styles: Styles }) {
   const [words, setWords] = useState<Word[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
@@ -210,7 +210,7 @@ function AddWordModal({
   visible: boolean;
   onClose: () => void;
   onAdded: () => void;
-  db: SQLiteDatabase;
+  db: LexisDb;
   styles: Styles;
 }) {
   const [spanish, setSpanish] = useState('');
@@ -308,7 +308,7 @@ function EditWordModal({
   word: Word | null;
   onClose: () => void;
   onSaved: () => void;
-  db: SQLiteDatabase;
+  db: LexisDb;
   styles: Styles;
 }) {
   const [english, setEnglish] = useState('');

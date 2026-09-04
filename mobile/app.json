@@ -22,8 +22,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite",
-      "expo-audio",
       "expo-asset"
     ]
   }

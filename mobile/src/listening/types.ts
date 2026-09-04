@@ -24,3 +24,14 @@ export interface ListeningSegment {
   endTime: number;
   transcript: string;
 }
+
+/** Résultat de la récupération de sous-titres via le mécanisme WebView/
+ * Electron (voir `electron/captionsFetcher.ts`, ex-`TranscriptFetcher.tsx`
+ * côté mobile abandonné — Decision 016). Déplacé ici (plutôt que de rester
+ * défini dans le fichier du fetcher) pour que le renderer puisse typer le
+ * retour de l'appel IPC sans dépendre du module main-process-only. */
+export interface TranscriptFetchResult {
+  status: CaptionStatus;
+  language: string;
+  segments: { startTime: number; endTime: number; transcript: string }[];
+}
