@@ -28,12 +28,12 @@ Verification actually performed (see `docs/AUDIT.md` Facts for the full detail �
 
 ## Next
 
-- [ ] **Open the app and actually look at it.** Run `npm run desktop` (starts the Metro web dev server + Electron together) or install `release/`'s output, and go through every screen — this is the one thing this session could not do itself. Report back anything that looks wrong; nothing UI-level has been confirmed beyond "it boots."
-- [ ] Add a video in Écoute and confirm the ported captions-fetch mechanism actually captures a real Spanish transcript (or correctly falls back to `unavailable`) — the technique is a direct port of a confirmed-working iPhone mechanism, but has not been run against a real YouTube video on this new host.
-- [ ] Confirm closed captions actually stay off during playback — the DOM-click fallback that made this reliable on iOS has no equivalent on this target; only the official IFrame API calls remain, untested.
+- [x] ~~Open the app and actually look at it.~~ Done 2026-09-06 by the user — app opens, is usable. Two visual issues reported and fixed (ugly default scrollbar, flattened buttons in Decks & mots) — see `docs/AUDIT.md`, not yet re-confirmed visually.
+- [ ] **Listening captions are blocked by a Google CAPTCHA wall — see `docs/AUDIT.md` Issues #1 for the full diagnosis.** Not a code bug: a direct, UI-bypassing test confirmed `youtube.com/watch` redirects straight to a `google.com/sorry/...` challenge before any of our scripts run, independent of User-Agent. Next real step: a human, single, patient attempt from the actual app (not another automated retry — this session's own repeated tests are a plausible contributor to the IP being flagged). If it's still blocked under normal use, this needs a conversation about whether to accept the risk, investigate session/cookie persistence, or treat this as a feature that may not be reliably portable to this network/environment.
+- [ ] Confirm closed captions actually stay off during playback — moot until captions-fetch itself works.
 - [ ] Configure a real DeepL key in `mobile/.env` and confirm translation actually works end-to-end through the new main-process IPC path (never called with a real key even before the migration).
 - [ ] Try installing the packaged `release/` output (not just running `win-unpacked/Lexis.exe` directly) to confirm the NSIS installer itself works.
-- [ ] Once the above is confirmed, update `CLAUDE.md`'s "Active stack" section to describe the desktop target (still describes the old Expo Go / iOS framing).
+- [ ] Update `CLAUDE.md`'s "Active stack" section to describe the desktop target — already done 2026-09-04, re-check once captions/DeepL are resolved in case the framing needs another pass.
 
 ## Later
 
