@@ -115,6 +115,7 @@ function WordListView({ db, styles }: { db: LexisDb; styles: Styles }) {
       </View>
 
       <FlatList
+        style={styles.list}
         data={words}
         keyExtractor={wordKeyExtractor}
         contentContainerStyle={styles.listContent}
@@ -399,8 +400,20 @@ function createStyles(t: SolYSombraPalette) {
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 16 },
 
-    filterRow: { flexGrow: 0, marginBottom: 8 },
+    // `flexGrow: 0` seul ne suffit pas sous react-native-web : sans
+    // `flexShrink: 0` explicite, ces rangées de filtres pouvaient être
+    // écrasées par `FlatList` qui, sans sa propre hauteur bornée (voir
+    // `list` ci-dessous), grossissait avec son contenu (jusqu'à 6002
+    // mots) plutôt que de rester une zone de défilement fixe — d'où les
+    // boutons qui rétrécissaient progressivement à mesure que la liste se
+    // peuplait, signalé explicitement le 06/09/2026.
+    filterRow: { flexGrow: 0, flexShrink: 0, marginBottom: 8 },
     filterRowContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    // Borne la zone de la liste à l'espace flex restant, pour qu'elle
+    // défile en interne au lieu de grossir avec son contenu (voir le
+    // commentaire sur `filterRow` ci-dessus — la cause réelle du problème
+    // était ici, pas sur les boutons eux-mêmes).
+    list: { flex: 1 },
     chip: {
       minHeight: 32,
       justifyContent: 'center',

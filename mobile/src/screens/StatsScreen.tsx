@@ -228,6 +228,7 @@ function HistoryView({ db, styles }: { db: LexisDb; styles: Styles }) {
         change pas la prochaine date de révision déjà programmée pour ce mot.
       </Text>
       <FlatList
+        style={{ flex: 1 }}
         data={rows}
         keyExtractor={reviewHistoryKeyExtractor}
         contentContainerStyle={styles.listContent}

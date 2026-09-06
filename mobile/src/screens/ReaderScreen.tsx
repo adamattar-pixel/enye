@@ -192,6 +192,7 @@ export function ReaderScreen({ db, bookId, onExit }: Props) {
       </TouchableOpacity>
 
       <FlatList
+        style={{ flex: 1 }}
         ref={listRef}
         data={paragraphs}
         keyExtractor={(_, i) => `${currentChapter.id}_p${i}`}

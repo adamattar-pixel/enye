@@ -73,7 +73,7 @@ export function BooksScreen({ db, onOpenBook }: Props) {
         (books.length === 0 ? (
           <Text style={styles.empty}>Aucun livre pour l'instant — ajoute-en un pour commencer à lire.</Text>
         ) : (
-          <FlatList data={books} keyExtractor={bookKeyExtractor} contentContainerStyle={styles.listContent} renderItem={renderItem} />
+          <FlatList style={{ flex: 1 }} data={books} keyExtractor={bookKeyExtractor} contentContainerStyle={styles.listContent} renderItem={renderItem} />
         ))}
 
       <FadeInView duration={300} style={styles.fabWrapper}>

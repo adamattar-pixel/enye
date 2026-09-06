@@ -126,6 +126,7 @@ function RepertoireView({ styles }: { styles: Styles }) {
 
   return (
     <FlatList
+      style={{ flex: 1 }}
       data={expressions}
       keyExtractor={expressionKeyExtractor}
       contentContainerStyle={styles.listContent}

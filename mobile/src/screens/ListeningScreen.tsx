@@ -284,6 +284,7 @@ function LibraryView({ db, styles }: { db: LexisDb; styles: Styles }) {
   return (
     <View style={{ flex: 1 }}>
       <FlatList
+        style={{ flex: 1 }}
         data={videos}
         keyExtractor={videoKeyExtractor}
         contentContainerStyle={styles.libraryListContent}

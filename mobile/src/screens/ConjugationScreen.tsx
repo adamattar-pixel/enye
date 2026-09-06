@@ -191,6 +191,7 @@ function HistoryView({ db, styles }: { db: LexisDb; styles: Styles }) {
         change pas la prochaine date de révision déjà programmée pour cette carte.
       </Text>
       <FlatList
+        style={{ flex: 1 }}
         data={rows}
         keyExtractor={conjugationHistoryKeyExtractor}
         contentContainerStyle={styles.historyListContent}
