@@ -400,8 +400,16 @@ function createStyles(t: SolYSombraPalette) {
     title: { fontFamily: 'Georgia', fontSize: 26, fontWeight: '600', color: t.wordText, marginTop: 4, marginBottom: 16 },
 
     filterRow: { flexGrow: 0, marginBottom: 8 },
-    filterRowContent: { gap: 8 },
-    chip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 16, backgroundColor: t.translationBackground },
+    filterRowContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    chip: {
+      minHeight: 32,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      backgroundColor: t.translationBackground,
+    },
     chipActive: { backgroundColor: t.buttonFilled },
     chipText: { fontSize: 12, color: t.wordText, fontWeight: '600' },
     chipTextActive: { color: t.buttonFilledText },
@@ -423,10 +431,12 @@ function createStyles(t: SolYSombraPalette) {
 
     fabWrapper: { position: 'absolute', bottom: 20, left: 0, right: 0 },
     fab: {
+      minHeight: 48,
       backgroundColor: t.buttonFilled,
       borderRadius: 24,
       paddingVertical: 14,
       alignItems: 'center',
+      justifyContent: 'center',
     },
     fabText: { color: t.buttonFilledText, fontWeight: '600' },
 
@@ -447,7 +457,15 @@ function createStyles(t: SolYSombraPalette) {
       backgroundColor: t.cardBackground,
     },
 
-    button: { flex: 1, backgroundColor: t.buttonFilled, paddingVertical: 14, borderRadius: 24, alignItems: 'center' },
+    button: {
+      flex: 1,
+      minHeight: 48,
+      backgroundColor: t.buttonFilled,
+      paddingVertical: 14,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     buttonText: { color: t.buttonFilledText, fontWeight: '600' },
     buttonOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: t.buttonOutline },
     buttonOutlineText: { color: t.buttonOutline, fontWeight: '600' },
