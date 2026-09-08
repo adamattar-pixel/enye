@@ -1069,8 +1069,16 @@ export async function importMissingConjugationCards(
 
 /** Cartes de conjugaison dues, avec le même principe de plafond séparé
  * nouvelles/révisions que `getDueCardsSplit` (vocabulaire) — voir
- * docs/PLAN.md. Pas de filtre par thème ici (la conjugaison n'a pas de
- * réglage "thèmes actifs", contrairement au vocabulaire).
+ * docs/PLAN.md.
+ *
+ * `disabledTenses` (demandé explicitement le 06/09/2026) exclut
+ * complètement les temps désactivés des deux requêtes (révisions ET
+ * nouvelles) — volontairement différent de `disabledTags` côté
+ * vocabulaire, qui ne filtre que les nouvelles cartes : ici, l'attente
+ * explicite est qu'AUCUNE carte du temps désactivé n'apparaisse plus,
+ * même une déjà en apprentissage. `tense` est une colonne SQL directe
+ * (contrairement à `tags`, un tableau JSON côté `words`), donc filtrable
+ * en `NOT IN` sans repli JS ni marge de sur-lecture.
  *
  * **Ordre aléatoire, pas par fréquence/insertion** — retour explicite :
  * l'ordre précédent (par `rowid`, donc verbe par verbe dans l'ordre
@@ -1083,17 +1091,24 @@ export async function importMissingConjugationCards(
 export async function getDueConjugationCardsSplit(
   db: LexisDb,
   now: Date,
-  settings: { conjugationNewCardsPerDay: number; conjugationReviewCapPerDay: number }
+  settings: { conjugationNewCardsPerDay: number; conjugationReviewCapPerDay: number; disabledTenses?: ConjugationTense[] }
 ): Promise<DueConjugationCardRow[]> {
+  const disabledTenses = settings.disabledTenses ?? [];
+  // `NOT IN ()` (zéro éléments) est une erreur de syntaxe SQLite — la
+  // clause n'est ajoutée que si au moins un temps est désactivé.
+  const tenseClause = disabledTenses.length > 0 ? `AND tense NOT IN (${disabledTenses.map(() => '?').join(', ')})` : '';
+
   const reviewRows = await db.getAllAsync<ConjugationCardRow>(
-    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle != 'new' ORDER BY due_date ASC LIMIT ?;`,
+    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle != 'new' ${tenseClause} ORDER BY due_date ASC LIMIT ?;`,
     now.toISOString(),
+    ...disabledTenses,
     settings.conjugationReviewCapPerDay
   );
 
   const newRows = await db.getAllAsync<ConjugationCardRow>(
-    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle = 'new' ORDER BY RANDOM() LIMIT ?;`,
+    `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle = 'new' ${tenseClause} ORDER BY RANDOM() LIMIT ?;`,
     now.toISOString(),
+    ...disabledTenses,
     settings.conjugationNewCardsPerDay
   );
 

@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import type { LexisDb } from '../data/dbTypes';
 import { getAllTags, getDueCardsSplit, resetProgress } from '../data/database';
 import { getSettings, saveSettings, type AppSettings } from '../data/settings';
+import { CONJUGATION_TENSES, TENSE_LABELS, type ConjugationTense } from '../conjugation/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
@@ -99,6 +100,13 @@ function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
     update({ disabledTags: disabled });
   };
 
+  const toggleTense = (tense: ConjugationTense) => {
+    const disabled = settings.disabledTenses.includes(tense)
+      ? settings.disabledTenses.filter((t) => t !== tense)
+      : [...settings.disabledTenses, tense];
+    update({ disabledTenses: disabled });
+  };
+
   const handleSave = async () => {
     if (settings.windowEndHour <= settings.windowStartHour) {
       Alert.alert('Plage horaire invalide', "L'heure de fin doit être après l'heure de début.");
@@ -158,6 +166,27 @@ function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
         value={settings.conjugationReviewCapPerDay}
         onChange={(v) => update({ conjugationReviewCapPerDay: v })}
       />
+
+      <Text style={styles.fieldLabel}>Temps actifs en conjugaison</Text>
+      <Text style={styles.fieldHint}>
+        Un temps désactivé n'apparaît plus du tout, y compris pour les cartes déjà en cours d'apprentissage.
+      </Text>
+      <View style={styles.tagToggleWrap}>
+        {CONJUGATION_TENSES.map((tense) => {
+          const enabled = !settings.disabledTenses.includes(tense);
+          return (
+            <AnimatedPressable
+              key={tense}
+              style={[styles.chip, enabled && styles.chipActive]}
+              haptic="none"
+              scaleTo={0.92}
+              onPress={() => toggleTense(tense)}
+            >
+              <Text style={[styles.chipText, enabled && styles.chipTextActive]}>{TENSE_LABELS[tense]}</Text>
+            </AnimatedPressable>
+          );
+        })}
+      </View>
 
       {allTags.length > 0 && (
         <>
@@ -303,13 +332,26 @@ function createStyles(t: SolYSombraPalette) {
     subTabText: { color: t.wordText, fontWeight: '600', fontSize: 13 },
     subTabTextActive: { color: t.buttonFilledText },
 
-    chip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 16, backgroundColor: t.translationBackground },
+    // `minHeight`/`justifyContent`/`alignItems` explicites — sans ça, ces
+    // puces se sont déjà révélées aplaties sous react-native-web (Decks &
+    // mots, corrigé le 06/09/2026 : le padding seul ne borne pas la
+    // hauteur aussi fiablement que sous Expo Go).
+    chip: {
+      minHeight: 32,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      backgroundColor: t.translationBackground,
+    },
     chipActive: { backgroundColor: t.buttonFilled },
     chipText: { fontSize: 12, color: t.wordText, fontWeight: '600' },
     chipTextActive: { color: t.buttonFilledText },
 
     field: { marginBottom: 14 },
     fieldLabel: { fontSize: 12, color: t.metaText, marginBottom: 6 },
+    fieldHint: { fontSize: 12, color: t.metaText, marginBottom: 10, lineHeight: 17 },
     input: {
       borderWidth: 1,
       borderColor: t.cardBorder,

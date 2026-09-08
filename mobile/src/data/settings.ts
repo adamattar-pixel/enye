@@ -1,4 +1,5 @@
 import type { LexisDb } from './dbTypes';
+import type { ConjugationTense } from '../conjugation/types';
 
 export interface AppSettings {
   newCardsPerDay: number;
@@ -25,6 +26,14 @@ export interface AppSettings {
    * ajuster séparément si besoin, voir docs/AUDIT.md. */
   conjugationNewCardsPerDay: number;
   conjugationReviewCapPerDay: number;
+  /** Temps/modes exclus de la conjugaison — demandé explicitement
+   * (06/09/2026) : contrairement à `disabledTags` (qui n'affecte que
+   * l'introduction de NOUVELLES cartes), désactiver un temps ici l'exclut
+   * complètement des cartes proposées, y compris celles déjà en
+   * apprentissage/révision — l'utilisateur veut ne plus JAMAIS voir ce
+   * temps tant qu'il reste désactivé, pas seulement freiner son
+   * introduction. Voir `getDueConjugationCardsSplit` (database.ts). */
+  disabledTenses: ConjugationTense[];
   /** Rythme de l'onglet Compréhension orale — même logique de budget
    * séparé que la conjugaison, mais plus bas par défaut (5 + 15) : le
    * volume de segments disponibles dépend entièrement des vidéos que
@@ -56,6 +65,7 @@ export const defaultSettings: AppSettings = {
   themeOverride: 'system',
   conjugationNewCardsPerDay: 8,
   conjugationReviewCapPerDay: 22,
+  disabledTenses: [],
   listeningNewSegmentsPerDay: 5,
   listeningReviewCapPerDay: 15,
   expressionNewCardsPerDay: 8,
