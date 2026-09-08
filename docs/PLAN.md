@@ -20,6 +20,8 @@ Feature-parity result (final, not a prediction):
 | Historique / stats / "Réinitialiser ma progression" | Adapté | DB-layer swap only. |
 | Rappels de révision | Perdu, remplacé | `mobile/src/notifications/` deleted; replaced by the due-card count already shown on the Aujourd'hui tab (first tab opened) plus a "Rappel" sub-tab in Réglages (was "Notifications"). |
 
+- [x] **Per-tense conjugation toggle** (requested 2026-09-06): `AppSettings.disabledTenses` — a disabled tense (e.g. "présent") is excluded from *every* conjugation card shown, including ones already in learning/review, not just new introductions (deliberately stronger than vocabulary's `disabledTags`, which only affects new cards — this was explicitly what was asked for). Filtered directly in SQL (`tense NOT IN (...)` on both the review and new-card queries in `getDueConjugationCardsSplit`) since `tense` is a plain column, unlike vocabulary's JSON `tags` array. UI: toggle chips in Réglages → Conjugaison, same component as the existing theme chips. Verified against a real in-memory SQLite DB (not just compiled): seeded cards across 3 tenses, disabled one, confirmed it's absent from results and that no filter returns all three. `tsc`/`jest` green (129/129).
+
 Verification actually performed (see `docs/AUDIT.md` Facts for the full detail — this is a summary):
 - `tsc --noEmit` (app) and `tsc -p electron/tsconfig.json` (main process) both clean; `jest` 129/129.
 - Electron actually launched on this machine twice (fresh install + reopen): real window, real `node:sqlite` file, row counts confirmed by querying the `.db` file directly (6002 words / 63804 conjugation cards / 60 expressions / 15 reading cards, identical both times — confirms idempotent reimport on the new backend).
@@ -28,12 +30,12 @@ Verification actually performed (see `docs/AUDIT.md` Facts for the full detail �
 
 ## Next
 
-- [x] ~~Open the app and actually look at it.~~ Done 2026-09-06 by the user — app opens, is usable. Two visual issues reported and fixed (ugly default scrollbar, flattened buttons in Decks & mots) — see `docs/AUDIT.md`, not yet re-confirmed visually.
-- [ ] **Listening captions are blocked by a Google CAPTCHA wall — see `docs/AUDIT.md` Issues #1 for the full diagnosis.** Not a code bug: a direct, UI-bypassing test confirmed `youtube.com/watch` redirects straight to a `google.com/sorry/...` challenge before any of our scripts run, independent of User-Agent. Next real step: a human, single, patient attempt from the actual app (not another automated retry — this session's own repeated tests are a plausible contributor to the IP being flagged). If it's still blocked under normal use, this needs a conversation about whether to accept the risk, investigate session/cookie persistence, or treat this as a feature that may not be reliably portable to this network/environment.
+- [x] ~~Open the app and actually look at it.~~ Done 2026-09-06 — app opens, is usable. Scrollbar + flattened-button issues reported and fixed (real cause: `FlatList`s missing `flex: 1`, see `docs/AUDIT.md`).
+- [x] ~~Packaged installer showed a blank screen.~~ Fixed 2026-09-07 — `file://` + Expo Web's absolute asset paths don't mix; now served over a custom `app://` scheme. Confirmed via CDP that real content mounts, not just that it compiles.
+- [ ] **Listening captions are blocked by a Google CAPTCHA wall — see `docs/AUDIT.md` Issues #1 for the full diagnosis.** Not a code bug: a direct, UI-bypassing test confirmed `youtube.com/watch` redirects straight to a `google.com/sorry/...` challenge before any of our scripts run, independent of User-Agent. User asked to leave this for now and will test it themselves from the real app.
 - [ ] Confirm closed captions actually stay off during playback — moot until captions-fetch itself works.
 - [ ] Configure a real DeepL key in `mobile/.env` and confirm translation actually works end-to-end through the new main-process IPC path (never called with a real key even before the migration).
-- [ ] Try installing the packaged `release/` output (not just running `win-unpacked/Lexis.exe` directly) to confirm the NSIS installer itself works.
-- [ ] Update `CLAUDE.md`'s "Active stack" section to describe the desktop target — already done 2026-09-04, re-check once captions/DeepL are resolved in case the framing needs another pass.
+- [ ] Re-confirm visually (user's own eyes) that the Decks & mots fix and the new conjugation tense toggles actually render correctly — nothing UI-level in this session is ever more than "should work," per the no-screenshot-tool constraint.
 
 ## Later
 
