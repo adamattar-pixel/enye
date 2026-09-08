@@ -1,6 +1,7 @@
 import './loadEnv';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, net, protocol } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createNodeSqliteDb } from './nodeSqliteAdapter';
 import { fetchTranscriptForVideo } from './captionsFetcher';
 import { translateSentence, isTranslationAvailable } from '../src/services/translate';
@@ -34,6 +35,44 @@ import { readingTexts } from '../src/reading/data';
  * du plan ("réutilise le code métier existant, pas une copie qui va
  * diverger", voir docs/DECISIONS.md Decision 016 / docs/PLAN.md).
  */
+
+// L'export statique d'Expo Web (`expo export --platform web`) référence
+// son bundle JS et ses assets par des chemins ABSOLUS (`/_expo/static/...`,
+// `/favicon.ico`) — corrects pour un vrai serveur HTTP, mais un chemin
+// absolu chargé depuis `file://` se résout à la racine du système de
+// fichiers (`file:///_expo/...`), pas au dossier de `index.html` : c'est
+// exactement pourquoi `win.loadFile()` produisait un écran blanc en
+// production (confirmé le 07/09/2026 — aucun des scripts/assets ne se
+// chargeait, silencieusement). Un schéma personnalisé "standard" (RFC
+// 3986) résout les chemins absolus par rapport à son propre serveur
+// virtuel, comme un vrai `http://`, réglant le problème sans avoir à
+// réécrire les chemins dans le HTML exporté. Doit être appelé AVANT
+// `app.whenReady()` (exigence d'Electron).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
+
+/** Sert le dossier `web-build` (copié depuis l'export Expo Web par
+ * `electron-builder`, voir `package.json`'s `build.extraResources`) sous
+ * `app://bundle/...` — uniquement utilisé pour la build packagée
+ * (`app.isPackaged`), voir `createWindow()`. `net.fetch` sur une URL
+ * `file://` déduit correctement le type MIME depuis l'extension. */
+function registerAppProtocol(): void {
+  const root = path.join(process.resourcesPath, 'web-build');
+
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url);
+    const relativePath = url.pathname === '/' || url.pathname === '' ? 'index.html' : decodeURIComponent(url.pathname);
+    const fullPath = path.normalize(path.join(root, relativePath));
+
+    // Empêche de sortir de `web-build` via un `..` dans le chemin.
+    if (!fullPath.startsWith(root)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+
+    return net.fetch(pathToFileURL(fullPath).toString());
+  });
+}
 
 let db: LexisDb | null = null;
 
@@ -111,11 +150,12 @@ function createWindow(): void {
   if (!app.isPackaged) {
     win.loadURL(devServerUrl);
   } else {
-    win.loadFile(path.join(process.resourcesPath, 'web-build', 'index.html'));
+    win.loadURL('app://bundle/index.html');
   }
 }
 
 app.whenReady().then(async () => {
+  if (app.isPackaged) registerAppProtocol();
   db = await initDatabase();
   registerDbHandlers(db);
   ipcMain.handle('captions:fetch', async (_event, videoId: string) => fetchTranscriptForVideo(videoId));
