@@ -179,3 +179,19 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+// Filet de sécurité pour fermer vraiment vite : la fenêtre cachée de
+// `captionsFetcher.ts` (une recherche de sous-titres en cours) compte
+// comme une fenêtre ouverte pour Electron — si l'utilisateur ferme la
+// fenêtre principale pendant qu'une recherche tourne encore,
+// `window-all-closed` n'aurait sinon rien à fermer avant que cette
+// fenêtre cachée se règle d'elle-même (jusqu'à 9s, voir son timeout
+// global) ou qu'un signal `before-quit` la force. Sans ce filet, l'app
+// pouvait rester quelques secondes de plus en arrière-plan après la
+// fermeture visible de la fenêtre — signalé le 10/09/2026 par
+// l'installeur refusant de continuer tant que "Lexis" tournait encore.
+app.on('before-quit', () => {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+});
