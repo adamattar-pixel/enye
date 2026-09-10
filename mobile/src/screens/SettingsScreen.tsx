@@ -15,6 +15,15 @@ type Props = { db: LexisDb };
 type SubView = 'settings' | 'reminder';
 type Styles = ReturnType<typeof createStyles>;
 
+// Même liste que `DecksScreen.tsx` (filtre par niveau) — pas partagée
+// via un module commun, ce projet ne mutualise pas les petites
+// constantes entre écrans (voir docs/CONVENTIONS.md). "B2" n'a en
+// pratique aucun mot (l'heuristique de génération n'en produit jamais,
+// voir docs/AUDIT.md) — le désactiver n'a donc aucun effet visible tant
+// que ça reste le cas, gardé quand même dans la liste pour rester
+// cohérent avec le filtre de Decks & mots.
+const VOCAB_LEVELS = ['A1', 'A2', 'B1', 'B2'];
+
 /** Réglages et rappel de cartes dues — regroupés dans un onglet à part
  * (sous-onglets internes), séparé de « Decks & mots » qui ne garde que
  * la liste de mots. L'historique des révisions, qui vivait ici aussi,
@@ -100,6 +109,13 @@ function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
     update({ disabledTags: disabled });
   };
 
+  const toggleLevel = (level: string) => {
+    const disabled = settings.disabledLevels.includes(level)
+      ? settings.disabledLevels.filter((l) => l !== level)
+      : [...settings.disabledLevels, level];
+    update({ disabledLevels: disabled });
+  };
+
   const toggleTense = (tense: ConjugationTense) => {
     const disabled = settings.disabledTenses.includes(tense)
       ? settings.disabledTenses.filter((t) => t !== tense)
@@ -151,6 +167,27 @@ function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
       <View style={styles.hourRow}>
         <NumberField styles={styles} label="Début (heure)" value={settings.windowStartHour} onChange={(v) => update({ windowStartHour: v })} compact />
         <NumberField styles={styles} label="Fin (heure)" value={settings.windowEndHour} onChange={(v) => update({ windowEndHour: v })} compact />
+      </View>
+
+      <Text style={styles.fieldLabel}>Niveaux actifs en vocabulaire</Text>
+      <Text style={styles.fieldHint}>
+        Un niveau désactivé n'apparaît plus du tout, y compris pour les mots déjà en cours d'apprentissage.
+      </Text>
+      <View style={styles.tagToggleWrap}>
+        {VOCAB_LEVELS.map((level) => {
+          const enabled = !settings.disabledLevels.includes(level);
+          return (
+            <AnimatedPressable
+              key={level}
+              style={[styles.chip, enabled && styles.chipActive]}
+              haptic="none"
+              scaleTo={0.92}
+              onPress={() => toggleLevel(level)}
+            >
+              <Text style={[styles.chipText, enabled && styles.chipTextActive]}>{level}</Text>
+            </AnimatedPressable>
+          );
+        })}
       </View>
 
       <Text style={styles.fieldLabel}>Conjugaison</Text>

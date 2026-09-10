@@ -60,7 +60,7 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
   const handleMoreCards = useCallback(async () => {
     setFetchingMore(true);
     const settings = await getSettings(db);
-    const more = await getMoreNewCards(db, new Date(), settings.disabledTags, settings.newCardsPerDay);
+    const more = await getMoreNewCards(db, new Date(), settings.disabledTags, settings.disabledLevels, settings.newCardsPerDay);
     setFetchingMore(false);
 
     if (more.length === 0) {

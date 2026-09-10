@@ -528,22 +528,32 @@ export async function getDueCards(db: LexisDb, now: Date, limit: number): Promis
  * commencée (voir `settings.ts`). Le filtre par tag se fait en JS après
  * une requête large plutôt qu'en SQL (`tags` est stocké en JSON, pas en
  * table de jointure) — acceptable au volume de mots actuel (des
- * milliers, pas des millions), à revoir si ça devient un goulot. */
+ * milliers, pas des millions), à revoir si ça devient un goulot.
+ *
+ * `disabledLevels` (niveaux CECRL, demandé le 10/09/2026) a une
+ * sémantique volontairement différente : exclusion TOTALE, y compris les
+ * cartes déjà en révision — même principe que `disabledTenses` côté
+ * conjugaison, voir `settings.ts`. `level` est une colonne SQL directe
+ * (contrairement à `tags`), filtrable en `NOT IN` sans repli JS. */
 export async function getDueCardsSplit(
   db: LexisDb,
   now: Date,
-  settings: { newCardsPerDay: number; reviewCapPerDay: number; disabledTags: string[] }
+  settings: { newCardsPerDay: number; reviewCapPerDay: number; disabledTags: string[]; disabledLevels?: string[] }
 ): Promise<DueCardRow[]> {
+  const disabledLevels = settings.disabledLevels ?? [];
+  const levelClause = notInClause('w.level', disabledLevels);
+
   const reviewRows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
-     WHERE c.due_date <= ? AND c.lifecycle != 'new'
+     WHERE c.due_date <= ? AND c.lifecycle != 'new' ${levelClause}
      ORDER BY c.due_date ASC
      LIMIT ?;`,
     now.toISOString(),
+    ...disabledLevels,
     settings.reviewCapPerDay
   );
 
-  const newRows = await fetchNewCardRows(db, now, settings.disabledTags, settings.newCardsPerDay);
+  const newRows = await fetchNewCardRows(db, now, settings.disabledTags, disabledLevels, settings.newCardsPerDay);
 
   // Mélangé avant présentation — signalé explicitement non aléatoire
   // (20/08/2026) : `fetchNewCardRows` triait par fréquence, donc les
@@ -559,17 +569,21 @@ async function fetchNewCardRows(
   db: LexisDb,
   now: Date,
   disabledTags: string[],
+  disabledLevels: string[],
   limit: number
 ): Promise<WordCardRow[]> {
+  const levelClause = notInClause('w.level', disabledLevels);
+
   // Tiré aléatoirement parmi les mots neufs (`ORDER BY RANDOM()`) plutôt
   // que par fréquence — l'ancien tri par `frequency_rank` rendait
   // l'ordre d'introduction des nouveaux mots entièrement prévisible.
   const candidateRows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
-     WHERE c.due_date <= ? AND c.lifecycle = 'new'
+     WHERE c.due_date <= ? AND c.lifecycle = 'new' ${levelClause}
      ORDER BY RANDOM()
      LIMIT ?;`,
     now.toISOString(),
+    ...disabledLevels,
     // Marge pour compenser les mots filtrés ensuite par `disabledTags`.
     limit * 5 + 50
   );
@@ -592,9 +606,10 @@ export async function getMoreNewCards(
   db: LexisDb,
   now: Date,
   disabledTags: string[],
+  disabledLevels: string[],
   limit: number
 ): Promise<DueCardRow[]> {
-  const rows = await fetchNewCardRows(db, now, disabledTags, limit);
+  const rows = await fetchNewCardRows(db, now, disabledTags, disabledLevels, limit);
   return rows.map(mapWordCardRow);
 }
 
@@ -1067,6 +1082,15 @@ export async function importMissingConjugationCards(
   return missing.length;
 }
 
+/** Fragment SQL `NOT IN (...)` conditionnel — vide si rien n'est
+ * désactivé (`NOT IN ()` est une erreur de syntaxe SQLite). Partagé par
+ * `disabledLevels` (vocabulaire) et `disabledTenses` (conjugaison), les
+ * deux seuls filtres exprimés directement en colonne SQL plutôt qu'en
+ * JSON (`disabledTags` reste un filtre JS, voir `fetchNewCardRows`). */
+function notInClause(column: string, values: string[]): string {
+  return values.length > 0 ? `AND ${column} NOT IN (${values.map(() => '?').join(', ')})` : '';
+}
+
 /** Cartes de conjugaison dues, avec le même principe de plafond séparé
  * nouvelles/révisions que `getDueCardsSplit` (vocabulaire) — voir
  * docs/PLAN.md.
@@ -1094,9 +1118,7 @@ export async function getDueConjugationCardsSplit(
   settings: { conjugationNewCardsPerDay: number; conjugationReviewCapPerDay: number; disabledTenses?: ConjugationTense[] }
 ): Promise<DueConjugationCardRow[]> {
   const disabledTenses = settings.disabledTenses ?? [];
-  // `NOT IN ()` (zéro éléments) est une erreur de syntaxe SQLite — la
-  // clause n'est ajoutée que si au moins un temps est désactivé.
-  const tenseClause = disabledTenses.length > 0 ? `AND tense NOT IN (${disabledTenses.map(() => '?').join(', ')})` : '';
+  const tenseClause = notInClause('tense', disabledTenses);
 
   const reviewRows = await db.getAllAsync<ConjugationCardRow>(
     `SELECT * FROM conjugation_cards WHERE due_date <= ? AND lifecycle != 'new' ${tenseClause} ORDER BY due_date ASC LIMIT ?;`,

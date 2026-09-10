@@ -13,6 +13,14 @@ export interface AppSettings {
    * apprentissage/révision — seulement quels mots deviennent "nouveaux"
    * à l'avenir, pour ne jamais faire disparaître une carte en cours. */
   disabledTags: string[];
+  /** Niveaux CECRL exclus du vocabulaire (A1/A2/B1/B2) — demandé
+   * explicitement (10/09/2026), avec une sémantique volontairement
+   * différente de `disabledTags` : un niveau désactivé exclut TOUTES les
+   * cartes de ce niveau, y compris celles déjà en apprentissage/révision
+   * (même logique que `disabledTenses` en conjugaison), pas seulement les
+   * nouvelles — c'est explicitement ce qui a été demandé ("je n'aurais
+   * pas de mots de difficulté B1"). Voir `getDueCardsSplit` (database.ts). */
+  disabledLevels: string[];
   /** Bascule manuelle clair/sombre (bouton en haut à droite), en plus du
    * réglage système. `'system'` suit `useColorScheme()` comme avant ;
    * `'light'`/`'dark'` force la palette correspondante quel que soit le
@@ -62,6 +70,7 @@ export const defaultSettings: AppSettings = {
   windowEndHour: 22,
   windowEndMinute: 0,
   disabledTags: [],
+  disabledLevels: [],
   themeOverride: 'system',
   conjugationNewCardsPerDay: 8,
   conjugationReviewCapPerDay: 22,
