@@ -9,6 +9,7 @@ import { isCorrectAnswer } from '../conjugation/validate';
 import { TENSE_LABELS, personLabelsForTense, type ConjugationTense } from '../conjugation/types';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 import type { SM2Grade } from '../sm2/types';
+import { useGradeKeyboardShortcuts } from '../hooks/useGradeKeyboardShortcuts';
 
 export type ConjugationCardData = {
   infinitive: string;
@@ -68,6 +69,8 @@ export function ConjugationReviewScreen({ card, onGrade }: Props) {
     GRADE_HAPTICS[grade]();
     onGrade(grade);
   };
+
+  useGradeKeyboardShortcuts(submitted, handleGrade);
 
   return (
     // Toucher n'importe où en dehors du champ de saisie ferme le clavier

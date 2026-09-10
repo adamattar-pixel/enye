@@ -8,6 +8,7 @@ import { ScreenContainer } from '../components/ScreenContainer';
 import { AzulejoFrieze } from '../components/AzulejoFrieze';
 import { formatMeta, useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 import type { SM2Grade } from '../sm2/types';
+import { useGradeKeyboardShortcuts } from '../hooks/useGradeKeyboardShortcuts';
 
 export type ReviewCardData = {
   word: string;
@@ -54,6 +55,8 @@ export function ReviewScreen({ card, onGrade }: Props) {
     GRADE_HAPTICS[grade]();
     onGrade(grade);
   };
+
+  useGradeKeyboardShortcuts(revealed, handleGrade);
 
   return (
     <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>

@@ -8,6 +8,7 @@ import { AzulejoFrieze } from '../components/AzulejoFrieze';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 import type { SM2Grade } from '../sm2/types';
 import type { ReadingQuestion } from '../reading/types';
+import { useGradeKeyboardShortcuts } from '../hooks/useGradeKeyboardShortcuts';
 
 export type ReadingCardData = {
   spanish: string;
@@ -64,6 +65,8 @@ export function ReadingReviewScreen({ card, onGrade }: Props) {
     GRADE_HAPTICS[grade]();
     onGrade(grade);
   };
+
+  useGradeKeyboardShortcuts(corrected, handleGrade);
 
   return (
     <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
