@@ -64,7 +64,8 @@ Single SQLite file, schema is additive-only (`CREATE TABLE IF NOT EXISTS` in `mi
 Each of the three trainable domains follows the same pattern: `XScreen.tsx` (browse/manage, with sub-tabs) → `XReviewContainer.tsx` (loads next due card, persists grade, loop) → `XReviewScreen.tsx` (the actual flashcard UI). Copy-pasted per domain rather than abstracted — see `docs/DECISIONS.md` for why.
 
 ```
-TodayScreen ─────────────► ReviewScreenContainer ──► ReviewScreen        (vocab)
+TodayScreen ─────────────► ReviewScreenContainer ──► ReviewScreen        (vocab, flashcards)
+TodayScreen ─────────────► WritingReviewContainer ──► WritingReviewScreen (vocab, écrire — 11/09/2026, même pool de cartes/mêmes filtres que les flashcards, voir docs/PLAN.md)
 ConjugationScreen ───────► ConjugationReviewContainer ──► ConjugationReviewScreen
 ListeningScreen ─────────► ListeningReviewContainer ──► ListeningReviewScreen
 StatsScreen (+ Historique sub-tab, moved here from Réglages 2026-08-20)
