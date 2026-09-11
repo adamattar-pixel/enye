@@ -1,6 +1,8 @@
 import type { LexisDb, SQLiteBindValue, SQLiteRunResult } from './dbTypes';
 import type { TranscriptFetchResult } from '../listening/types';
 import type { ParsedBook, BookSearchResult } from '../services/bookImport';
+import type { YoutubeSearchResult } from '../listening/search';
+import type { VideoMetadata } from '../listening/metadata';
 
 /** Exposé par `mobile/electron/preload.ts` via `contextBridge` — voir ce
  * fichier pour la liste exacte des méthodes exposées. Déclaré ici plutôt
@@ -27,6 +29,10 @@ declare global {
       books: {
         download(url: string): Promise<ParsedBook>;
         search(query: string): Promise<BookSearchResult[]>;
+      };
+      youtube: {
+        search(query: string): Promise<YoutubeSearchResult[]>;
+        metadata(videoId: string): Promise<VideoMetadata | null>;
       };
     };
   }

@@ -6,6 +6,8 @@ import { createNodeSqliteDb } from './nodeSqliteAdapter';
 import { fetchTranscriptForVideo } from './captionsFetcher';
 import { translateSentence, isTranslationAvailable } from '../src/services/translate';
 import { downloadAndParseBook, searchBooks } from '../src/services/bookImport';
+import { searchYoutubeVideos } from '../src/listening/search';
+import { fetchVideoMetadata } from '../src/listening/metadata';
 import {
   DB_NAME,
   migrateDbIfNeeded,
@@ -169,6 +171,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('translate:isAvailable', async () => isTranslationAvailable());
   ipcMain.handle('books:download', async (_event, url: string) => downloadAndParseBook(url));
   ipcMain.handle('books:search', async (_event, query: string) => searchBooks(query));
+  // Recherche YouTube (scrape de youtube.com/results) et métadonnées
+  // oEmbed : confirmé le 11/09/2026 (curl direct, en-têtes de réponse)
+  // qu'aucun des deux n'envoie d'en-tête CORS — bloqués depuis le
+  // renderer pour la même raison que DeepL/Open Library (voir plus haut).
+  // La recherche renvoyait silencieusement [] (dégradation existante,
+  // pas une exception), d'où "aucun résultat" sans erreur visible.
+  ipcMain.handle('youtube:search', async (_event, query: string) => searchYoutubeVideos(query));
+  ipcMain.handle('youtube:metadata', async (_event, videoId: string) => fetchVideoMetadata(videoId));
   createWindow();
 
   app.on('activate', () => {

@@ -11,10 +11,10 @@ import {
 } from '../data/database';
 import { getSettings } from '../data/settings';
 import { extractVideoId } from '../listening/youtubeUrl';
-import { fetchVideoMetadata } from '../listening/metadata';
+import { fetchVideoMetadata } from '../listening/searchIpc';
 import { fetchVideoCaptions } from '../listening/captions';
 import { fetchTranscriptViaDesktop } from '../listening/desktopTranscriptFetcher';
-import { searchYoutubeVideos, type YoutubeSearchResult } from '../listening/search';
+import { searchYoutubeVideos, type YoutubeSearchResult } from '../listening/searchIpc';
 import type { CaptionStatus, ListeningVideo } from '../listening/types';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';

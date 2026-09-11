@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { SQLiteBindValue } from '../src/data/dbTypes';
 import type { TranscriptFetchResult } from '../src/listening/types';
 import type { ParsedBook, BookSearchResult } from '../src/services/bookImport';
+import type { YoutubeSearchResult } from '../src/listening/search';
+import type { VideoMetadata } from '../src/listening/metadata';
 
 /**
  * Seul pont autorisé entre le renderer (code React/Expo Web, sandboxé,
@@ -31,5 +33,9 @@ contextBridge.exposeInMainWorld('lexisDesktop', {
   books: {
     download: (url: string): Promise<ParsedBook> => ipcRenderer.invoke('books:download', url),
     search: (query: string): Promise<BookSearchResult[]> => ipcRenderer.invoke('books:search', query),
+  },
+  youtube: {
+    search: (query: string): Promise<YoutubeSearchResult[]> => ipcRenderer.invoke('youtube:search', query),
+    metadata: (videoId: string): Promise<VideoMetadata | null> => ipcRenderer.invoke('youtube:metadata', videoId),
   },
 });
