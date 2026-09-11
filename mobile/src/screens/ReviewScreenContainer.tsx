@@ -5,6 +5,7 @@ import { getDueCardsSplit, getMoreNewCards, updateCard, logReview, type DueCardR
 import { getSettings } from '../data/settings';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
+import { pickWeighted, NEW_CARD_WEIGHT } from '../utils/shuffle';
 import { ReviewScreen } from './ReviewScreen';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
@@ -30,7 +31,11 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
   const loadNext = useCallback(async () => {
     const settings = await getSettings(db);
     const due = await getDueCardsSplit(db, new Date(), settings);
-    setCurrent(due[0] ?? null);
+    // Favorise les nouvelles cartes (demandé explicitement le 11/09/2026)
+    // — tirage pondéré plutôt que `due[0]`, sans changer `due` lui-même
+    // (utilisé ailleurs, ex. Aujourd'hui, pour un compte exact de cartes
+    // dues — voir `pickWeighted`).
+    setCurrent(pickWeighted(due, (row) => row.card.lifecycle === 'new', NEW_CARD_WEIGHT));
   }, [db]);
 
   useEffect(() => {

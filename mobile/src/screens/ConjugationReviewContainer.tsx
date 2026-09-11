@@ -11,6 +11,7 @@ import { getSettings } from '../data/settings';
 import { getConjugationVerb } from '../conjugation/data';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
+import { pickWeighted, NEW_CARD_WEIGHT } from '../utils/shuffle';
 import { ConjugationReviewScreen } from './ConjugationReviewScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
@@ -36,7 +37,9 @@ export function ConjugationReviewContainer({ db, onExit }: Props) {
   const loadNext = useCallback(async () => {
     const settings = await getSettings(db);
     const due = await getDueConjugationCardsSplit(db, new Date(), settings);
-    setCurrent(due[0] ?? null);
+    // Favorise les nouvelles cartes (demandé explicitement le 11/09/2026,
+    // même principe que côté vocabulaire — voir ReviewScreenContainer.tsx).
+    setCurrent(pickWeighted(due, (row) => row.card.lifecycle === 'new', NEW_CARD_WEIGHT));
   }, [db]);
 
   useEffect(() => {

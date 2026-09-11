@@ -522,38 +522,42 @@ export async function getDueCards(db: LexisDb, now: Date, limit: number): Promis
  * révision passent d'abord (elles sont réellement en retard), les
  * nouvelles cartes sont ajoutées ensuite par ordre de fréquence.
  *
- * `disabledTags` (réglage "thèmes actifs") n'exclut que les NOUVELLES
- * cartes — un mot déjà en cours de révision reste dû même si son tag a
- * été désactivé depuis, pour ne jamais faire disparaître une carte déjà
- * commencée (voir `settings.ts`). Le filtre par tag se fait en JS après
- * une requête large plutôt qu'en SQL (`tags` est stocké en JSON, pas en
- * table de jointure) — acceptable au volume de mots actuel (des
- * milliers, pas des millions), à revoir si ça devient un goulot.
- *
- * `disabledLevels` (niveaux CECRL, demandé le 10/09/2026) a une
- * sémantique volontairement différente : exclusion TOTALE, y compris les
- * cartes déjà en révision — même principe que `disabledTenses` côté
- * conjugaison, voir `settings.ts`. `level` est une colonne SQL directe
- * (contrairement à `tags`), filtrable en `NOT IN` sans repli JS. */
+ * `disabledTags`/`disabledLevels` (réglages "thèmes actifs"/"niveaux
+ * actifs") ont tous les deux une exclusion TOTALE depuis le 11/09/2026 —
+ * y compris les cartes déjà en cours de révision, pas seulement les
+ * nouvelles. **Changement de comportement** : jusque-là, `disabledTags`
+ * n'excluait que les nouvelles cartes (un mot déjà en révision restait dû
+ * même thème désactivé depuis) — signalé comme un bug le 11/09/2026 après
+ * vérification sur la vraie base de l'utilisateur (62 cartes déjà en
+ * cours, 57 hors du seul thème encore activé, toutes réapparaissant
+ * malgré la désactivation) : l'intention réelle est la même exclusion
+ * totale que `disabledLevels`/`disabledTenses`, pas la version plus
+ * permissive documentée à l'origine. `tags` est stocké en JSON (pas une
+ * colonne plate comme `level`) — filtré en SQL via `json_each` plutôt
+ * qu'un repli JS après une requête large, ce qui élimine aussi le besoin
+ * d'une marge de sur-lecture arbitraire. */
 export async function getDueCardsSplit(
   db: LexisDb,
   now: Date,
   settings: { newCardsPerDay: number; reviewCapPerDay: number; disabledTags: string[]; disabledLevels?: string[] }
 ): Promise<DueCardRow[]> {
   const disabledLevels = settings.disabledLevels ?? [];
+  const disabledTags = settings.disabledTags ?? [];
   const levelClause = notInClause('w.level', disabledLevels);
+  const tagClause = tagsNotInClause('w.tags', disabledTags);
 
   const reviewRows = await db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
-     WHERE c.due_date <= ? AND c.lifecycle != 'new' ${levelClause}
+     WHERE c.due_date <= ? AND c.lifecycle != 'new' ${levelClause} ${tagClause}
      ORDER BY c.due_date ASC
      LIMIT ?;`,
     now.toISOString(),
     ...disabledLevels,
+    ...disabledTags,
     settings.reviewCapPerDay
   );
 
-  const newRows = await fetchNewCardRows(db, now, settings.disabledTags, disabledLevels, settings.newCardsPerDay);
+  const newRows = await fetchNewCardRows(db, now, disabledTags, disabledLevels, settings.newCardsPerDay);
 
   // Mélangé avant présentation — signalé explicitement non aléatoire
   // (20/08/2026) : `fetchNewCardRows` triait par fréquence, donc les
@@ -573,24 +577,21 @@ async function fetchNewCardRows(
   limit: number
 ): Promise<WordCardRow[]> {
   const levelClause = notInClause('w.level', disabledLevels);
+  const tagClause = tagsNotInClause('w.tags', disabledTags);
 
   // Tiré aléatoirement parmi les mots neufs (`ORDER BY RANDOM()`) plutôt
   // que par fréquence — l'ancien tri par `frequency_rank` rendait
   // l'ordre d'introduction des nouveaux mots entièrement prévisible.
-  const candidateRows = await db.getAllAsync<WordCardRow>(
+  return db.getAllAsync<WordCardRow>(
     `${WORD_CARD_SELECT}
-     WHERE c.due_date <= ? AND c.lifecycle = 'new' ${levelClause}
+     WHERE c.due_date <= ? AND c.lifecycle = 'new' ${levelClause} ${tagClause}
      ORDER BY RANDOM()
      LIMIT ?;`,
     now.toISOString(),
     ...disabledLevels,
-    // Marge pour compenser les mots filtrés ensuite par `disabledTags`.
-    limit * 5 + 50
+    ...disabledTags,
+    limit
   );
-
-  const disabled = new Set(disabledTags);
-  // Déjà aléatoire depuis le tri SQL ci-dessus — pas besoin de remélanger.
-  return candidateRows.filter((r) => !(JSON.parse(r.tags) as string[]).some((tag) => disabled.has(tag))).slice(0, limit);
 }
 
 /** Un lot supplémentaire de nouvelles cartes, au-delà du plafond
@@ -1089,6 +1090,18 @@ export async function importMissingConjugationCards(
  * JSON (`disabledTags` reste un filtre JS, voir `fetchNewCardRows`). */
 function notInClause(column: string, values: string[]): string {
   return values.length > 0 ? `AND ${column} NOT IN (${values.map(() => '?').join(', ')})` : '';
+}
+
+/** Équivalent de `notInClause` pour une colonne JSON (le cas de
+ * `words.tags`, un tableau, contrairement à `level`/`tense` qui sont des
+ * colonnes plates) — `NOT IN` ne peut pas s'appliquer directement à un
+ * tableau JSON, `json_each` (extension JSON1, confirmée disponible sous
+ * `node:sqlite` par un test direct le 11/09/2026) le déplie en lignes
+ * pour permettre le test d'appartenance en SQL plutôt qu'un repli JS. */
+function tagsNotInClause(column: string, values: string[]): string {
+  if (values.length === 0) return '';
+  const placeholders = values.map(() => '?').join(', ');
+  return `AND NOT EXISTS (SELECT 1 FROM json_each(${column}) WHERE json_each.value IN (${placeholders}))`;
 }
 
 /** Cartes de conjugaison dues, avec le même principe de plafond séparé

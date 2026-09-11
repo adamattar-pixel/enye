@@ -5,6 +5,7 @@ import { getDueCardsSplit, getMoreNewCards, updateCard, logReview, type DueCardR
 import { getSettings } from '../data/settings';
 import { review } from '../sm2/engine';
 import type { SM2Grade } from '../sm2/types';
+import { pickWeighted, NEW_CARD_WEIGHT } from '../utils/shuffle';
 import { WritingReviewScreen } from './WritingReviewScreen';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
@@ -32,7 +33,7 @@ export function WritingReviewContainer({ db, onExit }: Props) {
   const loadNext = useCallback(async () => {
     const settings = await getSettings(db);
     const due = await getDueCardsSplit(db, new Date(), settings);
-    setCurrent(due[0] ?? null);
+    setCurrent(pickWeighted(due, (row) => row.card.lifecycle === 'new', NEW_CARD_WEIGHT));
   }, [db]);
 
   useEffect(() => {
