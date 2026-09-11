@@ -12,6 +12,7 @@ import { BooksScreen } from '../screens/BooksScreen';
 import { ReaderScreen } from '../screens/ReaderScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ReviewScreenContainer } from '../screens/ReviewScreenContainer';
+import { WritingReviewContainer } from '../screens/WritingReviewContainer';
 import { ConjugationReviewContainer } from '../screens/ConjugationReviewContainer';
 import { ListeningReviewContainer } from '../screens/ListeningReviewContainer';
 import { ExpressionReviewContainer } from '../screens/ExpressionReviewContainer';
@@ -21,7 +22,7 @@ import { FadeInView } from '../components/FadeInView';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, useThemeToggle, type SolYSombraPalette } from '../theme/solYSombra';
 
-type ActiveSession = 'none' | 'vocab' | 'conjugation' | 'listening' | 'expressions' | 'reading';
+type ActiveSession = 'none' | 'vocab' | 'vocabWriting' | 'conjugation' | 'listening' | 'expressions' | 'reading';
 
 /** Aujourd'hui / Statistiques / Decks & mots / Conjugaison / Écoute /
  * Expressions / Compréhension écrite / Livres / Réglages vivent derrière
@@ -58,6 +59,7 @@ export function RootTabs({ db }: { db: LexisDb }) {
       ) : activeSession !== 'none' ? (
         <FadeInView duration={250} direction="none" style={styles.root}>
           {activeSession === 'vocab' && <ReviewScreenContainer db={db} onExit={() => setActiveSession('none')} />}
+          {activeSession === 'vocabWriting' && <WritingReviewContainer db={db} onExit={() => setActiveSession('none')} />}
           {activeSession === 'conjugation' && <ConjugationReviewContainer db={db} onExit={() => setActiveSession('none')} />}
           {activeSession === 'listening' && <ListeningReviewContainer db={db} onExit={() => setActiveSession('none')} />}
           {activeSession === 'expressions' && <ExpressionReviewContainer db={db} onExit={() => setActiveSession('none')} />}
@@ -68,7 +70,7 @@ export function RootTabs({ db }: { db: LexisDb }) {
           {/* `key={tab}` force un remontage à chaque changement d'onglet
            * pour rejouer l'entrée en fondu plutôt qu'un changement instantané. */}
           <FadeInView key={tab} duration={200} direction="none" style={styles.content}>
-            {tab === 'today' && <TodayScreen db={db} onStartSession={() => setActiveSession('vocab')} />}
+            {tab === 'today' && <TodayScreen db={db} onStartSession={setActiveSession} />}
             {tab === 'stats' && <StatsScreen db={db} />}
             {tab === 'decks' && <DecksScreen db={db} />}
             {tab === 'conjugation' && <ConjugationScreen db={db} onStartSession={() => setActiveSession('conjugation')} />}

@@ -11,7 +11,7 @@ import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
 type Props = {
   db: LexisDb;
-  onStartSession: () => void;
+  onStartSession: (mode: 'vocab' | 'vocabWriting') => void;
 };
 type Styles = ReturnType<typeof createStyles>;
 
@@ -98,12 +98,24 @@ export function TodayScreen({ db, onStartSession }: Props) {
           <FadeInView duration={400} delay={160}>
             <AnimatedPressable
               style={[styles.button, dueCount === 0 && styles.buttonDisabled]}
-              onPress={onStartSession}
+              onPress={() => onStartSession('vocab')}
               disabled={dueCount === 0}
             >
               <Text style={styles.buttonText}>{dueCount === 0 ? 'Rien à réviser' : 'Commencer la session'}</Text>
             </AnimatedPressable>
           </FadeInView>
+
+          {dueCount > 0 && (
+            <FadeInView duration={400} delay={220}>
+              <AnimatedPressable
+                style={[styles.button, styles.buttonOutline]}
+                haptic="selection"
+                onPress={() => onStartSession('vocabWriting')}
+              >
+                <Text style={styles.buttonOutlineText}>Écrire les mots</Text>
+              </AnimatedPressable>
+            </FadeInView>
+          )}
         </>
       )}
     </ScreenContainer>
@@ -175,8 +187,17 @@ function createStyles(t: SolYSombraPalette) {
     progressText: { fontSize: 13, color: t.metaText, marginBottom: 8 },
     progressTrack: { height: 8, borderRadius: 4, backgroundColor: t.translationBackground, overflow: 'hidden' },
     progressFill: { height: '100%', backgroundColor: t.buttonFilled, borderRadius: 4 },
-    button: { backgroundColor: t.buttonFilled, paddingVertical: 16, borderRadius: 24, alignItems: 'center' },
+    button: {
+      minHeight: 52,
+      backgroundColor: t.buttonFilled,
+      paddingVertical: 16,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     buttonDisabled: { backgroundColor: t.cardBorder, opacity: 0.5 },
     buttonText: { color: t.buttonFilledText, fontWeight: '600', fontSize: 16 },
+    buttonOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: t.buttonOutline, marginTop: 12 },
+    buttonOutlineText: { color: t.buttonOutline, fontWeight: '600', fontSize: 16 },
   });
 }
