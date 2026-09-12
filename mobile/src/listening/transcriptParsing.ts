@@ -39,10 +39,84 @@ export function parseInterceptedBody(body: string): CaptionCue[] {
     const json = JSON.parse(trimmed);
     const json3Segments = parseJson3Captions(json);
     if (json3Segments.length > 0) return json3Segments;
+    const panelSegments = extractPanelTranscriptSegments(json);
+    if (panelSegments.length > 0) return panelSegments;
     return extractJsonTranscriptSegments(json);
   } catch {
     return [];
   }
+}
+
+/** Format `get_panel` (nouvelle architecture "ViewModel" de YouTube,
+ * remplace `get_transcript` — voir `captionsPreload.ts`) — **confirmé
+ * le 12/09/2026 par un vrai payload intercepté** via le débogueur Chrome
+ * DevTools Protocol : chaque ligne du panneau est un
+ * `macroMarkersPanelItemViewModel` (texte dans
+ * `item.timelineItemViewModel.contentItems[].transcriptSegmentViewModel.
+ * simpleText`, début en secondes dans
+ * `onTap.innertubeCommand.watchEndpoint.startTimeSeconds` — ou, à défaut,
+ * la chaîne `item.timelineItemViewModel.timestamp` du type `"0:18"` à
+ * parser). Parcours récursif (comme `extractJsonTranscriptSegments`)
+ * plutôt qu'un chemin fixe : structure interne non documentée, sujette à
+ * changer sans préavis. Le panneau n'affiche qu'un timestamp de DÉBUT par
+ * ligne, d'où `pairDomSegments` pour déduire les fins (même logique que
+ * pour le repli DOM). */
+export function extractPanelTranscriptSegments(root: unknown): CaptionCue[] {
+  const raw: { startTime: number; text: string }[] = [];
+  function walk(node: unknown, level: number): void {
+    if (level > 60 || !node || typeof node !== 'object') return;
+    const obj = node as Record<string, unknown>;
+    const panelItem = obj.macroMarkersPanelItemViewModel;
+    if (panelItem && typeof panelItem === 'object') {
+      const segment = extractPanelItemSegment(panelItem as Record<string, unknown>);
+      if (segment) raw.push(segment);
+    }
+    for (const key of Object.keys(obj)) walk(obj[key], level + 1);
+  }
+  walk(root, 0);
+  return raw.length > 0 ? pairDomSegments(raw) : [];
+}
+
+function extractPanelItemSegment(panelItem: Record<string, unknown>): { startTime: number; text: string } | null {
+  const item = panelItem.item as Record<string, unknown> | undefined;
+  const timelineItem = item?.timelineItemViewModel as Record<string, unknown> | undefined;
+  const contentItems = timelineItem?.contentItems;
+  if (!Array.isArray(contentItems)) return null;
+
+  const text = contentItems
+    .map((contentItem) => {
+      const segmentViewModel = (contentItem as Record<string, unknown> | null)?.transcriptSegmentViewModel as
+        | Record<string, unknown>
+        | undefined;
+      return typeof segmentViewModel?.simpleText === 'string' ? segmentViewModel.simpleText : '';
+    })
+    .join(' ')
+    .trim();
+  if (!text) return null;
+
+  const onTap = panelItem.onTap as Record<string, unknown> | undefined;
+  const innertubeCommand = onTap?.innertubeCommand as Record<string, unknown> | undefined;
+  const watchEndpoint = innertubeCommand?.watchEndpoint as Record<string, unknown> | undefined;
+  const startTimeSeconds = watchEndpoint?.startTimeSeconds;
+  if (typeof startTimeSeconds === 'number') {
+    return { startTime: startTimeSeconds, text: decodeHtmlEntities(text) };
+  }
+
+  const timestamp = typeof timelineItem?.timestamp === 'string' ? timelineItem.timestamp : null;
+  const parsedTimestamp = timestamp ? parseTimestampString(timestamp) : null;
+  if (parsedTimestamp === null) return null;
+  return { startTime: parsedTimestamp, text: decodeHtmlEntities(text) };
+}
+
+function parseTimestampString(text: string): number | null {
+  const parts = text.trim().split(':');
+  let seconds = 0;
+  for (const part of parts) {
+    const n = parseInt(part, 10);
+    if (Number.isNaN(n)) return null;
+    seconds = seconds * 60 + n;
+  }
+  return seconds;
 }
 
 /** Format `timedtext?...&fmt=json3` — **confirmé réellement par un test

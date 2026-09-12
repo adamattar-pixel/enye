@@ -33,8 +33,22 @@ function post(msg: unknown): void {
 // à `false`, ce qui est volontairement le cas ici — voir captionsFetcher.ts).
 (window as unknown as { __lexisPost: (msg: unknown) => void }).__lexisPost = post;
 
+/** `get_panel` ajouté le 12/09/2026 : bug réel confirmé — YouTube a migré
+ * le panneau de transcription vers son architecture interne "ViewModel"
+ * (`youtubei/v1/get_panel`, réponse `macroMarkersPanelItemViewModel` /
+ * `transcriptSegmentViewModel`), abandonnant `get_transcript` que ce
+ * filtre ciblait jusque-là — la requête réseau aboutissait bel et bien
+ * (200 OK, vérifié via le débogueur Chrome DevTools Protocol sur un vrai
+ * payload), mais n'était jamais interceptée puisque son URL ne contenait
+ * ni `get_transcript` ni `timedtext`, d'où "0 segment détecté" sur
+ * absolument toutes les vidéos malgré une récupération réseau réussie.
+ * Voir `transcriptParsing.ts` pour le parsing de cette nouvelle forme de
+ * réponse. */
 function isTranscriptUrl(url: unknown): boolean {
-  return typeof url === 'string' && (url.indexOf('get_transcript') !== -1 || url.indexOf('timedtext') !== -1);
+  return (
+    typeof url === 'string' &&
+    (url.indexOf('get_transcript') !== -1 || url.indexOf('timedtext') !== -1 || url.indexOf('get_panel') !== -1)
+  );
 }
 
 const originalFetch = window.fetch;

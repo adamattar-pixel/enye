@@ -1,4 +1,4 @@
-import { parseJson3Captions, parseInterceptedBody, extractLangFromUrl } from './transcriptParsing';
+import { parseJson3Captions, parseInterceptedBody, extractLangFromUrl, extractPanelTranscriptSegments } from './transcriptParsing';
 
 // Format `fmt=json3` confirmé réellement le 21/08/2026 par un corps
 // intercepté en conditions réelles (858 225 caractères pour une vraie
@@ -63,6 +63,94 @@ describe('parseInterceptedBody', () => {
     expect(parseInterceptedBody('')).toEqual([]);
     expect(parseInterceptedBody('   ')).toEqual([]);
     expect(parseInterceptedBody('{not json')).toEqual([]);
+  });
+
+  // Format `get_panel` confirmé réellement le 12/09/2026 par un vrai
+  // payload intercepté (débogueur Chrome DevTools Protocol, 34124
+  // caractères pour dQw4w9WgXcQ) — YouTube a migré le panneau de
+  // transcription vers cette forme, abandonnant `get_transcript` que
+  // `captionsPreload.ts` ciblait jusque-là (voir son commentaire). Ce
+  // fixture reproduit la forme réelle exacte de deux lignes consécutives.
+  test('routes a get_panel body to the panel-transcript parser', () => {
+    const body = JSON.stringify({
+      content: {
+        sectionListRenderer: {
+          contents: [
+            {
+              itemSectionRenderer: {
+                contents: [
+                  {
+                    macroMarkersPanelItemViewModel: {
+                      item: {
+                        timelineItemViewModel: {
+                          timestamp: '0:18',
+                          contentItems: [{ transcriptSegmentViewModel: { simpleText: 'Conocemos bien el amor' } }],
+                        },
+                      },
+                      onTap: { innertubeCommand: { watchEndpoint: { videoId: 'dQw4w9WgXcQ', startTimeSeconds: 18 } } },
+                    },
+                  },
+                  {
+                    macroMarkersPanelItemViewModel: {
+                      item: {
+                        timelineItemViewModel: {
+                          timestamp: '0:27',
+                          contentItems: [{ transcriptSegmentViewModel: { simpleText: 'Ningún otro chico te daría tanto' } }],
+                        },
+                      },
+                      onTap: { innertubeCommand: { watchEndpoint: { videoId: 'dQw4w9WgXcQ', startTimeSeconds: 27 } } },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(parseInterceptedBody(body)).toEqual([
+      { startTime: 18, endTime: 27, transcript: 'Conocemos bien el amor' },
+      { startTime: 27, endTime: 31, transcript: 'Ningún otro chico te daría tanto' },
+    ]);
+  });
+});
+
+describe('extractPanelTranscriptSegments', () => {
+  test('falls back to parsing the "m:ss" timestamp string when startTimeSeconds is absent', () => {
+    const json = {
+      macroMarkersPanelItemViewModel: {
+        item: { timelineItemViewModel: { timestamp: '1:05', contentItems: [{ transcriptSegmentViewModel: { simpleText: 'hola' } }] } },
+      },
+    };
+    expect(extractPanelTranscriptSegments(json)).toEqual([{ startTime: 65, endTime: 69, transcript: 'hola' }]);
+  });
+
+  test('finds panel items nested arbitrarily deep, not just at a fixed path', () => {
+    const json = {
+      responseContext: { irrelevant: true },
+      content: {
+        wrapper: [
+          { unrelated: 'noise' },
+          {
+            macroMarkersPanelItemViewModel: {
+              item: { timelineItemViewModel: { timestamp: '0:05', contentItems: [{ transcriptSegmentViewModel: { simpleText: 'segmento' } }] } },
+              onTap: { innertubeCommand: { watchEndpoint: { startTimeSeconds: 5 } } },
+            },
+          },
+        ],
+      },
+    };
+    expect(extractPanelTranscriptSegments(json)).toEqual([{ startTime: 5, endTime: 9, transcript: 'segmento' }]);
+  });
+
+  test('returns [] when no macroMarkersPanelItemViewModel is present anywhere', () => {
+    expect(extractPanelTranscriptSegments({ content: { sectionListRenderer: { contents: [] } } })).toEqual([]);
+    expect(extractPanelTranscriptSegments(null)).toEqual([]);
+  });
+
+  test('skips items with no usable text', () => {
+    const json = { macroMarkersPanelItemViewModel: { item: { timelineItemViewModel: { timestamp: '0:05', contentItems: [] } } } };
+    expect(extractPanelTranscriptSegments(json)).toEqual([]);
   });
 });
 
