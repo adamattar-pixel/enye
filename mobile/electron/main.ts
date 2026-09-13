@@ -1,7 +1,8 @@
 import './loadEnv';
-import { app, BrowserWindow, ipcMain, net, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import http from 'node:http';
+import fs from 'node:fs';
 import { createNodeSqliteDb } from './nodeSqliteAdapter';
 import { fetchTranscriptForVideo } from './captionsFetcher';
 import { translateSentence, isTranslationAvailable } from '../src/services/translate';
@@ -45,35 +46,97 @@ import { readingTexts } from '../src/reading/data';
 // fichiers (`file:///_expo/...`), pas au dossier de `index.html` : c'est
 // exactement pourquoi `win.loadFile()` produisait un écran blanc en
 // production (confirmé le 07/09/2026 — aucun des scripts/assets ne se
-// chargeait, silencieusement). Un schéma personnalisé "standard" (RFC
-// 3986) résout les chemins absolus par rapport à son propre serveur
-// virtuel, comme un vrai `http://`, réglant le problème sans avoir à
-// réécrire les chemins dans le HTML exporté. Doit être appelé AVANT
-// `app.whenReady()` (exigence d'Electron).
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
-]);
+// chargeait, silencieusement).
+//
+// **Un vrai serveur HTTP local, chargé via `localhost` — PAS un schéma
+// personnalisé `app://`, et PAS non plus `127.0.0.1` malgré les
+// apparences** — bug réel confirmé le 13/09/2026 en trois étapes, chacune
+// vérifiée par une vraie capture d'écran/console du renderer (technique
+// décrite dans `CLAUDE.md`, "Visual verification"), pas par supposition :
+//   1. `app://bundle` (utilisé depuis Decision 016) réglait bien le
+//      problème de chemins absolus ci-dessus, mais empêchait le lecteur
+//      YouTube intégré de fonctionner (signalé "la lecture intégrée ne
+//      s'est pas lancée") : l'API IFrame de YouTube communique avec la
+//      page hôte via `postMessage`, et son propre script widget
+//      (`www-widgetapi.js`, hébergé sur youtube.com) le rejette dès que
+//      l'origine n'est ni `http:` ni `https:` (`"Failed to execute
+//      'postMessage' ... origin ('app://bundle')"`).
+//   2. Remplacer `app://bundle` par `http://127.0.0.1:<port>` (une
+//      origine `http:` en apparence normale) a fait ÉCHOUER le lecteur
+//      d'une toute AUTRE façon (`onError` de l'API IFrame elle-même,
+//      reproduit deux fois de suite) — `127.0.0.1` et `localhost`
+//      pointent tous deux vers la boucle locale mais ne sont PAS
+//      interchangeables pour les vérifications d'intégration de YouTube.
+//   3. `http://localhost:<port>` (même serveur, seul le nom d'hôte de
+//      l'URL change) fonctionne : vidéo réelle en lecture, taille
+//      correcte, confirmé par capture d'écran — exactement le
+//      comportement déjà vérifié en développement (`localhost:8081`).
+// Le serveur reste lié à `127.0.0.1` uniquement pour la sécurité (jamais
+// exposé au réseau) — seul le nom d'hôte utilisé dans l'URL chargée par
+// `loadURL` doit être `localhost`, pas l'adresse de liaison du serveur.
+const WEB_BUILD_MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json; charset=utf-8',
+};
 
 /** Sert le dossier `web-build` (copié depuis l'export Expo Web par
- * `electron-builder`, voir `package.json`'s `build.extraResources`) sous
- * `app://bundle/...` — uniquement utilisé pour la build packagée
- * (`app.isPackaged`), voir `createWindow()`. `net.fetch` sur une URL
- * `file://` déduit correctement le type MIME depuis l'extension. */
-function registerAppProtocol(): void {
+ * `electron-builder`, voir `package.json`'s `build.extraResources`) sur
+ * un port local choisi par l'OS (`listen(0, ...)`) — uniquement utilisé
+ * pour la build packagée (`app.isPackaged`), voir `createWindow()`.
+ * Lié à `127.0.0.1` uniquement, jamais exposé au réseau. */
+function startLocalWebServer(): Promise<number> {
   const root = path.join(process.resourcesPath, 'web-build');
 
-  protocol.handle('app', (request) => {
-    const url = new URL(request.url);
-    const relativePath = url.pathname === '/' || url.pathname === '' ? 'index.html' : decodeURIComponent(url.pathname);
-    const fullPath = path.normalize(path.join(root, relativePath));
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const relativePath = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname);
+      const fullPath = path.normalize(path.join(root, relativePath));
 
-    // Empêche de sortir de `web-build` via un `..` dans le chemin.
-    if (!fullPath.startsWith(root)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+      // Empêche de sortir de `web-build` via un `..` dans le chemin.
+      if (!fullPath.startsWith(root)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
 
-    return net.fetch(pathToFileURL(fullPath).toString());
+      fs.readFile(fullPath, (err, data) => {
+        if (err) {
+          res.writeHead(404);
+          res.end('Not found');
+          return;
+        }
+        const ext = path.extname(fullPath).toLowerCase();
+        res.writeHead(200, { 'Content-Type': WEB_BUILD_MIME_TYPES[ext] ?? 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address && typeof address === 'object') resolve(address.port);
+      else reject(new Error('Impossible de démarrer le serveur web local'));
+    });
   });
+}
+
+let localWebServerPort: number | null = null;
+
+async function getLocalWebServerPort(): Promise<number> {
+  if (localWebServerPort === null) localWebServerPort = await startLocalWebServer();
+  return localWebServerPort;
 }
 
 let db: LexisDb | null = null;
@@ -129,7 +192,7 @@ function registerDbHandlers(database: LexisDb): void {
   });
 }
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -146,18 +209,19 @@ function createWindow(): void {
   // En dev, `npm run web:dev` sert le bundle Metro sur ce port (voir
   // package.json) ; en production, on charge le build statique exporté
   // par `expo export --platform web` (voir docs/PLAN.md, phase
-  // "Packaging"). `LEXIS_DEV_SERVER_URL` permet de pointer vers un autre
-  // port si celui-ci est déjà pris.
+  // "Packaging") via le serveur HTTP local démarré ci-dessus.
+  // `LEXIS_DEV_SERVER_URL` permet de pointer vers un autre port si celui-ci
+  // est déjà pris.
   const devServerUrl = process.env.LEXIS_DEV_SERVER_URL ?? 'http://localhost:8081';
   if (!app.isPackaged) {
     win.loadURL(devServerUrl);
   } else {
-    win.loadURL('app://bundle/index.html');
+    const port = await getLocalWebServerPort();
+    win.loadURL(`http://localhost:${port}/index.html`);
   }
 }
 
 app.whenReady().then(async () => {
-  if (app.isPackaged) registerAppProtocol();
   db = await initDatabase();
   registerDbHandlers(db);
   ipcMain.handle('captions:fetch', async (_event, videoId: string) => fetchTranscriptForVideo(videoId));
@@ -179,10 +243,10 @@ app.whenReady().then(async () => {
   // pas une exception), d'où "aucun résultat" sans erreur visible.
   ipcMain.handle('youtube:search', async (_event, query: string) => searchYoutubeVideos(query));
   ipcMain.handle('youtube:metadata', async (_event, videoId: string) => fetchVideoMetadata(videoId));
-  createWindow();
+  await createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow().catch(console.error);
   });
 });
 

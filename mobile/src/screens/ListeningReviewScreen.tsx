@@ -202,11 +202,18 @@ function createStyles(t: SolYSombraPalette) {
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },
     dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: t.dot },
     videoTitle: { fontSize: 14, fontWeight: '600', color: t.wordText, marginBottom: 14 },
+    // `maxWidth: 480, alignSelf: 'center'` — même correctif que le lecteur
+    // lui-même (YouTubePlayer.tsx) : ce repli n'avait aucun plafond, donc
+    // tout aussi "trop grand" que le bug original dès que `onError` se
+    // déclenche, quelle qu'en soit la cause (signalé le 13/09/2026).
     playerErrorBox: {
       backgroundColor: t.translationBackground,
       borderRadius: 14,
       padding: 20,
       alignItems: 'center',
+      width: '100%',
+      maxWidth: 480,
+      alignSelf: 'center',
       aspectRatio: 16 / 9,
       justifyContent: 'center',
     },
