@@ -6,6 +6,8 @@ import { StatsScreen } from '../screens/StatsScreen';
 import { DecksScreen } from '../screens/DecksScreen';
 import { ConjugationScreen } from '../screens/ConjugationScreen';
 import { ListeningScreen } from '../screens/ListeningScreen';
+import { ShadowingScreen } from '../screens/ShadowingScreen';
+import type { ListeningVideoWithStats } from '../data/database';
 import { ExpressionsScreen } from '../screens/ExpressionsScreen';
 import { ReadingScreen } from '../screens/ReadingScreen';
 import { BooksScreen } from '../screens/BooksScreen';
@@ -36,7 +38,11 @@ type ActiveSession = 'none' | 'vocab' | 'vocabWriting' | 'conjugation' | 'listen
  * BooksScreen.tsx/ReaderScreen.tsx, `activeBookId` distinct de
  * `activeSession` ci-dessous) ; Réglages séparé de Decks & mots le même
  * jour, regroupe réglages/historique/prochaine notification à part de la
- * liste de mots) ; Session (révision vocabulaire, conjugaison, écoute,
+ * liste de mots) ; mode "Répétition" ajouté le 13/09/2026 — même statut
+ * que les livres (lecture libre, pas de moteur SM-2), voir
+ * ShadowingScreen.tsx, `shadowingVideo` distinct de `activeSession`
+ * ci-dessous, lancé depuis un bouton par vidéo dans la Bibliothèque de
+ * l'onglet Écoute ; Session (révision vocabulaire, conjugaison, écoute,
  * expressions OU compréhension écrite, plein écran) masque la barre,
  * lancée depuis l'onglet correspondant et y ramène en sortant. */
 export function RootTabs({ db }: { db: LexisDb }) {
@@ -49,10 +55,23 @@ export function RootTabs({ db }: { db: LexisDb }) {
   // contenu), donc pas modélisée comme une valeur de plus dans cette
   // union, juste un id de livre optionnel affiché en plein écran.
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
+  // Même statut que `activeBookId` : le mode "Répétition" (lecture d'une
+  // vidéo entière phrase par phrase, pause manuelle) n'est pas non plus
+  // une session SM-2 notée — demandé le 13/09/2026.
+  const [shadowingVideo, setShadowingVideo] = useState<ListeningVideoWithStats | null>(null);
 
   return (
     <View style={styles.root}>
-      {activeBookId !== null ? (
+      {shadowingVideo !== null ? (
+        <FadeInView duration={250} direction="none" style={styles.root}>
+          <ShadowingScreen
+            db={db}
+            videoId={shadowingVideo.id}
+            videoTitle={shadowingVideo.title}
+            onExit={() => setShadowingVideo(null)}
+          />
+        </FadeInView>
+      ) : activeBookId !== null ? (
         <FadeInView duration={250} direction="none" style={styles.root}>
           <ReaderScreen db={db} bookId={activeBookId} onExit={() => setActiveBookId(null)} />
         </FadeInView>
@@ -74,7 +93,9 @@ export function RootTabs({ db }: { db: LexisDb }) {
             {tab === 'stats' && <StatsScreen db={db} />}
             {tab === 'decks' && <DecksScreen db={db} />}
             {tab === 'conjugation' && <ConjugationScreen db={db} onStartSession={() => setActiveSession('conjugation')} />}
-            {tab === 'listening' && <ListeningScreen db={db} onStartSession={() => setActiveSession('listening')} />}
+            {tab === 'listening' && (
+              <ListeningScreen db={db} onStartSession={() => setActiveSession('listening')} onStartShadowing={setShadowingVideo} />
+            )}
             {tab === 'expressions' && <ExpressionsScreen db={db} onStartSession={() => setActiveSession('expressions')} />}
             {tab === 'reading' && <ReadingScreen db={db} onStartSession={() => setActiveSession('reading')} />}
             {tab === 'books' && <BooksScreen db={db} onOpenBook={(bookId) => setActiveBookId(bookId)} />}

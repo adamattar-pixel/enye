@@ -1851,6 +1851,33 @@ export async function getListeningVideosWithStats(db: LexisDb): Promise<Listenin
   return rows.map((r) => ({ ...mapListeningVideoRow(r), segmentCount: r.segment_count }));
 }
 
+type ListeningSegmentRow = {
+  id: string;
+  video_id: string;
+  segment_index: number;
+  start_time: number;
+  end_time: number;
+  transcript: string;
+};
+
+function mapListeningSegmentRow(r: ListeningSegmentRow): ListeningSegment {
+  return { id: r.id, videoId: r.video_id, index: r.segment_index, startTime: r.start_time, endTime: r.end_time, transcript: r.transcript };
+}
+
+/** Tous les segments d'UNE vidéo, dans l'ordre chronologique — contrairement
+ * à `getDueListeningCardsSplit` (mélange plusieurs vidéos, filtré par
+ * carte SM-2 due), sert au mode "Répétition" (demandé le 13/09/2026) : la
+ * vidéo se joue phrase par phrase dans l'ordre, pause automatique à la fin
+ * de chaque sous-titre pour que l'utilisateur répète à voix haute, sans
+ * lien avec les cartes SM-2. */
+export async function getListeningVideoSegments(db: LexisDb, videoId: string): Promise<ListeningSegment[]> {
+  const rows = await db.getAllAsync<ListeningSegmentRow>(
+    'SELECT * FROM listening_segments WHERE video_id = ? ORDER BY segment_index ASC;',
+    videoId
+  );
+  return rows.map(mapListeningSegmentRow);
+}
+
 /** Supprime une vidéo et tout ce qui en dépend (segments, cartes,
  * historique de révisions) — irréversible, l'appelant doit confirmer
  * avant d'appeler cette fonction (voir l'écran Bibliothèque). */

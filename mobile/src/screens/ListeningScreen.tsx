@@ -21,7 +21,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
 
-type Props = { db: LexisDb; onStartSession: () => void };
+type Props = { db: LexisDb; onStartSession: () => void; onStartShadowing: (video: ListeningVideoWithStats) => void };
 type SubView = 'training' | 'library';
 type Styles = ReturnType<typeof createStyles>;
 
@@ -30,7 +30,7 @@ type Styles = ReturnType<typeof createStyles>;
  * pour gérer ces vidéos — deux sous-onglets, même patron que
  * ConjugationScreen.tsx. Pas de sous-onglet Historique/Règles ici (hors
  * périmètre de la mission d'origine, à ajouter plus tard si demandé). */
-export function ListeningScreen({ db, onStartSession }: Props) {
+export function ListeningScreen({ db, onStartSession, onStartShadowing }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [subView, setSubView] = useState<SubView>('training');
@@ -47,7 +47,7 @@ export function ListeningScreen({ db, onStartSession }: Props) {
       </View>
 
       {subView === 'training' && <TrainingView db={db} styles={styles} onStartSession={onStartSession} />}
-      {subView === 'library' && <LibraryView db={db} styles={styles} />}
+      {subView === 'library' && <LibraryView db={db} styles={styles} onStartShadowing={onStartShadowing} />}
     </ScreenContainer>
   );
 }
@@ -134,7 +134,15 @@ const CAPTION_STATUS_LABELS: Record<CaptionStatus, string> = {
   unavailable: 'Sous-titres indisponibles',
 };
 
-function LibraryView({ db, styles }: { db: LexisDb; styles: Styles }) {
+function LibraryView({
+  db,
+  styles,
+  onStartShadowing,
+}: {
+  db: LexisDb;
+  styles: Styles;
+  onStartShadowing: (video: ListeningVideoWithStats) => void;
+}) {
   const [videos, setVideos] = useState<ListeningVideoWithStats[]>([]);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -266,9 +274,9 @@ function LibraryView({ db, styles }: { db: LexisDb; styles: Styles }) {
 
   const renderVideoItem = useCallback(
     ({ item, index }: { item: ListeningVideoWithStats; index: number }) => (
-      <VideoRow item={item} index={index} styles={styles} onDelete={handleDelete} />
+      <VideoRow item={item} index={index} styles={styles} onDelete={handleDelete} onShadow={onStartShadowing} />
     ),
-    [styles, handleDelete]
+    [styles, handleDelete, onStartShadowing]
   );
 
   if (loading) return null;
@@ -366,11 +374,13 @@ const VideoRow = memo(function VideoRow({
   index,
   styles,
   onDelete,
+  onShadow,
 }: {
   item: ListeningVideoWithStats;
   index: number;
   styles: Styles;
   onDelete: (video: ListeningVideoWithStats) => void;
+  onShadow: (video: ListeningVideoWithStats) => void;
 }) {
   return (
     <FadeInView duration={220} direction="right" delay={Math.min(index, 12) * 20} style={styles.videoRow}>
@@ -385,6 +395,11 @@ const VideoRow = memo(function VideoRow({
           <Text style={styles.captionBadgeText}>{CAPTION_STATUS_LABELS[item.captionStatus]}</Text>
         </View>
       </View>
+      {item.segmentCount > 0 && (
+        <AnimatedPressable style={styles.shadowButton} haptic="none" onPress={() => onShadow(item)}>
+          <Text style={styles.shadowButtonText}>🗣</Text>
+        </AnimatedPressable>
+      )}
       <AnimatedPressable style={styles.deleteButton} haptic="none" onPress={() => onDelete(item)}>
         <Text style={styles.deleteButtonText}>×</Text>
       </AnimatedPressable>
@@ -477,6 +492,15 @@ function createStyles(t: SolYSombraPalette) {
     },
     captionBadgeUnavailable: { backgroundColor: 'rgba(181,83,60,0.15)' },
     captionBadgeText: { fontSize: 11, fontWeight: '600', color: t.metaText },
+    shadowButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: t.translationBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    shadowButtonText: { fontSize: 16 },
     deleteButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
     deleteButtonText: { fontSize: 22, color: t.metaText, fontWeight: '400' },
   });

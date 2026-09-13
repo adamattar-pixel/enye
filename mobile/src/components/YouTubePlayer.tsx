@@ -12,7 +12,15 @@ type Props = {
   endTime: number;
   /** Appelé quand le player a fini de charger et est prêt à lire. */
   onReady?: () => void;
-  /** Appelé quand la lecture atteint `endTime` (segment terminé). */
+  /** Appelé une seule fois quand la lecture atteint `endTime` (segment
+   * terminé) — déclenché par le même sondage à 200ms qui appelle déjà
+   * `pauseVideo()` ci-dessous, PAS par l'évènement `onStateChange` "ENDED"
+   * de l'API IFrame : ce dernier ne se déclenche fiablement que si la
+   * vidéo entière se termine, pas quand le paramètre `end` interrompt un
+   * segment en plein milieu (comportement documenté comme incohérent
+   * selon les navigateurs) — s'y fier exclusivement aurait laissé
+   * `onSegmentEnded` ne jamais s'appeler pour un usage en plein milieu de
+   * vidéo. */
   onSegmentEnded?: () => void;
   /** Appelé sur une erreur du player YouTube (voir la table de
    * résilience de docs/PLAN.md — vidéo bloquée à l'intégration, région,
@@ -79,6 +87,13 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     let disposed = false;
     let endCheckInterval: ReturnType<typeof setInterval> | null = null;
     let captionsInterval: ReturnType<typeof setInterval> | null = null;
+    let segmentEndedNotified = false;
+
+    function notifySegmentEnded(): void {
+      if (segmentEndedNotified) return;
+      segmentEndedNotified = true;
+      onSegmentEnded?.();
+    }
 
     function disableCaptions(p: YTPlayer): void {
       try {
@@ -126,7 +141,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
             captionsInterval = setInterval(() => disableCaptions(player), 1000);
             endCheckInterval = setInterval(() => {
               try {
-                if (player.getCurrentTime() >= endTime) player.pauseVideo();
+                if (player.getCurrentTime() >= endTime) {
+                  player.pauseVideo();
+                  notifySegmentEnded();
+                }
               } catch {
                 // ignore
               }
@@ -144,7 +162,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
                 // ignore
               }
             }
-            if (event.data === 0) onSegmentEnded?.();
+            // Filet de secours si la vraie fin de vidéo est atteinte avant
+            // `endTime` (segment couvrant la toute fin) — le sondage
+            // ci-dessus ne se déclencherait alors jamais puisque la
+            // lecture s'arrête d'elle-même sans jamais dépasser `endTime`.
+            if (event.data === 0) notifySegmentEnded();
           },
           onError: () => onError?.(),
         },
