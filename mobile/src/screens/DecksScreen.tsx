@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { LexisDb } from '../data/dbTypes';
 import { addUserWord, deleteWord, getAllTags, getAllWords, updateWord } from '../data/database';
@@ -8,6 +8,7 @@ import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
+import { showAlert } from '../utils/alert';
 
 type Props = { db: LexisDb };
 type Styles = ReturnType<typeof createStyles>;
@@ -60,7 +61,7 @@ function WordListView({ db, styles }: { db: LexisDb; styles: Styles }) {
 
   const handleDelete = useCallback(
     (word: Word) => {
-      Alert.alert('Supprimer ce mot ?', `« ${word.spanish} » sera définitivement supprimé.`, [
+      showAlert('Supprimer ce mot ?', `« ${word.spanish} » sera définitivement supprimé.`, [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
@@ -236,7 +237,7 @@ function AddWordModal({
 
   const handleSave = async () => {
     if (!spanish.trim() || !english.trim()) {
-      Alert.alert('Champs manquants', 'Le mot espagnol et sa traduction sont obligatoires.');
+      showAlert('Champs manquants', 'Le mot espagnol et sa traduction sont obligatoires.');
       return;
     }
 
@@ -331,7 +332,7 @@ function EditWordModal({
   const handleSave = async () => {
     if (!word) return;
     if (!english.trim()) {
-      Alert.alert('Champ manquant', 'La traduction anglaise est obligatoire.');
+      showAlert('Champ manquant', 'La traduction anglaise est obligatoire.');
       return;
     }
 

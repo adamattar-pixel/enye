@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { LexisDb } from '../data/dbTypes';
 import { getDueCardsSplit, getMoreNewCards, updateCard, logReview, type DueCardRow } from '../data/database';
 import { getSettings } from '../data/settings';
@@ -9,6 +9,7 @@ import { pickWeighted, NEW_CARD_WEIGHT } from '../utils/shuffle';
 import { ReviewScreen } from './ReviewScreen';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
+import { showAlert } from '../utils/alert';
 
 type Props = {
   db: LexisDb;
@@ -69,7 +70,7 @@ export function ReviewScreenContainer({ db, onExit }: Props) {
     setFetchingMore(false);
 
     if (more.length === 0) {
-      Alert.alert('Plus de nouveaux mots', "Il n'y a plus de nouveau mot disponible pour l'instant.");
+      showAlert('Plus de nouveaux mots', "Il n'y a plus de nouveau mot disponible pour l'instant.");
       return;
     }
     setCurrent(more[0]);

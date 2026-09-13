@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
@@ -80,6 +80,12 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
     // correctif que ConjugationReviewScreen.tsx, demandé explicitement.
     <Pressable style={styles.screenPressable} onPress={Keyboard.dismiss}>
       <ScreenContainer backgroundColor={theme.cardBackground} paddingHorizontal={28} paddingVertical={32} style={styles.screen}>
+      {/* Filet de sécurité au cas où le contenu déborde encore malgré le
+       * plafond de largeur du lecteur (YouTubePlayer.tsx) — sur une
+       * fenêtre étroite/basse, garantit que le champ de saisie et les
+       * boutons restent atteignables par défilement plutôt qu'invisibles
+       * hors écran sans aucun moyen d'y accéder. */}
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <FadeInView duration={350} distance={20} style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.label}>LEXIS · COMPRÉHENSION ORALE</Text>
@@ -169,6 +175,7 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
 
         <AzulejoFrieze theme={theme} />
       </FadeInView>
+      </ScrollView>
       </ScreenContainer>
     </Pressable>
   );
@@ -177,7 +184,8 @@ export function ListeningReviewScreen({ card, onGrade }: Props) {
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     screenPressable: { flex: 1 },
-    screen: { justifyContent: 'center' },
+    screen: {},
+    scrollContent: { flexGrow: 1, justifyContent: 'center' },
     card: {
       backgroundColor: t.cardBackground,
       borderWidth: 1.5,

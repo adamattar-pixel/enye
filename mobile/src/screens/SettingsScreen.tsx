@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { LexisDb } from '../data/dbTypes';
 import { getAllTags, getDueCardsSplit, resetProgress } from '../data/database';
@@ -10,6 +10,7 @@ import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { CreditsScreen } from './CreditsScreen';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
+import { showAlert } from '../utils/alert';
 
 type Props = { db: LexisDb };
 type SubView = 'settings' | 'reminder';
@@ -125,15 +126,15 @@ function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
 
   const handleSave = async () => {
     if (settings.windowEndHour <= settings.windowStartHour) {
-      Alert.alert('Plage horaire invalide', "L'heure de fin doit être après l'heure de début.");
+      showAlert('Plage horaire invalide', "L'heure de fin doit être après l'heure de début.");
       return;
     }
     await saveSettings(db, settings);
-    Alert.alert('Enregistré', 'Les réglages ont été mis à jour.');
+    showAlert('Enregistré', 'Les réglages ont été mis à jour.');
   };
 
   const handleResetProgress = () => {
-    Alert.alert(
+    showAlert(
       'Réinitialiser ma progression ?',
       "Toutes les notes et l'historique seront effacés, et chaque mot, conjugaison, expression, segment d'écoute et texte de compréhension repartiront de zéro comme au premier lancement. Le contenu lui-même n'est pas supprimé. Cette action est irréversible.",
       [
@@ -143,7 +144,7 @@ function SettingsView({ db, styles }: { db: LexisDb; styles: Styles }) {
           style: 'destructive',
           onPress: async () => {
             await resetProgress(db);
-            Alert.alert('Progression réinitialisée', 'Tout est de nouveau à réviser.');
+            showAlert('Progression réinitialisée', 'Tout est de nouveau à réviser.');
           },
         },
       ]

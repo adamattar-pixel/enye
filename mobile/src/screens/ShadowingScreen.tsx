@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { LexisDb } from '../data/dbTypes';
 import { getListeningVideoSegments } from '../data/database';
 import type { ListeningSegment } from '../listening/types';
@@ -94,47 +94,52 @@ export function ShadowingScreen({ db, videoId, videoTitle, onExit }: Props) {
         </Text>
       </View>
 
-      <Text style={styles.videoTitle} numberOfLines={2}>
-        {videoTitle}
-      </Text>
+      {/* Filet de sécurité au cas où le contenu déborde encore malgré le
+       * plafond de largeur du lecteur (YouTubePlayer.tsx) — voir le même
+       * correctif sur ListeningReviewScreen.tsx. */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.videoTitle} numberOfLines={2}>
+          {videoTitle}
+        </Text>
 
-      {playerError ? (
-        <View style={styles.playerErrorBox}>
-          <Text style={styles.playerErrorText}>La lecture intégrée n'a pas pu démarrer.</Text>
+        {playerError ? (
+          <View style={styles.playerErrorBox}>
+            <Text style={styles.playerErrorText}>La lecture intégrée n'a pas pu démarrer.</Text>
+          </View>
+        ) : (
+          <YouTubePlayer
+            ref={playerRef}
+            // Remonte le lecteur à chaque segment plutôt que de laisser les
+            // props seules déclencher la mise à jour — évite tout état
+            // fantôme (ex. `segmentEndedNotified` d'un sondage précédent)
+            // qui survivrait entre deux phrases très rapprochées.
+            key={current.id}
+            videoId={videoId}
+            startTime={current.startTime}
+            endTime={current.endTime}
+            onSegmentEnded={() => setPaused(true)}
+            onError={() => setPlayerError(true)}
+          />
+        )}
+
+        <FadeInView duration={250} style={styles.transcriptBlock}>
+          <Text style={styles.transcriptText}>{current.transcript}</Text>
+        </FadeInView>
+
+        <View style={styles.rowButtons}>
+          <AnimatedPressable style={styles.replayButton} haptic="none" onPress={() => playerRef.current?.replay()}>
+            <Text style={styles.replayButtonText}>↻ Réécouter</Text>
+          </AnimatedPressable>
+          <AnimatedPressable
+            style={[styles.primaryButton, !paused && styles.buttonDisabled]}
+            haptic="none"
+            disabled={!paused}
+            onPress={handleContinue}
+          >
+            <Text style={styles.primaryButtonText}>Continuer ›</Text>
+          </AnimatedPressable>
         </View>
-      ) : (
-        <YouTubePlayer
-          ref={playerRef}
-          // Remonte le lecteur à chaque segment plutôt que de laisser les
-          // props seules déclencher la mise à jour — évite tout état
-          // fantôme (ex. `segmentEndedNotified` d'un sondage précédent)
-          // qui survivrait entre deux phrases très rapprochées.
-          key={current.id}
-          videoId={videoId}
-          startTime={current.startTime}
-          endTime={current.endTime}
-          onSegmentEnded={() => setPaused(true)}
-          onError={() => setPlayerError(true)}
-        />
-      )}
-
-      <FadeInView duration={250} style={styles.transcriptBlock}>
-        <Text style={styles.transcriptText}>{current.transcript}</Text>
-      </FadeInView>
-
-      <View style={styles.rowButtons}>
-        <AnimatedPressable style={styles.replayButton} haptic="none" onPress={() => playerRef.current?.replay()}>
-          <Text style={styles.replayButtonText}>↻ Réécouter</Text>
-        </AnimatedPressable>
-        <AnimatedPressable
-          style={[styles.primaryButton, !paused && styles.buttonDisabled]}
-          haptic="none"
-          disabled={!paused}
-          onPress={handleContinue}
-        >
-          <Text style={styles.primaryButtonText}>Continuer ›</Text>
-        </AnimatedPressable>
-      </View>
+      </ScrollView>
 
       <AnimatedPressable style={styles.exitLink} haptic="none" onPress={onExit}>
         <Text style={styles.exitLinkText}>‹ Retour à Écoute</Text>
@@ -146,6 +151,7 @@ export function ShadowingScreen({ db, videoId, videoTitle, onExit }: Props) {
 function createStyles(t: SolYSombraPalette) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: t.cardBackground, paddingHorizontal: 22, paddingTop: 16 },
+    scrollContent: { flexGrow: 1, justifyContent: 'center' },
     center: { flex: 1, backgroundColor: t.cardBackground, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
     label: { fontSize: 12, fontWeight: '600', letterSpacing: 2, color: t.label },

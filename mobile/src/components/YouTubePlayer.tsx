@@ -257,6 +257,23 @@ function loadYouTubeIframeApi(): Promise<void> {
 }
 
 const styles = StyleSheet.create({
-  container: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000', borderRadius: 14, overflow: 'hidden' },
+  // `maxWidth: 480` — bug réel signalé le 13/09/2026 ("le lecteur youtube
+  // est trop grand, je vois même pas le champ texte") : sans plafond, la
+  // largeur `100%` se résout contre la carte qui l'englobe, elle-même sans
+  // limite propre — sur une fenêtre desktop de 1280px, ça donnait un
+  // lecteur ~1180×664px, débordant largement la fenêtre entière (aucun
+  // `ScrollView` dans ces écrans) et poussant le champ de saisie hors
+  // écran, invisible et inatteignable. 480px de large (donc 270px de haut
+  // en 16:9) reste largement lisible tout en laissant la place au reste de
+  // la carte quelle que soit la largeur de fenêtre.
+  container: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#000',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
   playerNode: { width: '100%', height: '100%' },
 });

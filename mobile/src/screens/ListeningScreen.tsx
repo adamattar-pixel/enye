@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { LexisDb } from '../data/dbTypes';
 import {
   getDueListeningCardsSplit,
@@ -20,6 +20,7 @@ import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
+import { showAlert } from '../utils/alert';
 
 type Props = { db: LexisDb; onStartSession: () => void; onStartShadowing: (video: ListeningVideoWithStats) => void };
 type SubView = 'training' | 'library';
@@ -236,7 +237,7 @@ function LibraryView({
       await refresh();
 
       if (captions.status === 'unavailable') {
-        Alert.alert(
+        showAlert(
           'Vidéo ajoutée, sans sous-titres exploitables',
           "Cette vidéo est dans ta bibliothèque mais aucun sous-titre espagnol n'a pu être récupéré — elle ne sera pas proposée en entraînement tant que ça reste le cas."
         );
@@ -257,7 +258,7 @@ function LibraryView({
 
   const handleDelete = useCallback(
     (video: ListeningVideoWithStats) => {
-      Alert.alert('Supprimer cette vidéo ?', video.title, [
+      showAlert('Supprimer cette vidéo ?', video.title, [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
@@ -395,14 +396,16 @@ const VideoRow = memo(function VideoRow({
           <Text style={styles.captionBadgeText}>{CAPTION_STATUS_LABELS[item.captionStatus]}</Text>
         </View>
       </View>
-      {item.segmentCount > 0 && (
-        <AnimatedPressable style={styles.shadowButton} haptic="none" onPress={() => onShadow(item)}>
-          <Text style={styles.shadowButtonText}>🗣</Text>
+      <View style={styles.rowActions}>
+        {item.segmentCount > 0 && (
+          <AnimatedPressable style={styles.shadowButton} haptic="none" onPress={() => onShadow(item)}>
+            <Text style={styles.shadowButtonText}>🗣</Text>
+          </AnimatedPressable>
+        )}
+        <AnimatedPressable style={styles.deleteButton} haptic="none" onPress={() => onDelete(item)}>
+          <Text style={styles.deleteButtonText}>×</Text>
         </AnimatedPressable>
-      )}
-      <AnimatedPressable style={styles.deleteButton} haptic="none" onPress={() => onDelete(item)}>
-        <Text style={styles.deleteButtonText}>×</Text>
-      </AnimatedPressable>
+      </View>
     </FadeInView>
   );
 });
@@ -492,6 +495,15 @@ function createStyles(t: SolYSombraPalette) {
     },
     captionBadgeUnavailable: { backgroundColor: 'rgba(181,83,60,0.15)' },
     captionBadgeText: { fontSize: 11, fontWeight: '600', color: t.metaText },
+    // `gap: 28`, pas 12 — chaque `AnimatedPressable` élargit sa zone
+    // tactile de 14px de chaque côté (`hitSlop`, voir AnimatedPressable.tsx),
+    // donc deux boutons adjacents avec un espacement inférieur à 28px (14+14)
+    // ont des zones tactiles qui se chevauchent : un tap visuellement sur le
+    // bouton de droite pouvait déclencher celui de gauche. Bug réel introduit
+    // le 13/09/2026 en ajoutant `shadowButton` juste à côté de `deleteButton`
+    // avec seulement 12px d'écart — signalé aussitôt ("je peux pas cliquer
+    // sur la croix pour supprimer mes vidéos").
+    rowActions: { flexDirection: 'row', gap: 28, alignItems: 'center' },
     shadowButton: {
       width: 36,
       height: 36,

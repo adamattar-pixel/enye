@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { LexisDb } from '../data/dbTypes';
 import { getBooks, createBook, deleteBook } from '../data/database';
@@ -9,6 +9,7 @@ import { AnimatedPressable } from '../components/AnimatedPressable';
 import { FadeInView } from '../components/FadeInView';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme, type SolYSombraPalette } from '../theme/solYSombra';
+import { showAlert } from '../utils/alert';
 
 type Props = { db: LexisDb; onOpenBook: (bookId: string) => void };
 type Styles = ReturnType<typeof createStyles>;
@@ -40,7 +41,7 @@ export function BooksScreen({ db, onOpenBook }: Props) {
 
   const handleDelete = useCallback(
     (book: Book) => {
-      Alert.alert('Supprimer ce livre ?', `« ${book.title} » et sa progression de lecture seront définitivement supprimés.`, [
+      showAlert('Supprimer ce livre ?', `« ${book.title} » et sa progression de lecture seront définitivement supprimés.`, [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
