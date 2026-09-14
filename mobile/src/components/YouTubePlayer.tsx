@@ -61,21 +61,45 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
   const containerRef = useRef<View>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const [width, setWidth] = useState(0);
-  const [replayKey, setReplayKey] = useState(0);
   // WebKit/Chromium bloque l'autoplay avec son sans geste utilisateur
   // direct, mais autorise l'autoplay MUET — même contournement que côté
   // mobile (Decision 014) : démarrer muet, démuter dès que la lecture a
   // réellement commencé.
-  const mutedRef = useRef(true);
   const hasUnmutedRef = useRef(false);
+  // Partagé avec `notifySegmentEnded` (dans l'effet ci-dessous) plutôt
+  // qu'une variable locale à l'effet : `replay()` doit pouvoir le
+  // réarmer, pour qu'un segment déjà terminé puisse à nouveau signaler sa
+  // fin après un "Réécouter" (sinon `onSegmentEnded` ne se redéclencherait
+  // jamais une deuxième fois pour le même segment).
+  const segmentEndedNotifiedRef = useRef(false);
 
-  useEffect(() => {
-    hasUnmutedRef.current = false;
-    mutedRef.current = true;
-  }, [replayKey, videoId]);
-
+  // `seekTo` + `playVideo` sur l'instance EXISTANTE, jamais un
+  // démontage/remontage du conteneur — bug réel confirmé le 14/09/2026
+  // ("le bouton réécouter fait crash l'application") : la version
+  // précédente forçait un remontage complet via `key={replayKey}`, or
+  // `new YT.Player(node, ...)` REMPLACE `node` par son propre `<iframe>`
+  // dans le vrai DOM (comportement documenté de l'API IFrame, pas un
+  // détail d'implémentation) — React continue de croire que CE `<View>`
+  // lui appartient encore. Au remontage suivant, la tentative de React de
+  // retirer ce nœud (déjà remplacé par YouTube) plantait tout l'arbre,
+  // sans limite de dégâts (aucun error boundary) : `Uncaught NotFoundError:
+  // Failed to execute 'removeChild' ... the node to be removed is not a
+  // child of this node`, page blanche. Les transitions normales entre
+  // segments (`startTime`/`endTime` qui changent) n'ont jamais ce problème
+  // — la `key` du conteneur ne change pas, donc React ne tente jamais de
+  // retirer ce nœud lui-même.
   useImperativeHandle(ref, () => ({
-    replay: () => setReplayKey((k) => k + 1),
+    replay: () => {
+      const player = playerRef.current;
+      if (!player) return;
+      segmentEndedNotifiedRef.current = false;
+      try {
+        player.seekTo(startTime, true);
+        player.playVideo();
+      } catch {
+        // ignore
+      }
+    },
   }));
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -87,11 +111,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
     let disposed = false;
     let endCheckInterval: ReturnType<typeof setInterval> | null = null;
     let captionsInterval: ReturnType<typeof setInterval> | null = null;
-    let segmentEndedNotified = false;
+    segmentEndedNotifiedRef.current = false;
 
     function notifySegmentEnded(): void {
-      if (segmentEndedNotified) return;
-      segmentEndedNotified = true;
+      if (segmentEndedNotifiedRef.current) return;
+      segmentEndedNotifiedRef.current = true;
       onSegmentEnded?.();
     }
 
@@ -190,11 +214,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, Props>(function You
       playerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, replayKey, videoId, startTime, endTime]);
+  }, [width, videoId, startTime, endTime]);
 
   return (
     <View style={styles.container} onLayout={handleLayout}>
-      {width > 0 && <View key={replayKey} ref={containerRef} style={styles.playerNode} />}
+      {width > 0 && <View ref={containerRef} style={styles.playerNode} />}
     </View>
   );
 });
@@ -205,6 +229,7 @@ type YTPlayer = {
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   getCurrentTime: () => number;
   pauseVideo: () => void;
+  playVideo: () => void;
   unMute: () => void;
   unloadModule?: (module: string) => void;
   setOption?: (module: string, option: string, value: unknown) => void;
